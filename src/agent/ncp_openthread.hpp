@@ -45,6 +45,7 @@
 #include "agent/thread_helper.hpp"
 #include "common/mainloop.hpp"
 #include "common/task_runner.hpp"
+#include "common/types.hpp"
 
 namespace otbr {
 namespace Ncp {
@@ -62,11 +63,13 @@ public:
      * This constructor initializes this object.
      *
      * @param[in]   aInterfaceName          A string of the NCP interface name.
-     * @param[in]   aRadioUrl               The URL describes the radio chip.
+     * @param[in]   aRadioUrls              The radio URLs (can be IEEE802.15.4 or TREL radio).
      * @param[in]   aBackboneInterfaceName  The Backbone network interface name.
      *
      */
-    ControllerOpenThread(const char *aInterfaceName, const char *aRadioUrl, const char *aBackboneInterfaceName);
+    ControllerOpenThread(const char *                     aInterfaceName,
+                         const std::vector<const char *> &aRadioUrls,
+                         const char *                     aBackboneInterfaceName);
 
     /**
      * This method initalize the NCP controller.
@@ -125,7 +128,27 @@ public:
      */
     void RegisterResetHandler(std::function<void(void)> aHandler);
 
+    /**
+     * This method adds a event listener for Thread state changes.
+     *
+     * @param[in]  aCallback  The callback to receive Thread state changed events.
+     *
+     */
     void AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback);
+
+    /**
+     * This method resets the OpenThread instance.
+     *
+     */
+    void Reset(void);
+
+    /**
+     * This method returns the Thread protocol version as a string.
+     *
+     * @returns  A pointer to the Thread version string.
+     *
+     */
+    static const char *GetThreadVersion(void);
 
     ~ControllerOpenThread(void) override;
 

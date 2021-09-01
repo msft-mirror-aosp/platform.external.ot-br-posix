@@ -34,6 +34,8 @@
 #ifndef OTBR_AGENT_MDNS_HPP_
 #define OTBR_AGENT_MDNS_HPP_
 
+#include <functional>
+#include <string>
 #include <vector>
 
 #include <sys/select.h>
@@ -49,13 +51,13 @@ namespace Mdns {
  * @addtogroup border-router-mdns
  *
  * @brief
- *   This module includes definition for MDNS service.
+ *   This module includes definition for mDNS service.
  *
  * @{
  */
 
 /**
- * This interface defines the functionality of MDNS service.
+ * This interface defines the functionality of mDNS service.
  *
  */
 class Publisher : public MainloopProcessor
@@ -67,10 +69,8 @@ public:
      */
     struct TxtEntry
     {
-        const char *   mName;        ///< The name of the TXT entry.
-        size_t         mNameLength;  ///< The length of the name of the TXT entry.
-        const uint8_t *mValue;       ///< The value of the TXT entry.
-        size_t         mValueLength; ///< The length of the value of the TXT entry.
+        std::string          mName;  ///< The name of the TXT entry.
+        std::vector<uint8_t> mValue; ///< The value of the TXT entry.
 
         TxtEntry(const char *aName, const char *aValue)
             : TxtEntry(aName, reinterpret_cast<const uint8_t *>(aValue), strlen(aValue))
@@ -83,28 +83,89 @@ public:
         }
 
         TxtEntry(const char *aName, size_t aNameLength, const uint8_t *aValue, size_t aValueLength)
-            : mName(aName)
-            , mNameLength(aNameLength)
-            , mValue(aValue)
-            , mValueLength(aValueLength)
+            : mName(aName, aNameLength)
+            , mValue(aValue, aValue + aValueLength)
         {
         }
     };
 
-    typedef std::vector<TxtEntry> TxtList;
+    typedef std::vector<TxtEntry>    TxtList;
+    typedef std::vector<std::string> SubTypeList;
 
     /**
-     * MDNS state values.
+     * This structure represents information of a discovered service instance.
+     *
+     */
+    struct DiscoveredInstanceInfo
+    {
+        /**
+         * Constructor to initialize a `DiscoveredInstanceInfo` instance.
+         *
+         */
+        DiscoveredInstanceInfo(void)
+            : mPort(0)
+            , mPriority(0)
+            , mWeight(0)
+            , mTtl(0)
+        {
+        }
+
+        std::string             mName;      ///< Instance name.
+        std::string             mHostName;  ///< Full host name.
+        std::vector<Ip6Address> mAddresses; ///< IPv6 addresses.
+        uint16_t                mPort;      ///< Port.
+        uint16_t                mPriority;  ///< Service priority.
+        uint16_t                mWeight;    ///< Service weight.
+        std::vector<uint8_t>    mTxtData;   ///< TXT RDATA bytes.
+        uint32_t                mTtl;       ///< Service TTL.
+    };
+
+    /**
+     * This structure represents information of a discovered host.
+     *
+     */
+    struct DiscoveredHostInfo
+    {
+        /**
+         * Constructor to initialize a `DiscoveredHostInfo` instance.
+         *
+         */
+        DiscoveredHostInfo(void)
+            : mTtl(0)
+        {
+        }
+
+        std::string             mHostName;  ///< Full host name.
+        std::vector<Ip6Address> mAddresses; ///< IP6 addresses.
+        uint32_t                mTtl;       ///< Host TTL.
+    };
+
+    /**
+     * This function is called to notify a discovered service instance.
+     *
+     */
+    using DiscoveredServiceInstanceCallback =
+        std::function<void(const std::string &aType, const DiscoveredInstanceInfo &aInstanceInfo)>;
+
+    /**
+     * This function is called to notify a discovered host.
+     *
+     */
+    using DiscoveredHostCallback =
+        std::function<void(const std::string &aHostName, const DiscoveredHostInfo &aHostInfo)>;
+
+    /**
+     * mDNS state values.
      *
      */
     enum class State
     {
-        kIdle,  ///< Unable to publishing service.
-        kReady, ///< Ready for publishing service.
+        kIdle,  ///< Unable to publish service.
+        kReady, ///< Ready to publish service.
     };
 
     /**
-     * This function pointer is called when MDNS service state changed.
+     * This function pointer is called when mDNS service state changed.
      *
      * @param[in]   aContext        A pointer to application-specific context.
      * @param[in]   aState          The new state.
@@ -160,16 +221,16 @@ public:
     }
 
     /**
-     * This method starts the MDNS service.
+     * This method starts the mDNS service.
      *
-     * @retval OTBR_ERROR_NONE  Successfully started MDNS service;
-     * @retval OTBR_ERROR_MDNS  Failed to start MDNS service.
+     * @retval OTBR_ERROR_NONE  Successfully started mDNS service;
+     * @retval OTBR_ERROR_MDNS  Failed to start mDNS service.
      *
      */
     virtual otbrError Start(void) = 0;
 
     /**
-     * This method stops the MDNS service.
+     * This method stops the mDNS service.
      *
      */
     virtual void Stop(void) = 0;
@@ -190,20 +251,22 @@ public:
      *                                  this service resides on local host and it is the implementation to provide
      *                                  specific host name. Otherwise, the caller MUST publish the host with method
      *                                  PublishHost.
+     * @param[in]   aPort               The port number of this service.
      * @param[in]   aName               The name of this service.
      * @param[in]   aType               The type of this service.
-     * @param[in]   aPort               The port number of this service.
+     * @param[in]   aSubTypeList        A list of service subtypes.
      * @param[in]   aTxtList            A list of TXT name/value pairs.
      *
      * @retval  OTBR_ERROR_NONE     Successfully published or updated the service.
      * @retval  OTBR_ERROR_ERRNO    Failed to publish or update the service.
      *
      */
-    virtual otbrError PublishService(const char *   aHostName,
-                                     uint16_t       aPort,
-                                     const char *   aName,
-                                     const char *   aType,
-                                     const TxtList &aTxtList) = 0;
+    virtual otbrError PublishService(const char *       aHostName,
+                                     uint16_t           aPort,
+                                     const char *       aName,
+                                     const char *       aType,
+                                     const SubTypeList &aSubTypeList,
+                                     const TxtList &    aTxtList) = 0;
 
     /**
      * This method un-publishes a service.
@@ -245,23 +308,89 @@ public:
      */
     virtual otbrError UnpublishHost(const char *aName) = 0;
 
+    /**
+     * This method subscribes a given service or service instance.
+     *
+     * If @p aInstanceName is not empty, this method subscribes the service instance. Otherwise, this method subscribes
+     * the service. mDNS implementations should use the `DiscoveredServiceInstanceCallback` function to notify
+     * discovered service instances.
+     *
+     * @note Discovery Proxy implementation guarantees no duplicate subscriptions for the same service or service
+     * instance.
+     *
+     * @param[in]  aType          The service type.
+     * @param[in]  aInstanceName  The service instance to subscribe, or empty to subscribe the service.
+     *
+     */
+    virtual void SubscribeService(const std::string &aType, const std::string &aInstanceName) = 0;
+
+    /**
+     * This method unsubscribes a given service or service instance.
+     *
+     * If @p aInstanceName is not empty, this method unsubscribes the service instance. Otherwise, this method
+     * unsubscribes the service.
+     *
+     * @note Discovery Proxy implementation guarantees no redundant unsubscription for a service or service instance.
+     *
+     * @param[in]  aType          The service type.
+     * @param[in]  aInstanceName  The service instance to unsubscribe, or empty to unsubscribe the service.
+     *
+     */
+    virtual void UnsubscribeService(const std::string &aType, const std::string &aInstanceName) = 0;
+
+    /**
+     * This method subscribes a given host.
+     *
+     * mDNS implementations should use the `DiscoveredHostCallback` function to notify discovered hosts.
+     *
+     * @note Discovery Proxy implementation guarantees no duplicate subscriptions for the same host.
+     *
+     * @param[in]  aHostName    The host name (without domain).
+     *
+     */
+    virtual void SubscribeHost(const std::string &aHostName) = 0;
+
+    /**
+     * This method unsubscribes a given host.
+     *
+     * @note Discovery Proxy implementation guarantees no redundant unsubscription for a host.
+     *
+     * @param[in]  aHostName    The host name (without domain).
+     *
+     */
+    virtual void UnsubscribeHost(const std::string &aHostName) = 0;
+
+    /**
+     * This method sets the callbacks for subscriptions.
+     *
+     * @param[in] aInstanceCallback     The callback function to receive discovered service instances.
+     * @param[in] aHostCallback         The callback function to receive discovered hosts.
+     *
+     */
+    void SetSubscriptionCallbacks(DiscoveredServiceInstanceCallback aInstanceCallback,
+                                  DiscoveredHostCallback            aHostCallback)
+    {
+        mDiscoveredServiceInstanceCallback = std::move(aInstanceCallback);
+        mDiscoveredHostCallback            = std::move(aHostCallback);
+    }
+
     virtual ~Publisher(void) = default;
 
     /**
-     * This function creates a MDNS publisher.
+     * This function creates a mDNS publisher.
      *
      * @param[in]   aProtocol           Protocol to use for publishing. AF_INET6, AF_INET or AF_UNSPEC.
      * @param[in]   aDomain             The domain to register in. Set nullptr to use default mDNS domain ("local.").
      * @param[in]   aHandler            The function to be called when this service state changed.
      * @param[in]   aContext            A pointer to application-specific context.
      *
-     * @returns A pointer to the newly created MDNS publisher.
+     * @returns A pointer to the newly created mDNS publisher.
      *
      */
     static Publisher *Create(int aProtocol, const char *aDomain, StateHandler aHandler, void *aContext);
 
     /**
-     * This function destroys the MDNS publisher.
+     * This function destroys the mDNS publisher.
      *
      * @param[in]   aPublisher          A pointer to the publisher.
      *
@@ -311,6 +440,9 @@ protected:
 
     PublishHostHandler mHostHandler        = nullptr;
     void *             mHostHandlerContext = nullptr;
+
+    DiscoveredServiceInstanceCallback mDiscoveredServiceInstanceCallback = nullptr;
+    DiscoveredHostCallback            mDiscoveredHostCallback            = nullptr;
 };
 
 /**

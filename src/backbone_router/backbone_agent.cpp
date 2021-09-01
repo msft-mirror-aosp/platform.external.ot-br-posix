@@ -31,7 +31,11 @@
  *   The file implements the Thread Backbone agent.
  */
 
+#define OTBR_LOG_TAG "BBA"
+
 #include "backbone_router/backbone_agent.hpp"
+
+#if OTBR_ENABLE_BACKBONE_ROUTER
 
 #include <assert.h>
 #include <net/if.h>
@@ -78,8 +82,8 @@ void BackboneAgent::HandleBackboneRouterState(void)
     otBackboneRouterState state      = otBackboneRouterGetState(mNcp.GetInstance());
     bool                  wasPrimary = (mBackboneRouterState == OT_BACKBONE_ROUTER_STATE_PRIMARY);
 
-    otbrLog(OTBR_LOG_DEBUG, "BackboneAgent: HandleBackboneRouterState: state=%d, mBackboneRouterState=%d", state,
-            mBackboneRouterState);
+    otbrLogDebug("BackboneAgent: HandleBackboneRouterState: state=%d, mBackboneRouterState=%d", state,
+                 mBackboneRouterState);
     VerifyOrExit(mBackboneRouterState != state);
 
     mBackboneRouterState = state;
@@ -99,11 +103,12 @@ exit:
 
 void BackboneAgent::OnBecomePrimary(void)
 {
-    otbrLog(OTBR_LOG_NOTICE, "BackboneAgent: Backbone Router becomes Primary!");
+    otbrLogNotice("BackboneAgent: Backbone Router becomes Primary!");
 
 #if OTBR_ENABLE_DUA_ROUTING
     if (mDomainPrefix.IsValid())
     {
+        mDuaRoutingManager.Enable(mDomainPrefix);
         mNdProxyManager.Enable(mDomainPrefix);
     }
 #endif
@@ -111,10 +116,10 @@ void BackboneAgent::OnBecomePrimary(void)
 
 void BackboneAgent::OnResignPrimary(void)
 {
-    otbrLog(OTBR_LOG_NOTICE, "BackboneAgent: Backbone Router resigns Primary to %s!",
-            StateToString(mBackboneRouterState));
+    otbrLogNotice("BackboneAgent: Backbone Router resigns Primary to %s!", StateToString(mBackboneRouterState));
 
 #if OTBR_ENABLE_DUA_ROUTING
+    mDuaRoutingManager.Disable();
     mNdProxyManager.Disable();
 #endif
 }
@@ -181,7 +186,10 @@ void BackboneAgent::HandleBackboneRouterDomainPrefixEvent(otBackboneRouterDomain
     VerifyOrExit(IsPrimary() && aEvent != OT_BACKBONE_ROUTER_DOMAIN_PREFIX_REMOVED);
 
 #if OTBR_ENABLE_DUA_ROUTING
+    mDuaRoutingManager.Disable();
     mNdProxyManager.Disable();
+
+    mDuaRoutingManager.Enable(mDomainPrefix);
     mNdProxyManager.Enable(mDomainPrefix);
 #endif
 
@@ -205,3 +213,5 @@ void BackboneAgent::HandleBackboneRouterNdProxyEvent(otBackboneRouterNdProxyEven
 
 } // namespace BackboneRouter
 } // namespace otbr
+
+#endif // OTBR_ENABLE_BACKBONE_ROUTER

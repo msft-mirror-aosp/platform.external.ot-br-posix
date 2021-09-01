@@ -31,6 +31,8 @@
  *   The file implements the Thread border agent.
  */
 
+#define OTBR_LOG_TAG "AGENT"
+
 #include "agent/border_agent.hpp"
 
 #include <arpa/inet.h>
@@ -42,6 +44,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <openthread/border_agent.h>
 #include <openthread/thread_ftd.h>
 #include <openthread/platform/toolchain.h>
 
@@ -60,10 +63,9 @@
 
 namespace otbr {
 
-static const uint16_t kThreadVersion11 = 2; ///< Thread Version 1.1
-static const uint16_t kThreadVersion12 = 3; ///< Thread Version 1.2
-
 static const char kBorderAgentServiceType[] = "_meshcop._udp"; ///< Border agent service type of mDNS
+static const char kBorderAgentServiceInstanceName[] =
+    OTBR_MESHCOP_SERVICE_INSTANCE_NAME; ///< Border agent service name of mDNS
 
 /**
  * Locators
@@ -73,15 +75,6 @@ enum
 {
     kAloc16Leader   = 0xfc00, ///< leader anycast locator.
     kInvalidLocator = 0xffff, ///< invalid locator.
-};
-
-/**
- * UDP ports
- *
- */
-enum
-{
-    kBorderAgentUdpPort = 49191, ///< Thread commissioning port.
 };
 
 uint32_t BorderAgent::StateBitmap::ToUint32(void) const
@@ -106,6 +99,9 @@ BorderAgent::BorderAgent(otbr::Ncp::ControllerOpenThread &aNcp)
 #endif
 #else
     , mPublisher(nullptr)
+#endif
+#if OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
+    , mDiscoveryProxy(aNcp, *mPublisher)
 #endif
 #if OTBR_ENABLE_BACKBONE_ROUTER
     , mBackboneAgent(aNcp)
@@ -145,6 +141,11 @@ otbrError BorderAgent::Start(void)
     mAdvertisingProxy.Start();
 #endif
     UpdateMeshCopService();
+
+#if OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
+    mDiscoveryProxy.Start();
+#endif
+
 #endif // OTBR_ENABLE_MDNS_AVAHI || OTBR_ENABLE_MDNS_MDNSSD || OTBR_ENABLE_MDNS_MOJO
 
 exit:
@@ -154,13 +155,18 @@ exit:
 
 void BorderAgent::Stop(void)
 {
-    otbrLog(OTBR_LOG_INFO, "stop Thread Border Agent");
+    otbrLogInfo("Stop Thread Border Agent");
 
 #if OTBR_ENABLE_MDNS_AVAHI || OTBR_ENABLE_MDNS_MDNSSD || OTBR_ENABLE_MDNS_MOJO
     mPublisher->Stop();
 #if OTBR_ENABLE_SRP_ADVERTISING_PROXY
     mAdvertisingProxy.Stop();
 #endif
+
+#if OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
+    mDiscoveryProxy.Stop();
+#endif
+
 #endif
 }
 
@@ -186,9 +192,12 @@ void BorderAgent::HandleMdnsState(Mdns::Publisher::State aState)
     {
     case Mdns::Publisher::State::kReady:
         UpdateMeshCopService();
+#if OTBR_ENABLE_SRP_ADVERTISING_PROXY
+        mAdvertisingProxy.PublishAllHostsAndServices();
+#endif
         break;
     default:
-        otbrLog(OTBR_LOG_WARNING, "MDNS service not available!");
+        otbrLogWarning("mDNS service not available!");
         break;
     }
 }
@@ -216,20 +225,6 @@ void BorderAgent::Process(const MainloopContext &aMainloop)
     }
 }
 
-static const char *ThreadVersionToString(uint16_t aThreadVersion)
-{
-    switch (aThreadVersion)
-    {
-    case kThreadVersion11:
-        return "1.1.1";
-    case kThreadVersion12:
-        return "1.2.0";
-    default:
-        otbrLog(OTBR_LOG_ERR, "unexpected thread version %hu", aThreadVersion);
-        abort();
-    }
-}
-
 void BorderAgent::PublishMeshCopService(void)
 {
     StateBitmap              state;
@@ -240,11 +235,11 @@ void BorderAgent::PublishMeshCopService(void)
     const char *             networkName = otThreadGetNetworkName(instance);
     Mdns::Publisher::TxtList txtList{{"rv", "1"}};
 
-    otbrLog(OTBR_LOG_INFO, "publish meshcop service %s.%s.local.", networkName, kBorderAgentServiceType);
+    otbrLogInfo("Publish meshcop service %s.%s.local.", kBorderAgentServiceInstanceName, kBorderAgentServiceType);
 
     txtList.emplace_back("nn", networkName);
     txtList.emplace_back("xp", extPanId->m8, sizeof(extPanId->m8));
-    txtList.emplace_back("tv", ThreadVersionToString(otThreadGetVersion()));
+    txtList.emplace_back("tv", mNcp.GetThreadVersion());
 
     // "dd" represents for device discriminator which
     // should always be the IEEE 802.15.4 extended address.
@@ -280,7 +275,7 @@ void BorderAgent::PublishMeshCopService(void)
 
         if ((error = otDatasetGetActive(instance, &activeDataset)) != OT_ERROR_NONE)
         {
-            otbrLog(OTBR_LOG_WARNING, "failed to get active dataset: %s", otThreadErrorToString(error));
+            otbrLogWarning("Failed to get active dataset: %s", otThreadErrorToString(error));
         }
         else
         {
@@ -306,7 +301,8 @@ void BorderAgent::PublishMeshCopService(void)
     txtList.emplace_back("dn", otThreadGetDomainName(instance));
 #endif
 
-    mPublisher->PublishService(/* aHostName */ nullptr, kBorderAgentUdpPort, networkName, kBorderAgentServiceType,
+    mPublisher->PublishService(/* aHostName */ nullptr, otBorderAgentGetUdpPort(instance),
+                               kBorderAgentServiceInstanceName, kBorderAgentServiceType, Mdns::Publisher::SubTypeList{},
                                txtList);
 }
 
@@ -315,9 +311,9 @@ void BorderAgent::UnpublishMeshCopService(void)
     assert(IsThreadStarted());
     VerifyOrExit(!mNetworkName.empty());
 
-    otbrLog(OTBR_LOG_INFO, "unpublish meshcop service %s.%s.local.", mNetworkName.c_str(), kBorderAgentServiceType);
+    otbrLogInfo("Unpublish meshcop service %s.%s.local.", kBorderAgentServiceInstanceName, kBorderAgentServiceType);
 
-    mPublisher->UnpublishService(mNetworkName.c_str(), kBorderAgentServiceType);
+    mPublisher->UnpublishService(kBorderAgentServiceInstanceName, kBorderAgentServiceType);
 
 exit:
     return;
@@ -331,18 +327,6 @@ void BorderAgent::UpdateMeshCopService(void)
 
     VerifyOrExit(mPublisher->IsStarted(), mPublisher->Start());
     VerifyOrExit(IsPskcInitialized(), UnpublishMeshCopService());
-
-    // In case the Thread network name changes, we need to unpublish
-    // current meshcop service.
-    //
-    // TODO: don't use Thread network name as service instance name.
-    // The network name is a TXT entry of the `_meshcop._udp` service
-    // and we should only update the mDNS service entry when network name
-    // changes but not republish a new service instance.
-    if (mNetworkName != networkName)
-    {
-        UnpublishMeshCopService();
-    }
 
     PublishMeshCopService();
     mNetworkName = networkName;
@@ -360,7 +344,7 @@ void BorderAgent::HandleThreadStateChanged(otChangedFlags aFlags)
 
     if (aFlags & OT_CHANGED_THREAD_ROLE)
     {
-        otbrLog(OTBR_LOG_INFO, "Thread is %s", (IsThreadStarted() ? "up" : "down"));
+        otbrLogInfo("Thread is %s", (IsThreadStarted() ? "up" : "down"));
 
         if (IsThreadStarted())
         {
