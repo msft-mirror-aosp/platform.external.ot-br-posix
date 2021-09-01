@@ -34,10 +34,13 @@
 #ifndef BACKBONE_ROUTER_BACKBONE_AGENT_HPP_
 #define BACKBONE_ROUTER_BACKBONE_AGENT_HPP_
 
+#if OTBR_ENABLE_BACKBONE_ROUTER
+
 #include <openthread/backbone_router_ftd.h>
 
 #include "agent/instance_params.hpp"
 #include "agent/ncp_openthread.hpp"
+#include "backbone_router/dua_routing_manager.hpp"
 #include "backbone_router/nd_proxy.hpp"
 #include "common/mainloop.hpp"
 
@@ -115,9 +118,9 @@ private:
     otbr::Ncp::ControllerOpenThread &mNcp;
     otBackboneRouterState            mBackboneRouterState;
     Ip6Prefix                        mDomainPrefix;
-
 #if OTBR_ENABLE_DUA_ROUTING
-    NdProxyManager mNdProxyManager;
+    NdProxyManager    mNdProxyManager;
+    DuaRoutingManager mDuaRoutingManager;
 #endif
 };
 
@@ -127,5 +130,7 @@ private:
 
 } // namespace BackboneRouter
 } // namespace otbr
+
+#endif // OTBR_ENABLE_BACKBONE_ROUTER
 
 #endif // BACKBONE_ROUTER_BACKBONE_AGENT_HPP_

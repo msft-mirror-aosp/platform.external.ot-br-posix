@@ -33,6 +33,8 @@ add_executable(otbr-agent
     agent_instance.hpp
     border_agent.cpp
     border_agent.hpp
+    discovery_proxy.cpp
+    discovery_proxy.hpp
     main.cpp
     uris.hpp
     ncp_openthread.cpp
@@ -49,6 +51,7 @@ target_link_libraries(otbr-agent PRIVATE
     $<$<BOOL:${OTBR_OPENWRT}>:otbr-ubus>
     $<$<BOOL:${OTBR_REST}>:otbr-rest>
     $<$<BOOL:${OTBR_BACKBONE_ROUTER}>:otbr-backbone-router>
+    openthread-posix
     openthread-cli-ftd
     openthread-ftd
     openthread-posix
