@@ -339,22 +339,6 @@ public:
      */
     void Stop(void) override;
 
-    /**
-     * This method updates the mainloop context.
-     *
-     * @param[inout]  aMainloop  A reference to the mainloop to be updated.
-     *
-     */
-    void Update(MainloopContext &aMainloop) override;
-
-    /**
-     * This method processes mainloop events.
-     *
-     * @param[in]  aMainloop  A reference to the mainloop context.
-     *
-     */
-    void Process(const MainloopContext &aMainloop) override;
-
 private:
     enum
     {
@@ -536,7 +520,6 @@ private:
     static void      HandleGroupState(AvahiEntryGroup *aGroup, AvahiEntryGroupState aState, void *aContext);
     void             HandleGroupState(AvahiEntryGroup *aGroup, AvahiEntryGroupState aState);
     void             CallHostOrServiceCallback(AvahiEntryGroup *aGroup, otbrError aError) const;
-    otbrError        RetryPublishService(const Services::iterator &aServiceIt);
 
     static otbrError TxtListToAvahiStringList(const TxtList &   aTxtList,
                                               AvahiStringList * aBuffer,

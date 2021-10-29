@@ -28,7 +28,7 @@
 
 #define OTBR_LOG_TAG "AGENT"
 
-#include "agent/ncp_openthread.hpp"
+#include "ncp/ncp_openthread.hpp"
 
 #include <assert.h>
 #include <stdio.h>
@@ -171,8 +171,6 @@ void ControllerOpenThread::HandleStateChanged(otChangedFlags aFlags)
 
 void ControllerOpenThread::Update(MainloopContext &aMainloop)
 {
-    mTaskRunner.Update(aMainloop);
-
     if (otTaskletsArePending(mInstance))
     {
         aMainloop.mTimeout = ToTimeval(Microseconds::zero());
@@ -186,8 +184,6 @@ void ControllerOpenThread::Process(const MainloopContext &aMainloop)
     otTaskletsProcess(mInstance);
 
     otSysMainloopProcess(mInstance, &aMainloop);
-
-    mTaskRunner.Process(aMainloop);
 
     if (getenv("OTBR_NO_AUTO_ATTACH") == nullptr && mThreadHelper->TryResumeNetwork() == OT_ERROR_NONE)
     {
@@ -280,7 +276,7 @@ extern "C" void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion, const ch
 
     va_list ap;
     va_start(ap, aFormat);
-    otbrLogv(otbrLogLevel, aFormat, ap);
+    otbrLogvNoFilter(otbrLogLevel, aFormat, ap);
     va_end(ap);
 }
 

@@ -43,6 +43,7 @@
 #include <dns_sd.h>
 
 #include "common/code_utils.hpp"
+#include "common/mainloop.hpp"
 #include "common/types.hpp"
 #include "mdns/mdns.hpp"
 
@@ -54,7 +55,7 @@ namespace Mdns {
  * This class implements mDNS service with mDNSResponder.
  *
  */
-class PublisherMDnsSd : public Publisher
+class PublisherMDnsSd : public MainloopProcessor, public Publisher
 {
 public:
     /**
@@ -241,6 +242,7 @@ private:
         char          mType[kMaxSizeOfServiceType];
         std::string   mRegType; ///< Service type with optional subtypes separated by commas
         DNSServiceRef mService;
+        uint16_t      mPort = 0;
     };
 
     struct Host
@@ -370,8 +372,12 @@ private:
     typedef std::vector<HostSubscription>    HostSubscriptionList;
 
     void        DiscardService(const char *aName, const char *aType, DNSServiceRef aServiceRef = nullptr);
-    void        RecordService(const char *aName, const char *aType, const char *aRegType, DNSServiceRef aServiceRef);
-    static bool IsServiceOutdated(const Service &service, const std::string &aNewRegType);
+    void        RecordService(const char *  aName,
+                              const char *  aType,
+                              const char *  aRegType,
+                              uint16_t      aPort,
+                              DNSServiceRef aServiceRef);
+    static bool IsServiceOutdated(const Service &service, const std::string &aNewRegType, int aNewPort);
 
     otbrError DiscardHost(const char *aName, bool aSendGoodbye = true);
     void      RecordHost(const char *aName, const uint8_t *aAddress, uint8_t aAddressLength, DNSRecordRef aRecordRef);
