@@ -33,7 +33,7 @@
 
 #define OTBR_LOG_TAG "AGENT"
 
-#include "agent/border_agent.hpp"
+#include "border_agent/border_agent.hpp"
 
 #include <arpa/inet.h>
 #include <assert.h>
@@ -48,8 +48,8 @@
 #include <openthread/thread_ftd.h>
 #include <openthread/platform/toolchain.h>
 
-#include "agent/ncp_openthread.hpp"
 #include "agent/uris.hpp"
+#include "ncp/ncp_openthread.hpp"
 #if OTBR_ENABLE_BACKBONE_ROUTER
 #include "backbone_router/backbone_agent.hpp"
 #endif
@@ -202,29 +202,6 @@ void BorderAgent::HandleMdnsState(Mdns::Publisher::State aState)
     }
 }
 
-void BorderAgent::Update(MainloopContext &aMainloop)
-{
-#if OTBR_ENABLE_BACKBONE_ROUTER
-    mBackboneAgent.Update(aMainloop);
-#endif
-
-    if (mPublisher != nullptr)
-    {
-        mPublisher->Update(aMainloop);
-    }
-}
-
-void BorderAgent::Process(const MainloopContext &aMainloop)
-{
-#if OTBR_ENABLE_BACKBONE_ROUTER
-    mBackboneAgent.Process(aMainloop);
-#endif
-    if (mPublisher != nullptr)
-    {
-        mPublisher->Process(aMainloop);
-    }
-}
-
 void BorderAgent::PublishMeshCopService(void)
 {
     StateBitmap              state;
@@ -373,10 +350,12 @@ bool BorderAgent::IsThreadStarted(void) const
 
 bool BorderAgent::IsPskcInitialized(void) const
 {
-    bool          initialized = false;
-    const otPskc *pskc        = otThreadGetPskc(mNcp.GetInstance());
+    bool   initialized = false;
+    otPskc pskc;
 
-    for (uint8_t byte : pskc->m8)
+    otThreadGetPskc(mNcp.GetInstance(), &pskc);
+
+    for (uint8_t byte : pskc.m8)
     {
         if (byte != 0x00)
         {
