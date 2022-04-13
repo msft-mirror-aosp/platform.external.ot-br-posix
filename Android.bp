@@ -132,6 +132,7 @@ cc_binary {
     static_libs: [
         "libopenthread-cli",
         "ot-core",
+        "openthread-tcplp",
     ],
 
     host_ldlibs: ["-lutil"],
