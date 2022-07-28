@@ -43,11 +43,18 @@
 using otbr::DBus::ActiveScanResult;
 using otbr::DBus::ClientError;
 using otbr::DBus::DeviceRole;
+using otbr::DBus::EnergyScanResult;
 using otbr::DBus::ExternalRoute;
 using otbr::DBus::Ip6Prefix;
 using otbr::DBus::LinkModeConfig;
 using otbr::DBus::OnMeshPrefix;
+using otbr::DBus::SrpServerInfo;
 using otbr::DBus::ThreadApiDBus;
+using otbr::DBus::TxtEntry;
+
+#if OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
+using otbr::DBus::DnssdCounters;
+#endif
 
 #define TEST_ASSERT(x)                                              \
     do                                                              \
@@ -76,7 +83,7 @@ static bool operator==(const otbr::DBus::Ip6Prefix &aLhs, const otbr::DBus::Ip6P
 
 static void CheckExternalRoute(ThreadApiDBus *aApi, const Ip6Prefix &aPrefix)
 {
-    ExternalRoute              route;
+    ExternalRoute              route = {};
     std::vector<ExternalRoute> externalRouteTable;
 
     route.mPrefix     = aPrefix;
@@ -84,13 +91,97 @@ static void CheckExternalRoute(ThreadApiDBus *aApi, const Ip6Prefix &aPrefix)
     route.mPreference = 0;
 
     TEST_ASSERT(aApi->AddExternalRoute(route) == OTBR_ERROR_NONE);
+    sleep(10);
     TEST_ASSERT(aApi->GetExternalRoutes(externalRouteTable) == OTBR_ERROR_NONE);
     TEST_ASSERT(externalRouteTable.size() == 1);
     TEST_ASSERT(externalRouteTable[0].mPrefix == aPrefix);
     TEST_ASSERT(externalRouteTable[0].mPreference == 0);
     TEST_ASSERT(externalRouteTable[0].mStable);
     TEST_ASSERT(externalRouteTable[0].mNextHopIsThisDevice);
+
     TEST_ASSERT(aApi->RemoveExternalRoute(aPrefix) == OTBR_ERROR_NONE);
+    sleep(10);
+    TEST_ASSERT(aApi->GetExternalRoutes(externalRouteTable) == OTBR_ERROR_NONE);
+    TEST_ASSERT(externalRouteTable.empty());
+}
+
+static void CheckOnMeshPrefix(ThreadApiDBus *aApi)
+{
+    OnMeshPrefix              prefix = {};
+    std::vector<OnMeshPrefix> onMeshPrefixes;
+
+    prefix.mPrefix.mPrefix = {0xfd, 0xee, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+    prefix.mPrefix.mLength = 64;
+
+    prefix.mPreference = 0;
+    prefix.mStable     = true;
+
+    TEST_ASSERT(aApi->AddOnMeshPrefix(prefix) == OTBR_ERROR_NONE);
+    sleep(10);
+    TEST_ASSERT(aApi->GetOnMeshPrefixes(onMeshPrefixes) == OTBR_ERROR_NONE);
+    TEST_ASSERT(onMeshPrefixes.size() == 1);
+    TEST_ASSERT(onMeshPrefixes[0].mPrefix == prefix.mPrefix);
+    TEST_ASSERT(onMeshPrefixes[0].mPreference == 0);
+    TEST_ASSERT(onMeshPrefixes[0].mStable);
+
+    TEST_ASSERT(aApi->RemoveOnMeshPrefix(prefix.mPrefix) == OTBR_ERROR_NONE);
+    sleep(10);
+    TEST_ASSERT(aApi->GetOnMeshPrefixes(onMeshPrefixes) == OTBR_ERROR_NONE);
+    TEST_ASSERT(onMeshPrefixes.empty());
+}
+
+void CheckSrpServerInfo(ThreadApiDBus *aApi)
+{
+    SrpServerInfo srpServerInfo;
+
+    TEST_ASSERT(aApi->GetSrpServerInfo(srpServerInfo) == OTBR_ERROR_NONE);
+    TEST_ASSERT(srpServerInfo.mState == otbr::DBus::OTBR_SRP_SERVER_STATE_RUNNING);
+    TEST_ASSERT(srpServerInfo.mPort != 0);
+    TEST_ASSERT(srpServerInfo.mHosts.mFreshCount == 0);
+    TEST_ASSERT(srpServerInfo.mHosts.mDeletedCount == 0);
+    TEST_ASSERT(srpServerInfo.mHosts.mLeaseTimeTotal == 0);
+    TEST_ASSERT(srpServerInfo.mHosts.mKeyLeaseTimeTotal == 0);
+    TEST_ASSERT(srpServerInfo.mHosts.mRemainingLeaseTimeTotal == 0);
+    TEST_ASSERT(srpServerInfo.mHosts.mRemainingKeyLeaseTimeTotal == 0);
+    TEST_ASSERT(srpServerInfo.mServices.mFreshCount == 0);
+    TEST_ASSERT(srpServerInfo.mServices.mDeletedCount == 0);
+    TEST_ASSERT(srpServerInfo.mServices.mLeaseTimeTotal == 0);
+    TEST_ASSERT(srpServerInfo.mServices.mKeyLeaseTimeTotal == 0);
+    TEST_ASSERT(srpServerInfo.mServices.mRemainingLeaseTimeTotal == 0);
+    TEST_ASSERT(srpServerInfo.mServices.mRemainingKeyLeaseTimeTotal == 0);
+    TEST_ASSERT(srpServerInfo.mResponseCounters.mSuccess == 0);
+    TEST_ASSERT(srpServerInfo.mResponseCounters.mServerFailure == 0);
+    TEST_ASSERT(srpServerInfo.mResponseCounters.mFormatError == 0);
+    TEST_ASSERT(srpServerInfo.mResponseCounters.mNameExists == 0);
+    TEST_ASSERT(srpServerInfo.mResponseCounters.mRefused == 0);
+    TEST_ASSERT(srpServerInfo.mResponseCounters.mOther == 0);
+}
+
+void CheckDnssdCounters(ThreadApiDBus *aApi)
+{
+    OTBR_UNUSED_VARIABLE(aApi);
+#if OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
+    otbr::DBus::DnssdCounters dnssdCounters;
+
+    TEST_ASSERT(aApi->GetDnssdCounters(dnssdCounters) == OTBR_ERROR_NONE);
+    TEST_ASSERT(dnssdCounters.mSuccessResponse == 0);
+    TEST_ASSERT(dnssdCounters.mServerFailureResponse == 0);
+    TEST_ASSERT(dnssdCounters.mFormatErrorResponse == 0);
+    TEST_ASSERT(dnssdCounters.mNameErrorResponse == 0);
+    TEST_ASSERT(dnssdCounters.mNotImplementedResponse == 0);
+    TEST_ASSERT(dnssdCounters.mOtherResponse == 0);
+    TEST_ASSERT(dnssdCounters.mResolvedBySrp == 0);
+#endif
+}
+
+void CheckMdnsInfo(ThreadApiDBus *aApi)
+{
+    otbr::MdnsTelemetryInfo mdnsInfo;
+
+    TEST_ASSERT(aApi->GetMdnsTelemetryInfo(mdnsInfo) == OTBR_ERROR_NONE);
+
+    TEST_ASSERT(mdnsInfo.mServiceRegistrations.mSuccess > 0);
+    TEST_ASSERT(mdnsInfo.mServiceRegistrationEmaLatency > 0);
 }
 
 int main()
@@ -100,6 +191,8 @@ int main()
     std::unique_ptr<ThreadApiDBus> api;
     uint64_t                       extpanid = 0xdead00beaf00cafe;
     std::string                    region;
+    uint32_t                       scanDuration = 1000; // 1s for each channel
+    bool                           stepDone     = false;
 
     dbus_error_init(&error);
     connection = UniqueDBusConnection(dbus_bus_get(DBUS_BUS_SYSTEM, &error));
@@ -117,7 +210,25 @@ int main()
     TEST_ASSERT(api->GetRadioRegion(region) == ClientError::ERROR_NONE);
     TEST_ASSERT(region == "US");
 
-    api->Scan([&api, extpanid](const std::vector<ActiveScanResult> &aResult) {
+    api->EnergyScan(scanDuration, [&stepDone](const std::vector<EnergyScanResult> &aResult) {
+        TEST_ASSERT(!aResult.empty());
+        printf("Energy Scan:\n");
+        for (auto &result : aResult)
+        {
+            printf("channel %d rssi %d\n", result.mChannel, result.mMaxRssi);
+        }
+
+        stepDone = true;
+    });
+
+    while (!stepDone)
+    {
+        dbus_connection_read_write_dispatch(connection.get(), 0);
+    }
+
+    stepDone = false;
+
+    api->Scan([&api, extpanid, &stepDone](const std::vector<ActiveScanResult> &aResult) {
         LinkModeConfig       cfg        = {true, false, true};
         std::vector<uint8_t> networkKey = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
                                            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
@@ -125,7 +236,7 @@ int main()
 
         for (auto &&result : aResult)
         {
-            printf("%s channel %d rssi %d\n", result.mNetworkName.c_str(), result.mChannel, result.mRssi);
+            printf("channel %d rssi %d\n", result.mChannel, result.mRssi);
         }
 
         api->SetLinkMode(cfg);
@@ -136,9 +247,9 @@ int main()
         api->SetLinkMode(cfg);
 
         api->Attach("Test", 0x3456, extpanid, networkKey, {}, 1 << channel,
-                    [&api, channel, extpanid](ClientError aError) {
+                    [&api, channel, extpanid, &stepDone](ClientError aError) {
                         printf("Attach result %d\n", static_cast<int>(aError));
-                        sleep(10);
+                        sleep(20);
                         uint64_t             extpanidCheck;
                         std::vector<uint8_t> activeDataset;
 
@@ -174,6 +285,9 @@ int main()
                             TEST_ASSERT(api->GetInstantRssi(rssi) == OTBR_ERROR_NONE);
                             TEST_ASSERT(api->GetRadioTxPower(txPower) == OTBR_ERROR_NONE);
                             TEST_ASSERT(api->GetActiveDatasetTlvs(activeDataset) == OTBR_ERROR_NONE);
+                            CheckSrpServerInfo(api.get());
+                            CheckMdnsInfo(api.get());
+                            CheckDnssdCounters(api.get());
                             api->FactoryReset(nullptr);
                             TEST_ASSERT(api->GetNetworkName(name) == OTBR_ERROR_NONE);
                             TEST_ASSERT(rloc16 != 0xffff);
@@ -187,21 +301,17 @@ int main()
                             exit(-1);
                         }
                         TEST_ASSERT(api->SetActiveDatasetTlvs(activeDataset) == OTBR_ERROR_NONE);
-                        api->Attach([&api, channel, extpanid](ClientError aErr) {
+                        api->Attach([&api, channel, extpanid, &stepDone](ClientError aErr) {
                             uint8_t                routerId;
                             otbr::DBus::LeaderData leaderData;
                             uint8_t                leaderWeight;
                             uint16_t               channelResult;
                             uint64_t               extpanidCheck;
                             Ip6Prefix              prefix;
-                            OnMeshPrefix           onMeshPrefix = {};
+                            std::vector<TxtEntry>  updatedTxtEntries{TxtEntry{"B", {97, 98, 99}}};
 
                             prefix.mPrefix = {0xfd, 0xcd, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
                             prefix.mLength = 64;
-
-                            onMeshPrefix.mPrefix     = prefix;
-                            onMeshPrefix.mPreference = 0;
-                            onMeshPrefix.mStable     = true;
 
                             TEST_ASSERT(aErr == ClientError::ERROR_NONE);
                             TEST_ASSERT(api->GetChannel(channelResult) == OTBR_ERROR_NONE);
@@ -214,29 +324,31 @@ int main()
                             TEST_ASSERT(api->GetRouterId(routerId) == OTBR_ERROR_NONE);
                             TEST_ASSERT(routerId == leaderData.mLeaderRouterId);
 
+                            TEST_ASSERT(api->UpdateVendorMeshCopTxtEntries(updatedTxtEntries) == OTBR_ERROR_NONE);
+
                             CheckExternalRoute(api.get(), prefix);
-                            TEST_ASSERT(api->AddOnMeshPrefix(onMeshPrefix) == OTBR_ERROR_NONE);
-                            TEST_ASSERT(api->RemoveOnMeshPrefix(onMeshPrefix.mPrefix) == OTBR_ERROR_NONE);
+                            CheckOnMeshPrefix(api.get());
 
                             api->FactoryReset(nullptr);
                             TEST_ASSERT(api->JoinerStart("ABCDEF", "", "", "", "", "", nullptr) ==
                                         ClientError::OT_ERROR_NOT_FOUND);
-                            TEST_ASSERT(api->JoinerStart("ABCDEF", "", "", "", "", "", [&api](ClientError aJoinError) {
-                                DeviceRole deviceRole;
+                            TEST_ASSERT(api->JoinerStart(
+                                            "ABCDEF", "", "", "", "", "", [&api, &stepDone](ClientError aJoinError) {
+                                                DeviceRole deviceRole;
 
-                                TEST_ASSERT(aJoinError == ClientError::OT_ERROR_NOT_FOUND);
+                                                TEST_ASSERT(aJoinError == ClientError::OT_ERROR_NOT_FOUND);
 
-                                api->FactoryReset(nullptr);
-                                api->GetDeviceRole(deviceRole);
-                                TEST_ASSERT(deviceRole == otbr::DBus::OTBR_DEVICE_ROLE_DISABLED);
+                                                api->FactoryReset(nullptr);
+                                                api->GetDeviceRole(deviceRole);
+                                                TEST_ASSERT(deviceRole == otbr::DBus::OTBR_DEVICE_ROLE_DISABLED);
 
-                                exit(0);
-                            }) == ClientError::ERROR_NONE);
+                                                stepDone = true;
+                                            }) == ClientError::ERROR_NONE);
                         });
                     });
     });
 
-    while (true)
+    while (!stepDone)
     {
         dbus_connection_read_write_dispatch(connection.get(), 0);
     }
