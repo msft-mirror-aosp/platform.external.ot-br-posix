@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2019, The OpenThread Authors.
+ *  Copyright (c) 2017-2021, The OpenThread Authors.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -26,19 +26,58 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "utils/strcpy_utils.hpp"
+/**
+ * @file
+ * This file includes definition for DNS utilities.
+ */
 
-#include "common/code_utils.hpp"
+#ifndef OTBR_UTILS_DNS_UTILS_HPP_
+#define OTBR_UTILS_DNS_UTILS_HPP_
 
-int strcpy_safe(char *aDest, size_t aDestSize, const char *aSrc)
-{
-    int ret = 0;
-    VerifyOrExit(aDest != nullptr, ret = -1);
-    VerifyOrExit(aSrc != nullptr, ret = -1, aDest[0] = 0);
-    VerifyOrExit(aDestSize > strnlen(aSrc, aDestSize), ret = -1, aDest[0] = 0);
+#include "openthread-br/config.h"
 
-    strncpy(aDest, aSrc, aDestSize);
+#include <string>
 
-exit:
-    return ret;
-}
+namespace otbr {
+
+namespace DnsUtils {
+
+/**
+ * This function unescapes a DNS Service Instance name according to "DNS Name Escaping".
+ *
+ * @sa  "Notes on DNS Name Escaping" at
+ *      https://opensource.apple.com/source/mDNSResponder/mDNSResponder-1310.140.1/mDNSShared/dns_sd.h.auto.html.
+ *
+ * @param[in] aName  The DNS Service Instance name to unescape.
+ *
+ * @returns  The unescaped DNS Service Instance name.
+ *
+ */
+std::string UnescapeInstanceName(const std::string &aName);
+
+/**
+ * This function checks a given host name for sanity.
+ *
+ * Check criteria:
+ *      The host name must ends with dot.
+ *
+ * @param[in] aHostName  The host name to check.
+ *
+ */
+void CheckHostnameSanity(const std::string &aHostName);
+
+/**
+ * This function checks a given service name for sanity.
+ *
+ * Check criteria:
+ *      The service name must contain exactly one dot.
+ *      The service name must not end with dot.
+ *
+ * @param[in] aServiceName  The service name to check.
+ *
+ */
+void CheckServiceNameSanity(const std::string &aServiceName);
+
+} // namespace DnsUtils
+} // namespace otbr
+#endif // OTBR_UTILS_DNS_UTILS_HPP_

@@ -37,6 +37,8 @@
 #define OTBR_LOG_TAG "UTILS"
 #endif
 
+#include <assert.h>
+#include <memory>
 #include <stdlib.h>
 
 #include "common/logging.hpp"
@@ -44,10 +46,10 @@
 /**
  *  This aligns the pointer to @p aAlignType.
  *
- *  @param[in]  aMem        A pointer to arbitrary memory.
- *  @param[in]  aAlignType  The type to align with and convert the pointer to this type.
+ *  @param[in] aMem        A pointer to arbitrary memory.
+ *  @param[in] aAlignType  The type to align with and convert the pointer to this type.
  *
- *  @returns A @aAlignType pointer to aligned memory.
+ *  @returns A pointer to aligned memory.
  *
  */
 #define OTBR_ALIGNED(aMem, aAlignType) \
@@ -65,7 +67,7 @@
  *  commonly be successful, and branches to the local label 'exit' if
  *  the status is unsuccessful.
  *
- *  @param[in]  aStatus     A scalar status to be evaluated against zero (0).
+ *  @param[in] aStatus  A scalar status to be evaluated against zero (0).
  *
  */
 #define SuccessOrExit(aStatus) \
@@ -81,18 +83,18 @@
  * This macro verifies a given error status to be successful (compared against value zero (0)), otherwise, it emits a
  * given error messages and exits the program.
  *
- * @param[in]  aStatus     A scalar error status to be evaluated against zero (0).
- * @param[in]  aMessage    A message (text string) to print on failure.
+ * @param[in] aStatus   A scalar error status to be evaluated against zero (0).
+ * @param[in] aMessage  A message (text string) to print on failure.
  *
  */
-#define SuccessOrDie(aStatus, aMessage)                                          \
-    do                                                                           \
-    {                                                                            \
-        if ((aStatus) != 0)                                                      \
-        {                                                                        \
-            otbrLogEmerg("FAILED %s:%d - %s", __FUNCTION__, __LINE__, aMessage); \
-            exit(-1);                                                            \
-        }                                                                        \
+#define SuccessOrDie(aStatus, aMessage)                                      \
+    do                                                                       \
+    {                                                                        \
+        if ((aStatus) != 0)                                                  \
+        {                                                                    \
+            otbrLogEmerg("FAILED %s:%d - %s", __FILE__, __LINE__, aMessage); \
+            exit(-1);                                                        \
+        }                                                                    \
     } while (false)
 
 /**
@@ -100,9 +102,9 @@
  *  commonly be true, and both executes @a ... and branches to the
  *  local label 'exit' if the condition is false.
  *
- *  @param[in]  aCondition  A Boolean expression to be evaluated.
- *  @param[in]  ...         An expression or block to execute when the
- *                          assertion fails.
+ *  @param[in] aCondition  A Boolean expression to be evaluated.
+ *  @param[in] ...         An expression or block to execute when the
+ *                         assertion fails.
  *
  */
 #define VerifyOrExit(aCondition, ...) \
@@ -119,18 +121,18 @@
  * This macro checks for the specified condition, which is expected to commonly be true,
  * and both prints the message and terminates the program if the condition is false.
  *
- * @param[in]   aCondition  The condition to verify
- * @param[in]   aMessage    A message (text string) to print on failure.
+ * @param[in] aCondition  The condition to verify
+ * @param[in] aMessage    A message (text string) to print on failure.
  *
  */
-#define VerifyOrDie(aCondition, aMessage)                                        \
-    do                                                                           \
-    {                                                                            \
-        if (!(aCondition))                                                       \
-        {                                                                        \
-            otbrLogEmerg("FAILED %s:%d - %s", __FUNCTION__, __LINE__, aMessage); \
-            exit(-1);                                                            \
-        }                                                                        \
+#define VerifyOrDie(aCondition, aMessage)                                    \
+    do                                                                       \
+    {                                                                        \
+        if (!(aCondition))                                                   \
+        {                                                                    \
+            otbrLogEmerg("FAILED %s:%d - %s", __FILE__, __LINE__, aMessage); \
+            exit(-1);                                                        \
+        }                                                                    \
     } while (false)
 
 /**
@@ -141,8 +143,8 @@
  *        failure for the overall exit status of the enclosing
  *        function body.
  *
- *  @param[in]  ...         An optional expression or block to execute
- *                          when the assertion fails.
+ *  @param[in] ...  An optional expression or block to execute
+ *                  when the assertion fails.
  *
  */
 #define ExitNow(...) \
@@ -154,5 +156,79 @@
 
 #define OTBR_NOOP
 #define OTBR_UNUSED_VARIABLE(variable) ((void)(variable))
+
+template <typename T, typename... Args> std::unique_ptr<T> MakeUnique(Args &&... args)
+{
+    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+/**
+ * This class makes any class that derives from it non-copyable. It is intended to be used as a private base class.
+ *
+ */
+class NonCopyable
+{
+public:
+    NonCopyable(const NonCopyable &) = delete;
+    NonCopyable &operator=(const NonCopyable &) = delete;
+
+protected:
+    NonCopyable(void) = default;
+};
+
+template <typename T> class Optional
+{
+public:
+    constexpr Optional(void) = default;
+
+    Optional(T aValue) { SetValue(aValue); }
+
+    ~Optional(void) { ClearValue(); }
+
+    Optional(const Optional &aOther) { AssignFrom(aOther); }
+
+    Optional &operator=(const Optional &aOther) { AssignFrom(aOther); }
+
+    constexpr const T *operator->(void)const { return &GetValue(); }
+
+    constexpr const T &operator*(void)const { return GetValue(); }
+
+    constexpr bool HasValue(void) const { return mHasValue; }
+
+private:
+    T &GetValue(void) const
+    {
+        assert(mHasValue);
+        return *const_cast<T *>(reinterpret_cast<const T *>(&mStorage));
+    }
+
+    void ClearValue(void)
+    {
+        if (mHasValue)
+        {
+            GetValue().~T();
+            mHasValue = false;
+        }
+    }
+
+    void SetValue(const T &aValue)
+    {
+        ClearValue();
+        new (&mStorage) T(aValue);
+        mHasValue = true;
+    }
+
+    void AssignFrom(const Optional &aOther)
+    {
+        ClearValue();
+        if (aOther.mHasValue)
+        {
+            SetValue(aOther.GetValue());
+        }
+    }
+
+    alignas(T) unsigned char mStorage[sizeof(T)];
+    bool mHasValue = false;
+};
 
 #endif // OTBR_COMMON_CODE_UTILS_HPP_
