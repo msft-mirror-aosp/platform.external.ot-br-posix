@@ -30,49 +30,81 @@
 
 #include "dbus/server/dbus_agent.hpp"
 
+#include <chrono>
+#include <thread>
+#include <unistd.h>
+
 #include "common/logging.hpp"
 #include "dbus/common/constants.hpp"
+#include "mdns/mdns.hpp"
 
 namespace otbr {
 namespace DBus {
 
-const struct timeval DBusAgent::kPollTimeout = {0, 0};
+const struct timeval           DBusAgent::kPollTimeout = {0, 0};
+constexpr std::chrono::seconds DBusAgent::kDBusWaitAllowance;
 
-DBusAgent::DBusAgent(otbr::Ncp::ControllerOpenThread &aNcp)
+DBusAgent::DBusAgent(otbr::Ncp::ControllerOpenThread &aNcp, Mdns::Publisher &aPublisher)
     : mInterfaceName(aNcp.GetInterfaceName())
     , mNcp(aNcp)
+    , mPublisher(aPublisher)
 {
 }
 
-otbrError DBusAgent::Init(void)
+void DBusAgent::Init(void)
 {
-    DBusError   dbusError;
-    otbrError   error = OTBR_ERROR_NONE;
-    int         requestReply;
-    std::string serverName = OTBR_DBUS_SERVER_PREFIX + mInterfaceName;
+    otbrError error = OTBR_ERROR_NONE;
+
+    auto connection_deadline = Clock::now() + kDBusWaitAllowance;
+
+    while ((mConnection = PrepareDBusConnection()) == nullptr && Clock::now() < connection_deadline)
+    {
+        otbrLogWarning("Failed to setup DBus connection, will retry after 1 second");
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    VerifyOrDie(mConnection != nullptr, "Failed to get DBus connection");
+
+    mThreadObject =
+        std::unique_ptr<DBusThreadObject>(new DBusThreadObject(mConnection.get(), mInterfaceName, &mNcp, &mPublisher));
+    error = mThreadObject->Init();
+    VerifyOrDie(error == OTBR_ERROR_NONE, "Failed to initialize DBus Agent");
+}
+
+DBusAgent::UniqueDBusConnection DBusAgent::PrepareDBusConnection(void)
+{
+    DBusError            dbusError;
+    DBusConnection *     conn = nullptr;
+    UniqueDBusConnection uniqueConn;
+    int                  requestReply;
+    std::string          serverName = OTBR_DBUS_SERVER_PREFIX + mInterfaceName;
 
     dbus_error_init(&dbusError);
-    DBusConnection *conn = dbus_bus_get(DBUS_BUS_SYSTEM, &dbusError);
-    mConnection          = std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>>(
-        conn, [](DBusConnection *aConnection) { dbus_connection_unref(aConnection); });
-    VerifyOrExit(mConnection != nullptr, error = OTBR_ERROR_DBUS);
-    dbus_bus_register(mConnection.get(), &dbusError);
+
+    conn = dbus_bus_get(DBUS_BUS_SYSTEM, &dbusError);
+
+    uniqueConn = UniqueDBusConnection(conn, [](DBusConnection *aConnection) { dbus_connection_unref(aConnection); });
+
+    VerifyOrExit(uniqueConn != nullptr,
+                 otbrLogWarning("Failed to get DBus connection: %s: %s", dbusError.name, dbusError.message));
+    dbus_bus_register(uniqueConn.get(), &dbusError);
+
     requestReply =
-        dbus_bus_request_name(mConnection.get(), serverName.c_str(), DBUS_NAME_FLAG_REPLACE_EXISTING, &dbusError);
+        dbus_bus_request_name(uniqueConn.get(), serverName.c_str(), DBUS_NAME_FLAG_REPLACE_EXISTING, &dbusError);
     VerifyOrExit(requestReply == DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER ||
                      requestReply == DBUS_REQUEST_NAME_REPLY_ALREADY_OWNER,
-                 error = OTBR_ERROR_DBUS);
+                 {
+                     otbrLogWarning("Failed to request DBus name: %s: %s", dbusError.name, dbusError.message);
+                     uniqueConn = nullptr;
+                 });
     VerifyOrExit(
-        dbus_connection_set_watch_functions(mConnection.get(), AddDBusWatch, RemoveDBusWatch, nullptr, this, nullptr));
-    mThreadObject = std::unique_ptr<DBusThreadObject>(new DBusThreadObject(mConnection.get(), mInterfaceName, &mNcp));
-    error         = mThreadObject->Init();
+        dbus_connection_set_watch_functions(uniqueConn.get(), AddDBusWatch, RemoveDBusWatch, nullptr, this, nullptr),
+        uniqueConn = nullptr);
+
 exit:
-    if (error != OTBR_ERROR_NONE)
-    {
-        otbrLogErr("Dbus error %s: %s", dbusError.name, dbusError.message);
-    }
     dbus_error_free(&dbusError);
-    return error;
+
+    return uniqueConn;
 }
 
 dbus_bool_t DBusAgent::AddDBusWatch(struct DBusWatch *aWatch, void *aContext)

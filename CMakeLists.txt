@@ -29,6 +29,7 @@
 cmake_minimum_required(VERSION 3.10.2)
 project(openthread-br VERSION 0.3.0)
 
+add_compile_options(-Wall -Wextra -Werror -Wfatal-errors -Wuninitialized -Wno-missing-braces)
 
 add_library(otbr-config INTERFACE)
 
@@ -36,7 +37,9 @@ set(OTBR_INFRA_IF_NAME "wlan0" CACHE STRING "The infrastructure interface name")
 set(OTBR_VENDOR_NAME "OpenThread" CACHE STRING "The vendor name")
 set(OTBR_PRODUCT_NAME "BorderRouter" CACHE STRING "The product name")
 set(OTBR_NAME "${OTBR_VENDOR_NAME}_${OTBR_PRODUCT_NAME}" CACHE STRING "The package name")
-set(OTBR_MDNS "avahi" CACHE STRING "mDNS service provider")
+set(OTBR_MESHCOP_SERVICE_INSTANCE_NAME "${OTBR_VENDOR_NAME} ${OTBR_PRODUCT_NAME}" CACHE STRING "The OTBR MeshCoP service instance name")
+set(OTBR_MDNS "avahi" CACHE STRING "mDNS publisher provider")
+set(OTBR_SYSLOG_FACILITY_ID LOG_USER CACHE STRING "Syslog logging facility")
 
 set_property(CACHE OTBR_MDNS PROPERTY STRINGS "avahi" "mDNSResponder")
 
@@ -59,8 +62,6 @@ if (OTBR_COVERAGE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(otbr-config INTERFACE -g -O0 --coverage)
     target_link_libraries(otbr-config INTERFACE --coverage)
 endif()
-
-add_compile_options(-Wall -Wextra -Werror -Wfatal-errors -Wno-missing-braces)
 
 message(STATUS "OTBR package name: ${OTBR_NAME}")
 
@@ -89,6 +90,8 @@ target_compile_definitions(otbr-config INTERFACE
     "OTBR_PRODUCT_NAME=\"${OTBR_PRODUCT_NAME}\""
     "OTBR_PACKAGE_NAME=\"${OTBR_NAME}\""
     "OTBR_PACKAGE_VERSION=\"${OTBR_VERSION}\""
+    "OTBR_MESHCOP_SERVICE_INSTANCE_NAME=\"${OTBR_MESHCOP_SERVICE_INSTANCE_NAME}\""
+    "OTBR_SYSLOG_FACILITY_ID=${OTBR_SYSLOG_FACILITY_ID}"
 )
 
 if(BUILD_SHARED_LIBS)
@@ -118,8 +121,8 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     endif()
 
     set(CPACK_GENERATOR "DEB")
-    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "OpenThread Authors <openthread-users@googlegroups.com")
-    set(CPACK_PACKAGE_CONTACT "OpenThread Authors <openthread-users@googlegroups.com")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "OpenThread Authors (https://github.com/openthread/openthread)")
+    set(CPACK_PACKAGE_CONTACT "OpenThread Authors (https://github.com/openthread/openthread)")
     include(CPack)
 endif()
 

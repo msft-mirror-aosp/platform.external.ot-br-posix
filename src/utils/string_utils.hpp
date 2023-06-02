@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2017-2019, The OpenThread Authors.
+ *  Copyright (c) 2021, The OpenThread Authors.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -28,35 +28,44 @@
 
 /**
  * @file
- * This file includes definition for strcpy_safe().
+ * This file includes definition for string utilities.
  */
 
-#ifndef OTBR_UTILS_STRCPY_UTILS_HPP_
-#define OTBR_UTILS_STRCPY_UTILS_HPP_
+#ifndef OTBR_UTILS_STRING_UTILS_HPP_
+#define OTBR_UTILS_STRING_UTILS_HPP_
 
 #include "openthread-br/config.h"
 
 #include <string.h>
+#include <string>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace otbr {
+
+namespace StringUtils {
 
 /**
- * This method is a safe version of strcpy always ensuring last byte to be 0
- * If strlen(aSrc) >= n, the string will be truncated
+ * This function compares two strings in a case-insensitive manner.
  *
- * @param[out] aDest      dest string
- * @param[in]  aDestSize  size of dest string buffer
- * @param[in]  aSrc       src string
+ * @param[in] aString1 The first string.
+ * @param[in] aString2 The second string.
  *
- * @returns 0 on success, -1 on error
+ * @returns  Whether the two strings are equal in a case-insensitive manner.
  *
  */
-int strcpy_safe(char *aDest, size_t aDestSize, const char *aSrc);
+bool EqualCaseInsensitive(const std::string &aString1, const std::string &aString2);
 
-#ifdef __cplusplus
-}
-#endif
+/**
+ * This function converts a given string to lowercase.
+ *
+ * @param[in] aString The string to convert.
+ *
+ * @returns  A copy of @p aString with all letters converted to lowercase.
+ *
+ */
+std::string ToLowercase(const std::string &aString);
 
-#endif // OTBR_UTILS_STRCPY_UTILS_HPP_
+} // namespace StringUtils
+
+} // namespace otbr
+
+#endif // OTBR_UTILS_STRING_UTILS_HPP_
