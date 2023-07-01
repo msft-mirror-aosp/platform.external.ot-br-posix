@@ -133,6 +133,8 @@ cc_binary {
         "libbase",
         "libutils",
         "libcutils",
+        "libbinder_ndk",
+        "android.hardware.threadnetwork-V1-ndk",
     ],
 
     static_libs: [
