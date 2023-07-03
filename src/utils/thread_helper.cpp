@@ -26,7 +26,7 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define OTBR_LOG_TAG "AGENT"
+#define OTBR_LOG_TAG "UTILS"
 
 #include "utils/thread_helper.hpp"
 
@@ -92,8 +92,28 @@ void ThreadHelper::StateChangedCallback(otChangedFlags aFlags)
         {
             if (mAttachHandler != nullptr)
             {
-                mAttachHandler(OT_ERROR_NONE);
-                mAttachHandler = nullptr;
+                if (mAttachPendingDatasetTlvs.mLength == 0)
+                {
+                    AttachHandler handler = mAttachHandler;
+
+                    mAttachHandler = nullptr;
+                    handler(OT_ERROR_NONE, mAttachDelayMs);
+                }
+                else
+                {
+                    otOperationalDataset emptyDataset = {};
+                    otError              error =
+                        otDatasetSendMgmtPendingSet(mInstance, &emptyDataset, mAttachPendingDatasetTlvs.mTlvs,
+                                                    mAttachPendingDatasetTlvs.mLength, MgmtSetResponseHandler, this);
+                    if (error != OT_ERROR_NONE)
+                    {
+                        AttachHandler handler = mAttachHandler;
+
+                        mAttachHandler            = nullptr;
+                        mAttachPendingDatasetTlvs = {};
+                        handler(error, 0);
+                    }
+                }
             }
             else if (mJoinerHandler != nullptr)
             {
@@ -102,7 +122,45 @@ void ThreadHelper::StateChangedCallback(otChangedFlags aFlags)
             }
         }
     }
+
+    if (aFlags & OT_CHANGED_ACTIVE_DATASET)
+    {
+        ActiveDatasetChangedCallback();
+    }
 }
+
+void ThreadHelper::ActiveDatasetChangedCallback()
+{
+    otError                  error;
+    otOperationalDatasetTlvs datasetTlvs;
+
+    SuccessOrExit(error = otDatasetGetActiveTlvs(mInstance, &datasetTlvs));
+
+    for (const auto &handler : mActiveDatasetChangeHandlers)
+    {
+        handler(datasetTlvs);
+    }
+
+exit:
+    if (error != OT_ERROR_NONE)
+    {
+        otbrLogWarning("Error handling active dataset change: %s", otThreadErrorToString(error));
+    }
+}
+
+#if OTBR_ENABLE_DBUS_SERVER
+void ThreadHelper::OnUpdateMeshCopTxt(std::map<std::string, std::vector<uint8_t>> aUpdate)
+{
+    if (mUpdateMeshCopTxtHandler)
+    {
+        mUpdateMeshCopTxtHandler(std::move(aUpdate));
+    }
+    else
+    {
+        otbrLogErr("No UpdateMeshCopTxtHandler");
+    }
+}
+#endif
 
 void ThreadHelper::AddDeviceRoleHandler(DeviceRoleHandler aHandler)
 {
@@ -128,6 +186,30 @@ exit:
             mScanHandler(error, {});
         }
         mScanHandler = nullptr;
+    }
+}
+
+void ThreadHelper::EnergyScan(uint32_t aScanDuration, EnergyScanHandler aHandler)
+{
+    otError  error             = OT_ERROR_NONE;
+    uint32_t preferredChannels = otPlatRadioGetPreferredChannelMask(mInstance);
+
+    VerifyOrExit(aHandler != nullptr, error = OT_ERROR_BUSY);
+    VerifyOrExit(aScanDuration < UINT16_MAX, error = OT_ERROR_INVALID_ARGS);
+    mEnergyScanHandler = aHandler;
+    mEnergyScanResults.clear();
+
+    error = otLinkEnergyScan(mInstance, preferredChannels, static_cast<uint16_t>(aScanDuration),
+                             &ThreadHelper::EnergyScanCallback, this);
+
+exit:
+    if (error != OT_ERROR_NONE)
+    {
+        if (aHandler)
+        {
+            mEnergyScanHandler(error, {});
+        }
+        mEnergyScanHandler = nullptr;
     }
 }
 
@@ -161,6 +243,28 @@ void ThreadHelper::ActiveScanHandler(otActiveScanResult *aResult)
     else
     {
         mScanResults.push_back(*aResult);
+    }
+}
+
+void ThreadHelper::EnergyScanCallback(otEnergyScanResult *aResult, void *aThreadHelper)
+{
+    ThreadHelper *helper = static_cast<ThreadHelper *>(aThreadHelper);
+
+    helper->EnergyScanCallback(aResult);
+}
+
+void ThreadHelper::EnergyScanCallback(otEnergyScanResult *aResult)
+{
+    if (aResult == nullptr)
+    {
+        if (mEnergyScanHandler != nullptr)
+        {
+            mEnergyScanHandler(OT_ERROR_NONE, mEnergyScanResults);
+        }
+    }
+    else
+    {
+        mEnergyScanResults.push_back(*aResult);
     }
 }
 
@@ -201,7 +305,7 @@ void ThreadHelper::Attach(const std::string &         aNetworkName,
                           const std::vector<uint8_t> &aNetworkKey,
                           const std::vector<uint8_t> &aPSKc,
                           uint32_t                    aChannelMask,
-                          ResultHandler               aHandler)
+                          AttachHandler               aHandler)
 
 {
     otError         error = OT_ERROR_NONE;
@@ -278,6 +382,7 @@ void ThreadHelper::Attach(const std::string &         aNetworkName,
     SuccessOrExit(error = otThreadSetPskc(mInstance, &pskc));
 
     SuccessOrExit(error = otThreadSetEnabled(mInstance, true));
+    mAttachDelayMs = 0;
     mAttachHandler = aHandler;
 
 exit:
@@ -285,12 +390,12 @@ exit:
     {
         if (aHandler)
         {
-            aHandler(error);
+            aHandler(error, 0);
         }
     }
 }
 
-void ThreadHelper::Attach(ResultHandler aHandler)
+void ThreadHelper::Attach(AttachHandler aHandler)
 {
     otError error = OT_ERROR_NONE;
 
@@ -308,7 +413,7 @@ exit:
     {
         if (aHandler)
         {
-            aHandler(error);
+            aHandler(error, 0);
         }
     }
 }
@@ -419,7 +524,7 @@ void ThreadHelper::LogOpenThreadResult(const char *aAction, otError aError)
     }
 }
 
-void ThreadHelper::AttachAllNodesTo(const std::vector<uint8_t> &aDatasetTlvs, ResultHandler aHandler)
+void ThreadHelper::AttachAllNodesTo(const std::vector<uint8_t> &aDatasetTlvs, AttachHandler aHandler)
 {
     constexpr uint32_t kDelayTimerMilliseconds = 300 * 1000;
 
@@ -451,27 +556,6 @@ void ThreadHelper::AttachAllNodesTo(const std::vector<uint8_t> &aDatasetTlvs, Re
     VerifyOrExit(dataset.mComponents.mIsSecurityPolicyPresent, error = OT_ERROR_INVALID_ARGS);
     VerifyOrExit(dataset.mComponents.mIsChannelMaskPresent, error = OT_ERROR_INVALID_ARGS);
 
-    if (role == OT_DEVICE_ROLE_DISABLED || role == OT_DEVICE_ROLE_DETACHED)
-    {
-        otOperationalDataset existingDataset;
-
-        error = otDatasetGetActive(mInstance, &existingDataset);
-        VerifyOrExit(error == OT_ERROR_NONE || error == OT_ERROR_NOT_FOUND);
-
-        VerifyOrExit(error == OT_ERROR_NOT_FOUND, error = OT_ERROR_INVALID_STATE);
-
-        SuccessOrExit(error = otDatasetSetActiveTlvs(mInstance, &datasetTlvs));
-
-        if (!otIp6IsEnabled(mInstance))
-        {
-            SuccessOrExit(error = otIp6SetEnabled(mInstance, true));
-        }
-        SuccessOrExit(error = otThreadSetEnabled(mInstance, true));
-
-        aHandler(OT_ERROR_NONE);
-        ExitNow();
-    }
-
     VerifyOrExit(FindTlv(OT_MESHCOP_TLV_PENDINGTIMESTAMP, datasetTlvs.mTlvs, datasetTlvs.mLength) == nullptr &&
                      FindTlv(OT_MESHCOP_TLV_DELAYTIMER, datasetTlvs.mTlvs, datasetTlvs.mLength) == nullptr,
                  error = OT_ERROR_INVALID_ARGS);
@@ -497,14 +581,52 @@ void ThreadHelper::AttachAllNodesTo(const std::vector<uint8_t> &aDatasetTlvs, Re
 
     datasetTlvs.mLength = reinterpret_cast<uint8_t *>(tlv->GetNext()) - datasetTlvs.mTlvs;
 
+    assert(datasetTlvs.mLength > 0);
+
+    if (role == OT_DEVICE_ROLE_DISABLED || role == OT_DEVICE_ROLE_DETACHED)
+    {
+        otOperationalDataset existingDataset;
+        bool                 hasActiveDataset;
+
+        error = otDatasetGetActive(mInstance, &existingDataset);
+        VerifyOrExit(error == OT_ERROR_NONE || error == OT_ERROR_NOT_FOUND);
+
+        hasActiveDataset = (error == OT_ERROR_NONE);
+
+        if (!hasActiveDataset)
+        {
+            SuccessOrExit(error = otDatasetSetActiveTlvs(mInstance, &datasetTlvs));
+        }
+
+        if (!otIp6IsEnabled(mInstance))
+        {
+            SuccessOrExit(error = otIp6SetEnabled(mInstance, true));
+        }
+        SuccessOrExit(error = otThreadSetEnabled(mInstance, true));
+
+        if (hasActiveDataset)
+        {
+            mAttachDelayMs            = kDelayTimerMilliseconds;
+            mAttachPendingDatasetTlvs = datasetTlvs;
+        }
+        else
+        {
+            mAttachDelayMs            = 0;
+            mAttachPendingDatasetTlvs = {};
+        }
+        mAttachHandler = aHandler;
+        ExitNow();
+    }
+
     SuccessOrExit(error = otDatasetSendMgmtPendingSet(mInstance, &emptyDataset, datasetTlvs.mTlvs, datasetTlvs.mLength,
                                                       MgmtSetResponseHandler, this));
+    mAttachDelayMs = kDelayTimerMilliseconds;
     mAttachHandler = aHandler;
 
 exit:
     if (error != OT_ERROR_NONE)
     {
-        aHandler(error);
+        aHandler(error, 0);
     }
 }
 
@@ -515,6 +637,9 @@ void ThreadHelper::MgmtSetResponseHandler(otError aResult, void *aContext)
 
 void ThreadHelper::MgmtSetResponseHandler(otError aResult)
 {
+    AttachHandler handler;
+    int64_t       attachDelayMs;
+
     LogOpenThreadResult("MgmtSetResponseHandler()", aResult);
 
     assert(mAttachHandler != nullptr);
@@ -529,8 +654,19 @@ void ThreadHelper::MgmtSetResponseHandler(otError aResult)
         break;
     }
 
-    mAttachHandler(aResult);
-    mAttachHandler = nullptr;
+    attachDelayMs             = mAttachDelayMs;
+    handler                   = mAttachHandler;
+    mAttachDelayMs            = 0;
+    mAttachHandler            = nullptr;
+    mAttachPendingDatasetTlvs = {};
+    if (aResult == OT_ERROR_NONE)
+    {
+        handler(aResult, attachDelayMs);
+    }
+    else
+    {
+        handler(aResult, 0);
+    }
 }
 
 #if OTBR_ENABLE_UNSECURE_JOIN
@@ -579,6 +715,11 @@ exit:
     return error;
 }
 #endif
+
+void ThreadHelper::AddActiveDatasetChangeHandler(DatasetChangeHandler aHandler)
+{
+    mActiveDatasetChangeHandlers.push_back(std::move(aHandler));
+}
 
 } // namespace agent
 } // namespace otbr
