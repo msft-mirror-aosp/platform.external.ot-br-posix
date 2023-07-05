@@ -74,7 +74,7 @@ genrule {
 }
 
 cc_binary {
-    name: "otbr-agent",
+    name: "ot-daemon",
     generated_headers: ["otbr_version_header"],
 
     include_dirs: [
