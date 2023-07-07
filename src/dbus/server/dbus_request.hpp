@@ -35,6 +35,7 @@
 #define OTBR_LOG_TAG "DBUS"
 #endif
 
+#include "common/code_utils.hpp"
 #include "common/logging.hpp"
 
 #include "dbus/common/dbus_message_dump.hpp"
@@ -55,8 +56,8 @@ public:
     /**
      * The constructor of dbus request.
      *
-     * @param[in]   aConnection   The dbus connection.
-     * @param[in]   aMessage      The incoming dbus message.
+     * @param[in] aConnection  The dbus connection.
+     * @param[in] aMessage     The incoming dbus message.
      *
      */
     DBusRequest(DBusConnection *aConnection, DBusMessage *aMessage)
@@ -70,7 +71,7 @@ public:
     /**
      * The copy constructor of dbus request.
      *
-     * @param[in]   aOther    The object to be copied from.
+     * @param[in] aOther  The object to be copied from.
      *
      */
     DBusRequest(const DBusRequest &aOther)
@@ -83,7 +84,7 @@ public:
     /**
      * The assignment operator of dbus request.
      *
-     * @param[in]   aOther    The object to be copied from.
+     * @param[in] aOther  The object to be copied from.
      *
      */
     DBusRequest &operator=(const DBusRequest &aOther)
@@ -95,7 +96,7 @@ public:
     /**
      * This method returns the message sent to call the d-bus method.
      *
-     * @returns   The dbus message.
+     * @returns The dbus message.
      *
      */
     DBusMessage *GetMessage(void) { return mMessage; }
@@ -103,7 +104,7 @@ public:
     /**
      * This method returns underlying d-bus connection.
      *
-     * @returns   The dbus connection.
+     * @returns The dbus connection.
      *
      */
     DBusConnection *GetConnection(void) { return mConnection; }
@@ -136,9 +137,11 @@ public:
      * This method replies an otError to the d-bus method call.
      *
      * @param[in] aError  The error to be sent.
+     * @param[in] aResult The return value of the method call, if any.
      *
      */
-    void ReplyOtResult(otError aError)
+    template <typename ResultType = int>
+    void ReplyOtResult(otError aError, Optional<ResultType> aResult = Optional<ResultType>())
     {
         UniqueDBusMessage reply{nullptr};
 
@@ -161,12 +164,19 @@ public:
         {
             reply = UniqueDBusMessage(dbus_message_new_error(mMessage, ConvertToDBusErrorName(aError), nullptr));
         }
+        VerifyOrDie(reply != nullptr, "Failed to allocate message");
 
-        VerifyOrExit(reply != nullptr);
+        if (aResult.HasValue())
+        {
+            DBusMessageIter replyIter;
+            otbrError       error;
+
+            dbus_message_iter_init_append(reply.get(), &replyIter);
+            error = DBusMessageEncode(&replyIter, *aResult);
+            VerifyOrDie(error == OTBR_ERROR_NONE, "Failed to encode result");
+        }
+
         dbus_connection_send(mConnection, reply.get(), nullptr);
-
-    exit:
-        return;
     }
 
     /**

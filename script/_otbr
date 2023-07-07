@@ -91,10 +91,16 @@ otbr_install()
         otbr_options+=(
             "-DOTBR_BACKBONE_ROUTER=ON"
         )
+        if [[ ${REFERENCE_DEVICE} == "1" ]]; then
+            otbr_options+=(
+                "-DOTBR_DUA_ROUTING=ON"
+            )
+        fi
     fi
 
     if [[ ${REFERENCE_DEVICE} == "1" ]]; then
         otbr_options+=(
+            "-DOTBR_NO_AUTO_ATTACH=1"
             "-DOT_REFERENCE_DEVICE=ON"
             "-DOT_DHCP6_CLIENT=ON"
             "-DOT_DHCP6_SERVER=ON"

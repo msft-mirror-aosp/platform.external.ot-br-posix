@@ -54,10 +54,12 @@ send "ifconfig up\r\n"
 expect "Done"
 send "thread start\r\n"
 expect "Done"
+send "srp server disable\r\n"
+expect "Done"
 wait
 EOF
     trap on_exit EXIT
-    sleep 5
+    sleep 12
     sudo python3 "${CMAKE_CURRENT_SOURCE_DIR}"/test_rest.py
 }
 
