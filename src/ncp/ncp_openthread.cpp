@@ -26,7 +26,7 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define OTBR_LOG_TAG "AGENT"
+#define OTBR_LOG_TAG "NCP"
 
 #include "ncp/ncp_openthread.hpp"
 
@@ -59,11 +59,15 @@ namespace Ncp {
 
 static const uint16_t kThreadVersion11 = 2; ///< Thread Version 1.1
 static const uint16_t kThreadVersion12 = 3; ///< Thread Version 1.2
+static const uint16_t kThreadVersion13 = 4; ///< Thread Version 1.3
 
 ControllerOpenThread::ControllerOpenThread(const char *                     aInterfaceName,
                                            const std::vector<const char *> &aRadioUrls,
-                                           const char *                     aBackboneInterfaceName)
+                                           const char *                     aBackboneInterfaceName,
+                                           bool                             aDryRun,
+                                           bool                             aEnableAutoAttach)
     : mInstance(nullptr)
+    , mEnableAutoAttach(aEnableAutoAttach)
 {
     VerifyOrDie(aRadioUrls.size() <= OT_PLATFORM_CONFIG_MAX_RADIO_URLS, "Too many Radio URLs!");
 
@@ -71,6 +75,8 @@ ControllerOpenThread::ControllerOpenThread(const char *                     aInt
 
     mConfig.mInterfaceName         = aInterfaceName;
     mConfig.mBackboneInterfaceName = aBackboneInterfaceName;
+    mConfig.mDryRun                = aDryRun;
+
     for (const char *url : aRadioUrls)
     {
         mConfig.mRadioUrls[mConfig.mRadioUrlNum++] = url;
@@ -80,15 +86,45 @@ ControllerOpenThread::ControllerOpenThread(const char *                     aInt
 
 ControllerOpenThread::~ControllerOpenThread(void)
 {
-    otSysDeinit();
+    // Make sure OpenThread Instance was gracefully de-initialized.
+    assert(mInstance == nullptr);
 }
 
-otbrError ControllerOpenThread::Init(void)
+otbrLogLevel ControllerOpenThread::ConvertToOtbrLogLevel(otLogLevel aLogLevel)
 {
-    otbrError  error = OTBR_ERROR_NONE;
-    otLogLevel level = OT_LOG_LEVEL_NONE;
+    otbrLogLevel otbrLogLevel;
 
-    switch (otbrLogGetLevel())
+    switch (aLogLevel)
+    {
+    case OT_LOG_LEVEL_NONE:
+        otbrLogLevel = OTBR_LOG_EMERG;
+        break;
+    case OT_LOG_LEVEL_CRIT:
+        otbrLogLevel = OTBR_LOG_CRIT;
+        break;
+    case OT_LOG_LEVEL_WARN:
+        otbrLogLevel = OTBR_LOG_WARNING;
+        break;
+    case OT_LOG_LEVEL_NOTE:
+        otbrLogLevel = OTBR_LOG_NOTICE;
+        break;
+    case OT_LOG_LEVEL_INFO:
+        otbrLogLevel = OTBR_LOG_INFO;
+        break;
+    case OT_LOG_LEVEL_DEBG:
+    default:
+        otbrLogLevel = OTBR_LOG_DEBUG;
+        break;
+    }
+
+    return otbrLogLevel;
+}
+
+otLogLevel ControllerOpenThread::ConvertToOtLogLevel(otbrLogLevel aLevel)
+{
+    otLogLevel level;
+
+    switch (aLevel)
     {
     case OTBR_LOG_EMERG:
     case OTBR_LOG_ALERT:
@@ -106,12 +142,19 @@ otbrError ControllerOpenThread::Init(void)
         level = OT_LOG_LEVEL_INFO;
         break;
     case OTBR_LOG_DEBUG:
+    default:
         level = OT_LOG_LEVEL_DEBG;
         break;
-    default:
-        ExitNow(error = OTBR_ERROR_OPENTHREAD);
-        break;
     }
+
+    return level;
+}
+
+void ControllerOpenThread::Init(void)
+{
+    otbrError  error = OTBR_ERROR_NONE;
+    otLogLevel level = ConvertToOtLogLevel(otbrLogGetLevel());
+
     VerifyOrExit(otLoggingSetLevel(level) == OT_ERROR_NONE, error = OTBR_ERROR_OPENTHREAD);
 
     mInstance = otSysInit(&mConfig);
@@ -135,7 +178,15 @@ otbrError ControllerOpenThread::Init(void)
     mThreadHelper = std::unique_ptr<otbr::agent::ThreadHelper>(new otbr::agent::ThreadHelper(mInstance, this));
 
 exit:
-    return error;
+    SuccessOrDie(error, "Failed to initialize NCP!");
+}
+
+void ControllerOpenThread::Deinit(void)
+{
+    assert(mInstance != nullptr);
+
+    otSysDeinit();
+    mInstance = nullptr;
 }
 
 void ControllerOpenThread::HandleStateChanged(otChangedFlags aFlags)
@@ -185,10 +236,20 @@ void ControllerOpenThread::Process(const MainloopContext &aMainloop)
 
     otSysMainloopProcess(mInstance, &aMainloop);
 
-    if (getenv("OTBR_NO_AUTO_ATTACH") == nullptr && mThreadHelper->TryResumeNetwork() == OT_ERROR_NONE)
+    if (IsAutoAttachEnabled() && mThreadHelper->TryResumeNetwork() == OT_ERROR_NONE)
     {
-        setenv("OTBR_NO_AUTO_ATTACH", "1", 0);
+        DisableAutoAttach();
     }
+}
+
+bool ControllerOpenThread::IsAutoAttachEnabled(void)
+{
+    return mEnableAutoAttach;
+}
+
+void ControllerOpenThread::DisableAutoAttach(void)
+{
+    mEnableAutoAttach = false;
 }
 
 void ControllerOpenThread::PostTimerTask(Milliseconds aDelay, TaskRunner::Task<void> aTask)
@@ -218,7 +279,7 @@ void ControllerOpenThread::Reset(void)
     {
         handler();
     }
-    unsetenv("OTBR_NO_AUTO_ATTACH");
+    mEnableAutoAttach = true;
 }
 
 const char *ControllerOpenThread::GetThreadVersion(void)
@@ -232,6 +293,9 @@ const char *ControllerOpenThread::GetThreadVersion(void)
         break;
     case kThreadVersion12:
         version = "1.2.0";
+        break;
+    case kThreadVersion13:
+        version = "1.3.0";
         break;
     default:
         otbrLogEmerg("Unexpected thread version %hu", otThreadGetVersion());
@@ -247,37 +311,18 @@ extern "C" void otPlatLog(otLogLevel aLogLevel, otLogRegion aLogRegion, const ch
 {
     OT_UNUSED_VARIABLE(aLogRegion);
 
-    otbrLogLevel otbrLogLevel;
-
-    switch (aLogLevel)
-    {
-    case OT_LOG_LEVEL_NONE:
-        otbrLogLevel = OTBR_LOG_EMERG;
-        break;
-    case OT_LOG_LEVEL_CRIT:
-        otbrLogLevel = OTBR_LOG_CRIT;
-        break;
-    case OT_LOG_LEVEL_WARN:
-        otbrLogLevel = OTBR_LOG_WARNING;
-        break;
-    case OT_LOG_LEVEL_NOTE:
-        otbrLogLevel = OTBR_LOG_NOTICE;
-        break;
-    case OT_LOG_LEVEL_INFO:
-        otbrLogLevel = OTBR_LOG_INFO;
-        break;
-    case OT_LOG_LEVEL_DEBG:
-        otbrLogLevel = OTBR_LOG_DEBUG;
-        break;
-    default:
-        otbrLogLevel = OTBR_LOG_DEBUG;
-        break;
-    }
+    otbrLogLevel otbrLogLevel = ControllerOpenThread::ConvertToOtbrLogLevel(aLogLevel);
 
     va_list ap;
     va_start(ap, aFormat);
     otbrLogvNoFilter(otbrLogLevel, aFormat, ap);
     va_end(ap);
+}
+
+extern "C" void otPlatLogHandleLevelChanged(otLogLevel aLogLevel)
+{
+    otbrLogSetLevel(ControllerOpenThread::ConvertToOtbrLogLevel(aLogLevel));
+    otbrLogInfo("OpenThread log level changed to %d", aLogLevel);
 }
 
 } // namespace Ncp
