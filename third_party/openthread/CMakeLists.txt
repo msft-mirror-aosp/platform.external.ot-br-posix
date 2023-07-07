@@ -29,14 +29,19 @@
 set(OT_BORDER_AGENT ON CACHE BOOL "enable border agent" FORCE)
 set(OT_BORDER_ROUTER ON CACHE BOOL "enable border router feature" FORCE)
 set(OT_BORDER_ROUTING ${OTBR_BORDER_ROUTING} CACHE BOOL "enable border routing feature" FORCE)
+set(OT_BORDER_ROUTING_NAT64 ${OTBR_BORDER_ROUTING_NAT64} CACHE BOOL "enable border routing NAT64 feature" FORCE)
 set(OT_BUILD_EXECUTABLES OFF CACHE BOOL "disable building executables" FORCE)
 set(OT_BUILTIN_MBEDTLS_MANAGEMENT OFF CACHE BOOL "diable mbedTLS management" FORCE)
-set(OT_COMMISSIONER ON CACHE BOOL "enable commissioner" FORCE)
+set(OT_COMMISSIONER ON CACHE BOOL "enable commissioner")
 set(OT_DAEMON ON CACHE BOOL "enable daemon mode" FORCE)
+set(OT_FIREWALL ON CACHE BOOL "enable firewall feature")
 set(OT_JOINER ON CACHE BOOL "enable joiner" FORCE)
 set(OT_LEGACY ON CACHE STRING "enable legacy network support" FORCE)
+if (NOT OT_THREAD_VERSION EQUAL "1.1")
+    set(OT_LINK_METRICS_SUBJECT ON CACHE BOOL "enable link metrics subject" FORCE)
+endif()
 set(OT_SLAAC ON CACHE BOOL "enable SLAAC" FORCE)
-set(OT_TREL ON CACHE BOOL "enable TREL")
+set(OT_TREL ${OTBR_TREL} CACHE BOOL "enable TREL" FORCE)
 
 if (NOT OT_LOG_LEVEL)
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -63,12 +68,14 @@ if (OTBR_SRP_ADVERTISING_PROXY)
 endif()
 
 if (OTBR_BACKBONE_ROUTER)
-    set(OT_THREAD_VERSION 1.2 CACHE STRING "Backbone Router requires Thread 1.2 or higher" FORCE)
     set(OT_BACKBONE_ROUTER ON CACHE BOOL "Enable Backbone Router feature in OpenThread" FORCE)
     set(OT_SERVICE ON CACHE BOOL "Backbone Router requires Thread network service" FORCE)
 endif()
 
-if (OT_THREAD_VERSION STREQUAL "1.2")
+if (NOT OT_THREAD_VERSION STREQUAL "1.1")
+    if (OT_REFERENCE_DEVICE)
+        set(OT_DUA ON CACHE BOOL "Enable Thread 1.2 DUA for reference devices")
+    endif()
     set(OT_MLR ON CACHE BOOL "Enable Thread 1.2 MLR by default")
 endif()
 
@@ -89,5 +96,12 @@ target_compile_definitions(ot-config INTERFACE
     "-DOPENTHREAD_CONFIG_LOG_CLI=1"
     "-DOPENTHREAD_CONFIG_MAX_STATECHANGE_HANDLERS=3"
     "-DOPENTHREAD_CONFIG_MLE_STEERING_DATA_SET_OOB_ENABLE=1"
-    "-DOPENTHREAD_CONFIG_TMF_PROXY_DUA_ENABLE=$<BOOL:${OTBR_DUA_ROUTING}>"
+    "-DOPENTHREAD_CONFIG_TCP_ENABLE=0"
 )
+
+if (NOT OT_THREAD_VERSION STREQUAL "1.1")
+    target_compile_definitions(ot-config INTERFACE
+        "-DOPENTHREAD_CONFIG_TMF_PROXY_DUA_ENABLE=1"
+        "-DOPENTHREAD_CONFIG_TMF_PROXY_MLR_ENABLE=1"
+    )
+endif()

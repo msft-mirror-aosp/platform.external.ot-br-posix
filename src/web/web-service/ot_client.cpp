@@ -39,13 +39,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
 
 #include "common/code_utils.hpp"
 #include "common/logging.hpp"
-#include "utils/strcpy_utils.hpp"
 
 // Temporary solution before posix platform header files are cleaned up.
 #ifndef OPENTHREAD_POSIX_DAEMON_SOCKET_NAME
@@ -110,6 +110,32 @@ exit:
     return ret == 0;
 }
 
+void OpenThreadClient::DiscardRead(void)
+{
+    fd_set  readFdSet;
+    timeval timeout = {0, 0};
+    ssize_t count;
+    int     ret;
+
+    for (;;)
+    {
+        FD_ZERO(&readFdSet);
+        FD_SET(mSocket, &readFdSet);
+
+        ret = select(mSocket + 1, &readFdSet, nullptr, nullptr, &timeout);
+        if (ret <= 0)
+        {
+            break;
+        }
+
+        count = read(mSocket, mBuffer, sizeof(mBuffer));
+        if (count <= 0)
+        {
+            break;
+        }
+    }
+}
+
 char *OpenThreadClient::Execute(const char *aFormat, ...)
 {
     va_list args;
@@ -117,6 +143,8 @@ char *OpenThreadClient::Execute(const char *aFormat, ...)
     char *  rval = nullptr;
     ssize_t count;
     size_t  rxLength = 0;
+
+    DiscardRead();
 
     va_start(args, aFormat);
     ret = vsnprintf(&mBuffer[1], sizeof(mBuffer) - 1, aFormat, args);
@@ -227,7 +255,6 @@ int OpenThreadClient::Scan(WpanNetworkInfo *aNetworks, int aLength)
         static const char kCliPrompt[] = "> ";
         char *            cliPrompt;
         int               matched;
-        int               joinable;
         int               lqi;
 
         // remove prompt
@@ -243,23 +270,19 @@ int OpenThreadClient::Scan(WpanNetworkInfo *aNetworks, int aLength)
             }
         }
 
-        matched = sscanf(result,
-                         "| %d | %s | %" PRIx64
-                         " | %hx | %02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx | %hu | %hhd | %d |",
-                         &joinable, aNetworks[rval].mNetworkName, &aNetworks[rval].mExtPanId, &aNetworks[rval].mPanId,
-                         &aNetworks[rval].mHardwareAddress[0], &aNetworks[rval].mHardwareAddress[1],
-                         &aNetworks[rval].mHardwareAddress[2], &aNetworks[rval].mHardwareAddress[3],
-                         &aNetworks[rval].mHardwareAddress[4], &aNetworks[rval].mHardwareAddress[5],
-                         &aNetworks[rval].mHardwareAddress[6], &aNetworks[rval].mHardwareAddress[7],
-                         &aNetworks[rval].mChannel, &aNetworks[rval].mRssi, &lqi);
+        matched = sscanf(result, "| %hx | %02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx | %hu | %hhd | %d |",
+                         &aNetworks[rval].mPanId, &aNetworks[rval].mHardwareAddress[0],
+                         &aNetworks[rval].mHardwareAddress[1], &aNetworks[rval].mHardwareAddress[2],
+                         &aNetworks[rval].mHardwareAddress[3], &aNetworks[rval].mHardwareAddress[4],
+                         &aNetworks[rval].mHardwareAddress[5], &aNetworks[rval].mHardwareAddress[6],
+                         &aNetworks[rval].mHardwareAddress[7], &aNetworks[rval].mChannel, &aNetworks[rval].mRssi, &lqi);
 
         // 15 is the number of output arguments of the last sscanf()
-        if (matched != 15)
+        if (matched != 12)
         {
             continue;
         }
 
-        aNetworks[rval].mAllowingJoin = joinable != 0;
         ++rval;
     }
 

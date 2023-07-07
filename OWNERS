@@ -1,3 +1,5 @@
-xyk@google.com
+# Bug component: 1203089
+
+include platform/packages/modules/ThreadNetwork:/OWNERS
+
 jinran@google.com
-zhanglongxia@google.com
