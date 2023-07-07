@@ -28,11 +28,13 @@
 
 add_library(otbr-utils
     crc16.cpp
+    dns_utils.cpp
     hex.cpp
+    infra_link_selector.cpp
     pskc.cpp
     socket_utils.cpp
     steering_data.cpp
-    strcpy_utils.cpp
+    string_utils.cpp
     system_utils.cpp
     thread_helper.cpp
     thread_helper.hpp

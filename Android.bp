@@ -102,8 +102,7 @@ cc_binary {
     ],
 
     srcs: [
-        "src/agent/agent_instance.cpp",
-        "src/agent/instance_params.cpp",
+        "src/agent/application.cpp",
         "src/agent/main.cpp",
         "src/border_agent/border_agent.cpp",
         "src/ncp/ncp_openthread.cpp",
@@ -118,8 +117,11 @@ cc_binary {
         "src/common/mainloop_manager.cpp",
         "src/mdns/mdns.cpp",
         "src/mdns/mdns_mdnssd.cpp",
+        "src/utils/dns_utils.cpp",
         "src/utils/hex.cpp",
-        "src/utils/strcpy_utils.cpp",
+        "src/utils/infra_link_selector.cpp",
+        "src/utils/socket_utils.cpp",
+        "src/utils/string_utils.cpp",
     ],
 
     shared_libs: [
@@ -132,6 +134,7 @@ cc_binary {
     static_libs: [
         "libopenthread-cli",
         "ot-core",
+        "openthread-tcplp",
     ],
 
     host_ldlibs: ["-lutil"],

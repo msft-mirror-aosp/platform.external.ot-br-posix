@@ -93,7 +93,7 @@
             networkName: 'OpenThreadDemo',
             extPanId: '1111111122222222',
             panId: '0x1234',
-            passphrase: '123456',
+            passphrase: 'j01Nme',
             networkKey: '00112233445566778899aabbccddeeff',
             channel: 15,
             prefix: 'fd11:22::',
@@ -130,7 +130,7 @@
             $scope.menu[index].show = true;
             if (index == 1) {
                 $scope.isLoading = true;
-                $http.get('/available_network').then(function(response) {
+                $http.get('available_network').then(function(response) {
                     $scope.isLoading = false;
                     if (response.data.error == 0) {
                         $scope.networksInfo = response.data.result;
@@ -140,7 +140,7 @@
                 });
             }
             if (index == 3) {
-                $http.get('/get_properties').then(function(response) {
+                $http.get('get_properties').then(function(response) {
                     console.log(response);
                     if (response.data.error == 0) {
                         var statusJson = response.data.result;
@@ -257,7 +257,7 @@
                 };
                 var httpRequest = $http({
                     method: 'POST',
-                    url: '/join_network',
+                    url: 'join_network',
                     data: data,
                 });
 
@@ -277,7 +277,7 @@
 
             $scope.qrcode = function() {
                 $scope.isLoading = false;
-                $http.get('/get_qrcode').then(function(response) {
+                $http.get('get_qrcode').then(function(response) {
                     console.log(response);
                     $scope.res = response.data.result;
                     if (response.data.result == 'successful') {
@@ -323,7 +323,7 @@
                 $scope.isForming = true;
                 var httpRequest = $http({
                     method: 'POST',
-                    url: '/form_network',
+                    url: 'form_network',
                     data: data,
                 });
 
@@ -371,7 +371,7 @@
                 };
                 var httpRequest = $http({
                     method: 'POST',
-                    url: '/add_prefix',
+                    url: 'add_prefix',
                     data: data,
                 });
 
@@ -397,7 +397,7 @@
                 };
                 var httpRequest = $http({
                     method: 'POST',
-                    url: '/delete_prefix',
+                    url: 'delete_prefix',
                     data: data,
                 });
 
@@ -416,7 +416,7 @@
             };
             var httpRequest = $http({
                 method: 'POST',
-                url: '/commission',
+                url: 'commission',
                 data: data,
             });
             
