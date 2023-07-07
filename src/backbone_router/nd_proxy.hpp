@@ -46,9 +46,11 @@
 #include <netinet/in.h>
 #include <set>
 #include <string>
+#include <utility>
 
 #include <openthread/backbone_router_ftd.h>
 
+#include "common/code_utils.hpp"
 #include "common/mainloop.hpp"
 #include "common/types.hpp"
 #include "ncp/ncp_openthread.hpp"
@@ -69,15 +71,16 @@ namespace BackboneRouter {
  * This class implements ND Proxy manager.
  *
  */
-class NdProxyManager : public MainloopProcessor
+class NdProxyManager : public MainloopProcessor, private NonCopyable
 {
 public:
     /**
      * This constructor initializes a NdProxyManager instance.
      *
      */
-    explicit NdProxyManager(otbr::Ncp::ControllerOpenThread &aNcp)
+    explicit NdProxyManager(otbr::Ncp::ControllerOpenThread &aNcp, std::string aBackboneInterfaceName)
         : mNcp(aNcp)
+        , mBackboneInterfaceName(std::move(aBackboneInterfaceName))
         , mIcmp6RawSock(-1)
         , mUnicastNsQueueSock(-1)
         , mNfqHandler(nullptr)
@@ -105,28 +108,15 @@ public:
      */
     void Disable(void);
 
-    /**
-     * This method updates the mainloop context.
-     *
-     * @param[inout]  aMainloop  A reference to the mainloop to be updated.
-     *
-     */
     void Update(MainloopContext &aMainloop) override;
-
-    /**
-     * This method processes mainloop events.
-     *
-     * @param[in]  aMainloop  A reference to the mainloop context.
-     *
-     */
     void Process(const MainloopContext &aMainloop) override;
 
     /**
      * This method handles a Backbone Router ND Proxy event.
      *
-     * @param[in] aEvent    The Backbone Router ND Proxy event type.
-     * @param[in] aDua      The Domain Unicast Address of the ND Proxy, or `nullptr` if @p `aEvent` is
-     *                      `OT_BACKBONE_ROUTER_NDPROXY_CLEARED`.
+     * @param[in] aEvent  The Backbone Router ND Proxy event type.
+     * @param[in] aDua    The Domain Unicast Address of the ND Proxy, or `nullptr` if @p `aEvent` is
+     *                    `OT_BACKBONE_ROUTER_NDPROXY_CLEARED`.
      *
      */
     void HandleBackboneRouterNdProxyEvent(otBackboneRouterNdProxyEvent aEvent, const otIp6Address *aDua);
@@ -134,7 +124,7 @@ public:
     /**
      * This method returns if the ND Proxy manager is enabled.
      *
-     * @returns  If the ND Proxy manager is enabled;
+     * @returns If the ND Proxy manager is enabled;
      *
      */
     bool IsEnabled(void) const { return mIcmp6RawSock >= 0; }
@@ -162,6 +152,7 @@ private:
     int HandleNetfilterQueue(struct nfq_q_handle *aNfQueueHandler, struct nfgenmsg *aNfMsg, struct nfq_data *aNfData);
 
     otbr::Ncp::ControllerOpenThread &mNcp;
+    std::string                      mBackboneInterfaceName;
     std::set<Ip6Address>             mNdProxySet;
     uint32_t                         mBackboneIfIndex;
     int                              mIcmp6RawSock;

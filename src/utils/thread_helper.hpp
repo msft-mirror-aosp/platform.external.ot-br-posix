@@ -63,15 +63,19 @@ namespace agent {
 class ThreadHelper
 {
 public:
-    using DeviceRoleHandler = std::function<void(otDeviceRole)>;
-    using ScanHandler       = std::function<void(otError, const std::vector<otActiveScanResult> &)>;
-    using ResultHandler     = std::function<void(otError)>;
+    using DeviceRoleHandler       = std::function<void(otDeviceRole)>;
+    using ScanHandler             = std::function<void(otError, const std::vector<otActiveScanResult> &)>;
+    using EnergyScanHandler       = std::function<void(otError, const std::vector<otEnergyScanResult> &)>;
+    using ResultHandler           = std::function<void(otError)>;
+    using AttachHandler           = std::function<void(otError, int64_t)>;
+    using UpdateMeshCopTxtHandler = std::function<void(std::map<std::string, std::vector<uint8_t>>)>;
+    using DatasetChangeHandler    = std::function<void(const otOperationalDatasetTlvs &)>;
 
     /**
      * The constructor of a Thread helper.
      *
-     * @param[in]   aInstance  The Thread instance.
-     * @param[in]   aNcp       The ncp controller.
+     * @param[in] aInstance  The Thread instance.
+     * @param[in] aNcp       The ncp controller.
      *
      */
     ThreadHelper(otInstance *aInstance, otbr::Ncp::ControllerOpenThread *aNcp);
@@ -79,16 +83,23 @@ public:
     /**
      * This method adds a callback for device role change.
      *
-     * @param[in]   aHandler  The device role handler.
+     * @param[in] aHandler  The device role handler.
      *
      */
     void AddDeviceRoleHandler(DeviceRoleHandler aHandler);
 
     /**
+     * This method adds a callback for active dataset change.
+     *
+     * @param[in]  aHandler   The active dataset change handler.
+     */
+    void AddActiveDatasetChangeHandler(DatasetChangeHandler aHandler);
+
+    /**
      * This method permits unsecure join on port.
      *
-     * @param[in]   aPort     The port number.
-     * @param[in]   aSeconds  The timeout to close the port, 0 for never close.
+     * @param[in] aPort     The port number.
+     * @param[in] aSeconds  The timeout to close the port, 0 for never close.
      *
      * @returns The error value of underlying OpenThread api calls.
      *
@@ -98,23 +109,32 @@ public:
     /**
      * This method performs a Thread network scan.
      *
-     * @param[in]   aHandler  The scan result handler.
+     * @param[in] aHandler  The scan result handler.
      *
      */
     void Scan(ScanHandler aHandler);
+
+    /**
+     * This method performs an IEEE 802.15.4 Energy Scan.
+     *
+     * @param[in] aScanDuration  The duration for the scan, in milliseconds.
+     * @param[in] aHandler       The scan result handler.
+     *
+     */
+    void EnergyScan(uint32_t aScanDuration, EnergyScanHandler aHandler);
 
     /**
      * This method attaches the device to the Thread network.
      *
      * @note The joiner start and the attach proccesses are exclusive
      *
-     * @param[in]   aNetworkName    The network name.
-     * @param[in]   aPanId          The pan id, UINT16_MAX for random.
-     * @param[in]   aExtPanId       The extended pan id, UINT64_MAX for random.
-     * @param[in]   aNetworkKey     The network key, empty for random.
-     * @param[in]   aPSKc           The pre-shared commissioner key, empty for random.
-     * @param[in]   aChannelMask    A bitmask for valid channels, will random select one.
-     * @param[in]   aHandler        The attach result handler.
+     * @param[in] aNetworkName  The network name.
+     * @param[in] aPanId        The pan id, UINT16_MAX for random.
+     * @param[in] aExtPanId     The extended pan id, UINT64_MAX for random.
+     * @param[in] aNetworkKey   The network key, empty for random.
+     * @param[in] aPSKc         The pre-shared commissioner key, empty for random.
+     * @param[in] aChannelMask  A bitmask for valid channels, will random select one.
+     * @param[in] aHandler      The attach result handler.
      *
      */
     void Attach(const std::string &         aNetworkName,
@@ -123,7 +143,7 @@ public:
                 const std::vector<uint8_t> &aNetworkKey,
                 const std::vector<uint8_t> &aPSKc,
                 uint32_t                    aChannelMask,
-                ResultHandler               aHandler);
+                AttachHandler               aHandler);
 
     /**
      * This method detaches the device from the Thread network.
@@ -139,10 +159,10 @@ public:
      * @note The joiner start and the attach proccesses are exclusive, and the
      *       network parameter will be set through the active dataset.
      *
-     * @param[in]   aHandler        The attach result handler.
+     * @param[in] aHandler  The attach result handler.
      *
      */
-    void Attach(ResultHandler aHandler);
+    void Attach(AttachHandler aHandler);
 
     /**
      * This method makes all nodes in the current network attach to the network specified by the dataset TLVs.
@@ -151,7 +171,7 @@ public:
      * @param[in] aHandler      The result handler.
      *
      */
-    void AttachAllNodesTo(const std::vector<uint8_t> &aDatasetTlvs, ResultHandler aHandler);
+    void AttachAllNodesTo(const std::vector<uint8_t> &aDatasetTlvs, AttachHandler aHandler);
 
     /**
      * This method resets the OpenThread stack.
@@ -166,13 +186,13 @@ public:
      *
      * @note The joiner start and the attach proccesses are exclusive
      *
-     * @param[in]   aPskd             The pre-shared key for device.
-     * @param[in]   aProvisioningUrl  The provision url.
-     * @param[in]   aVendorName       The vendor name.
-     * @param[in]   aVendorModel      The vendor model.
-     * @param[in]   aVendorSwVersion  The vendor software version.
-     * @param[in]   aVendorData       The vendor custom data.
-     * @param[in]   aHandler          The join result handler.
+     * @param[in] aPskd             The pre-shared key for device.
+     * @param[in] aProvisioningUrl  The provision url.
+     * @param[in] aVendorName       The vendor name.
+     * @param[in] aVendorModel      The vendor model.
+     * @param[in] aVendorSwVersion  The vendor software version.
+     * @param[in] aVendorData       The vendor custom data.
+     * @param[in] aHandler          The join result handler.
      *
      */
     void JoinerStart(const std::string &aPskd,
@@ -202,16 +222,37 @@ public:
     /**
      * This method handles OpenThread state changed notification.
      *
-     * @param[in]  aFlags    A bit-field indicating specific state that has changed.  See `OT_CHANGED_*` definitions.
+     * @param[in] aFlags    A bit-field indicating specific state that has changed.  See `OT_CHANGED_*` definitions.
      *
      */
     void StateChangedCallback(otChangedFlags aFlags);
 
+#if OTBR_ENABLE_DBUS_SERVER
+    /**
+     * This method sets a callback for calls of UpdateVendorMeshCopTxtEntries D-Bus API.
+     *
+     * @param[in] aHandler  The handler on MeshCoP TXT changes.
+     *
+     */
+    void SetUpdateMeshCopTxtHandler(UpdateMeshCopTxtHandler aHandler)
+    {
+        mUpdateMeshCopTxtHandler = std::move(aHandler);
+    }
+
+    /**
+     * This method handles MeshCoP TXT updates done by UpdateVendorMeshCopTxtEntries D-Bus API.
+     *
+     * @param[in] aUpdate  The key-value pairs to be updated in the TXT record.
+     *
+     */
+    void OnUpdateMeshCopTxt(std::map<std::string, std::vector<uint8_t>> aUpdate);
+#endif
+
     /**
      * This method logs OpenThread action result.
      *
-     * @param[in] aAction   The action OpenThread performs.
-     * @param[in] aError    The action result.
+     * @param[in] aAction  The action OpenThread performs.
+     * @param[in] aError   The action result.
      *
      */
     static void LogOpenThreadResult(const char *aAction, otError aError);
@@ -219,6 +260,9 @@ public:
 private:
     static void ActiveScanHandler(otActiveScanResult *aResult, void *aThreadHelper);
     void        ActiveScanHandler(otActiveScanResult *aResult);
+
+    static void EnergyScanCallback(otEnergyScanResult *aResult, void *aThreadHelper);
+    void        EnergyScanCallback(otEnergyScanResult *aResult);
 
     static void JoinerCallback(otError aError, void *aThreadHelper);
     void        JoinerCallback(otError aResult);
@@ -229,21 +273,33 @@ private:
     void    RandomFill(void *aBuf, size_t size);
     uint8_t RandomChannelFromChannelMask(uint32_t aChannelMask);
 
+    void ActiveDatasetChangedCallback();
+
     otInstance *mInstance;
 
     otbr::Ncp::ControllerOpenThread *mNcp;
 
     ScanHandler                     mScanHandler;
     std::vector<otActiveScanResult> mScanResults;
+    EnergyScanHandler               mEnergyScanHandler;
+    std::vector<otEnergyScanResult> mEnergyScanResults;
 
-    std::vector<DeviceRoleHandler> mDeviceRoleHandlers;
+    std::vector<DeviceRoleHandler>    mDeviceRoleHandlers;
+    std::vector<DatasetChangeHandler> mActiveDatasetChangeHandlers;
 
     std::map<uint16_t, size_t> mUnsecurePortRefCounter;
 
-    ResultHandler mAttachHandler;
+    int64_t       mAttachDelayMs = 0;
+    AttachHandler mAttachHandler;
     ResultHandler mJoinerHandler;
 
+    otOperationalDatasetTlvs mAttachPendingDatasetTlvs = {};
+
     std::random_device mRandomDevice;
+
+#if OTBR_ENABLE_DBUS_SERVER
+    UpdateMeshCopTxtHandler mUpdateMeshCopTxtHandler;
+#endif
 };
 
 } // namespace agent
