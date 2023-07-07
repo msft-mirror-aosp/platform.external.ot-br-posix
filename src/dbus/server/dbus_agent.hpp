@@ -39,6 +39,7 @@
 #include <string>
 #include <sys/select.h>
 
+#include "common/code_utils.hpp"
 #include "common/mainloop.hpp"
 #include "dbus/common/dbus_message_helper.hpp"
 #include "dbus/common/dbus_resources.hpp"
@@ -50,52 +51,43 @@
 namespace otbr {
 namespace DBus {
 
-class DBusAgent : public MainloopProcessor
+class DBusAgent : public MainloopProcessor, private NonCopyable
 {
 public:
     /**
      * The constructor of dbus agent.
      *
-     * @param[in]  aNcp  A reference to the NCP controller.
+     * @param[in] aNcp  A reference to the NCP controller.
      *
      */
-    DBusAgent(otbr::Ncp::ControllerOpenThread &aNcp);
+    DBusAgent(otbr::Ncp::ControllerOpenThread &aNcp, Mdns::Publisher &aPublisher);
 
     /**
      * This method initializes the dbus agent.
      *
-     * @returns The intialization error.
-     *
      */
-    otbrError Init(void);
+    void Init(void);
 
-    /**
-     * This method updates the mainloop context.
-     *
-     * @param[inout]  aMainloop  A reference to the mainloop to be updated.
-     *
-     */
     void Update(MainloopContext &aMainloop) override;
-
-    /**
-     * This method processes mainloop events.
-     *
-     * @param[in]  aMainloop  A reference to the mainloop context.
-     *
-     */
     void Process(const MainloopContext &aMainloop) override;
 
 private:
-    static dbus_bool_t AddDBusWatch(struct DBusWatch *aWatch, void *aContext);
-    static void        RemoveDBusWatch(struct DBusWatch *aWatch, void *aContext);
+    using Clock                                              = std::chrono::steady_clock;
+    constexpr static std::chrono::seconds kDBusWaitAllowance = std::chrono::seconds(30);
+
+    using UniqueDBusConnection = std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>>;
+
+    static dbus_bool_t   AddDBusWatch(struct DBusWatch *aWatch, void *aContext);
+    static void          RemoveDBusWatch(struct DBusWatch *aWatch, void *aContext);
+    UniqueDBusConnection PrepareDBusConnection(void);
 
     static const struct timeval kPollTimeout;
 
     std::string                       mInterfaceName;
     std::unique_ptr<DBusThreadObject> mThreadObject;
-    using UniqueDBusConnection = std::unique_ptr<DBusConnection, std::function<void(DBusConnection *)>>;
-    UniqueDBusConnection             mConnection;
-    otbr::Ncp::ControllerOpenThread &mNcp;
+    UniqueDBusConnection              mConnection;
+    otbr::Ncp::ControllerOpenThread & mNcp;
+    Mdns::Publisher &                 mPublisher;
 
     /**
      * This map is used to track DBusWatch-es.
