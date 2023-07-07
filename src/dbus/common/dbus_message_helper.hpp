@@ -53,6 +53,8 @@ otbrError DBusMessageEncode(DBusMessageIter *aIter, const otbrError &aError);
 otbrError DBusMessageExtract(DBusMessageIter *aIter, otbrError &aError);
 otbrError DBusMessageEncode(DBusMessageIter *aIter, const ActiveScanResult &aScanResult);
 otbrError DBusMessageExtract(DBusMessageIter *aIter, ActiveScanResult &aScanResult);
+otbrError DBusMessageEncode(DBusMessageIter *aIter, const EnergyScanResult &aResult);
+otbrError DBusMessageExtract(DBusMessageIter *aIter, EnergyScanResult &aResult);
 otbrError DBusMessageEncode(DBusMessageIter *aIter, const LinkModeConfig &aConfig);
 otbrError DBusMessageExtract(DBusMessageIter *aIter, LinkModeConfig &aConfig);
 otbrError DBusMessageEncode(DBusMessageIter *aIter, const Ip6Prefix &aPrefix);
@@ -73,6 +75,26 @@ otbrError DBusMessageEncode(DBusMessageIter *aIter, const LeaderData &aLeaderDat
 otbrError DBusMessageExtract(DBusMessageIter *aIter, LeaderData &aLeaderData);
 otbrError DBusMessageEncode(DBusMessageIter *aIter, const ChannelQuality &aQuality);
 otbrError DBusMessageExtract(DBusMessageIter *aIter, ChannelQuality &aQuality);
+otbrError DBusMessageEncode(DBusMessageIter *aIter, const TxtEntry &aTxtEntry);
+otbrError DBusMessageExtract(DBusMessageIter *aIter, TxtEntry &aTxtEntry);
+otbrError DBusMessageEncode(DBusMessageIter *aIter, const SrpServerInfo::Registration &aRegistration);
+otbrError DBusMessageExtract(DBusMessageIter *aIter, SrpServerInfo::Registration &aRegistration);
+otbrError DBusMessageEncode(DBusMessageIter *aIter, const SrpServerInfo::ResponseCounters &aResponseCounters);
+otbrError DBusMessageExtract(DBusMessageIter *aIter, SrpServerInfo::ResponseCounters &aResponseCounters);
+otbrError DBusMessageEncode(DBusMessageIter *aIter, const SrpServerInfo &aSrpServerInfo);
+otbrError DBusMessageExtract(DBusMessageIter *aIter, SrpServerInfo &aSrpServerInfo);
+otbrError DBusMessageEncode(DBusMessageIter *aIter, const MdnsResponseCounters &aMdnsResponseCounters);
+otbrError DBusMessageExtract(DBusMessageIter *aIter, MdnsResponseCounters &aMdnsResponseCounters);
+otbrError DBusMessageEncode(DBusMessageIter *aIter, const MdnsTelemetryInfo &aMdnsTelemetryInfo);
+otbrError DBusMessageExtract(DBusMessageIter *aIter, MdnsTelemetryInfo &aMdnsTelemetryInfo);
+otbrError DBusMessageEncode(DBusMessageIter *aIter, const DnssdCounters &aDnssdCounters);
+otbrError DBusMessageExtract(DBusMessageIter *aIter, DnssdCounters &aDnssdCounters);
+otbrError DBusMessageEncode(DBusMessageIter *aIter, const RadioSpinelMetrics &aRadioSpinelMetrics);
+otbrError DBusMessageExtract(DBusMessageIter *aIter, RadioSpinelMetrics &RadioSpinelMetrics);
+otbrError DBusMessageEncode(DBusMessageIter *aIter, const RcpInterfaceMetrics &aRcpInterfaceMetrics);
+otbrError DBusMessageExtract(DBusMessageIter *aIter, RcpInterfaceMetrics &aRcpInterfaceMetrics);
+otbrError DBusMessageEncode(DBusMessageIter *aIter, const RadioCoexMetrics &aRadioCoexMetrics);
+otbrError DBusMessageExtract(DBusMessageIter *aIter, RadioCoexMetrics &aRadioCoexMetrics);
 
 template <typename T> struct DBusTypeTrait;
 
@@ -124,6 +146,18 @@ template <> struct DBusTypeTrait<std::vector<ExternalRoute>>
     static constexpr const char *TYPE_AS_STRING = "a((ayy)qybb)";
 };
 
+template <> struct DBusTypeTrait<OnMeshPrefix>
+{
+    // struct of {{array of bytes, byte}, uint16, byte, bool, bool, bool, bool, bool, bool, bool, bool, bool}
+    static constexpr const char *TYPE_AS_STRING = "((ayy)qybbbbbbbbb)";
+};
+
+template <> struct DBusTypeTrait<std::vector<OnMeshPrefix>>
+{
+    // array of {{array of bytes, byte}, uint16, byte, bool, bool, bool, bool, bool, bool, bool, bool, bool}
+    static constexpr const char *TYPE_AS_STRING = "a((ayy)qybbbbbbbbb)";
+};
+
 template <> struct DBusTypeTrait<LeaderData>
 {
     // struct of { uint32, byte, byte, byte, byte }
@@ -164,6 +198,12 @@ template <> struct DBusTypeTrait<ActiveScanResult>
     static constexpr const char *TYPE_AS_STRING = "(tstayqqyyyybb)";
 };
 
+template <> struct DBusTypeTrait<EnergyScanResult>
+{
+    // struct of { uint8, int8_t }
+    static constexpr const char *TYPE_AS_STRING = "(yy)";
+};
+
 template <> struct DBusTypeTrait<ChannelQuality>
 {
     // struct of { uint8, uint16}
@@ -175,6 +215,75 @@ template <> struct DBusTypeTrait<std::vector<ChildInfo>>
     // array of struct of { uint64, uint32, uint32, uint16, uint16, uint8, uint8,
     //                      uint8, uint8, uint16, uint16, bool, bool, bool, bool }
     static constexpr const char *TYPE_AS_STRING = "a(tuuqqyyyyqqbbbb)";
+};
+
+template <> struct DBusTypeTrait<TxtEntry>
+{
+    // struct of { string, array<uint8> }
+    static constexpr const char *TYPE_AS_STRING = "(say)";
+};
+
+template <> struct DBusTypeTrait<std::vector<TxtEntry>>
+{
+    // array of struct of { string, array<uint8> }
+    static constexpr const char *TYPE_AS_STRING = "a(say)";
+};
+
+template <> struct DBusTypeTrait<SrpServerState>
+{
+    static constexpr int         TYPE           = DBUS_TYPE_BYTE;
+    static constexpr const char *TYPE_AS_STRING = DBUS_TYPE_BYTE_AS_STRING;
+};
+
+template <> struct DBusTypeTrait<SrpServerAddressMode>
+{
+    static constexpr int         TYPE           = DBUS_TYPE_BYTE;
+    static constexpr const char *TYPE_AS_STRING = DBUS_TYPE_BYTE_AS_STRING;
+};
+
+template <> struct DBusTypeTrait<SrpServerInfo>
+{
+    // struct of { uint8, uint16, uint8,
+    //              struct of { uint32, uint32, uint64, uint64, uint64, uint64 },
+    //              struct of { uint32, uint32, uint64, uint64, uint64, uint64 },
+    //              struct of { uint32, uint32, uint32, uint32, uint32, uint32} }
+    static constexpr const char *TYPE_AS_STRING = "(yqy(uutttt)(uutttt)(uuuuuu))";
+};
+
+template <> struct DBusTypeTrait<MdnsTelemetryInfo>
+{
+    // struct of { struct of { uint32, uint32, uint32, uint32, uint32, uint32 },
+    //              struct of { uint32, uint32, uint32, uint32, uint32, uint32 },
+    //              struct of { uint32, uint32, uint32, uint32, uint32, uint32 },
+    //              struct of { uint32, uint32, uint32, uint32, uint32, uint32 },
+    //              uint32, uint32, uint32, uint32 }
+    static constexpr const char *TYPE_AS_STRING = "((uuuuuu)(uuuuuu)(uuuuuu)(uuuuuu)uuuu)";
+};
+
+template <> struct DBusTypeTrait<DnssdCounters>
+{
+    // struct of { uint32, uint32, uint32, uint32, uint32, uint32, uint32 }
+    static constexpr const char *TYPE_AS_STRING = "(uuuuuuu)";
+};
+
+template <> struct DBusTypeTrait<RadioSpinelMetrics>
+{
+    // struct of { uint32, uint32, uint32, uint32 }
+    static constexpr const char *TYPE_AS_STRING = "(uuuu)";
+};
+
+template <> struct DBusTypeTrait<RcpInterfaceMetrics>
+{
+    // struct of { uint8, uint64, uint64, uint64, uint64, uint64, uint64, uint64 }
+    static constexpr const char *TYPE_AS_STRING = "(yttttttt)";
+};
+
+template <> struct DBusTypeTrait<RadioCoexMetrics>
+{
+    // struct of { uint32, uint32, uint32, uint32, uint32, uint32, uint32, uint32,
+    //             uint32, uint32, uint32, uint32, uint32, uint32, uint32, uint32,
+    //             uint32, uint32, bool }
+    static constexpr const char *TYPE_AS_STRING = "(uuuuuuuuuuuuuuuuuub)";
 };
 
 template <> struct DBusTypeTrait<int8_t>
@@ -449,6 +558,24 @@ public:
     }
 };
 
+template <> class DBusMessageIterFor<0, 0>
+{
+public:
+    static otbrError ConvertToTuple(DBusMessageIter *aIter, std::tuple<> &aValues)
+    {
+        OTBR_UNUSED_VARIABLE(aIter);
+        OTBR_UNUSED_VARIABLE(aValues);
+        return OTBR_ERROR_NONE;
+    }
+
+    static otbrError ConvertToDBusMessage(DBusMessageIter *aIter, const std::tuple<> &aValues)
+    {
+        OTBR_UNUSED_VARIABLE(aIter);
+        OTBR_UNUSED_VARIABLE(aValues);
+        return OTBR_ERROR_NONE;
+    }
+};
+
 template <size_t N, typename... FieldTypes> class DBusMessageIterFor<1, N, FieldTypes...>
 {
 public:
@@ -486,11 +613,11 @@ constexpr otbrError ConvertToTuple(DBusMessageIter *aIter, std::tuple<FieldTypes
 /**
  * This function converts a value to a d-bus variant.
  *
- * @param[out]  aIter    The message iterator pointing to the variant.
- * @param[in]   aValue    The value input.
+ * @param[out] aIter   The message iterator pointing to the variant.
+ * @param[in]  aValue  The value input.
  *
- * @retval  OTBR_ERROR_NONE   Successfully encoded to the variant.
- * @retval  OTBR_ERROR_DBUS   Failed to encode to the variant.
+ * @retval OTBR_ERROR_NONE  Successfully encoded to the variant.
+ * @retval OTBR_ERROR_DBUS  Failed to encode to the variant.
  */
 template <typename ValueType> otbrError DBusMessageEncodeToVariant(DBusMessageIter *aIter, const ValueType &aValue)
 {
@@ -512,11 +639,11 @@ exit:
 /**
  * This function converts a d-bus variant to a value.
  *
- * @param[in]   aIter     The message iterator pointing to the variant.
- * @param[out]  aValue    The value output.
+ * @param[in]  aIter   The message iterator pointing to the variant.
+ * @param[out] aValue  The value output.
  *
- * @retval  OTBR_ERROR_NONE   Successfully decoded the variant.
- * @retval  OTBR_ERROR_DBUS   Failed to decode the variant.
+ * @retval OTBR_ERROR_NONE  Successfully decoded the variant.
+ * @retval OTBR_ERROR_DBUS  Failed to decode the variant.
  */
 template <typename ValueType> otbrError DBusMessageExtractFromVariant(DBusMessageIter *aIter, ValueType &aValue)
 {
@@ -535,11 +662,11 @@ exit:
 /**
  * This function converts a d-bus message to a tuple of C++ types.
  *
- * @param[in]   aMessage  The dbus message to decode.
- * @param[out]  aValues   The tuple output.
+ * @param[in]  aMessage  The dbus message to decode.
+ * @param[out] aValues   The tuple output.
  *
- * @retval  OTBR_ERROR_NONE   Successfully decoded the message.
- * @retval  OTBR_ERROR_DBUS   Failed to decode the message.
+ * @retval OTBR_ERROR_NONE  Successfully decoded the message.
+ * @retval OTBR_ERROR_DBUS  Failed to decode the message.
  */
 template <typename... FieldTypes>
 otbrError DBusMessageToTuple(DBusMessage &aMessage, std::tuple<FieldTypes...> &aValues)
@@ -558,11 +685,11 @@ exit:
 /**
  * This function converts a tuple of C++ types to a d-bus message.
  *
- * @param[out]  aMessage  The dbus message output.
- * @param[in]   aValues   The tuple to encode.
+ * @param[out] aMessage  The dbus message output.
+ * @param[in]  aValues   The tuple to encode.
  *
- * @retval  OTBR_ERROR_NONE   Successfully encoded the message.
- * @retval  OTBR_ERROR_DBUS   Failed to encode the message.
+ * @retval OTBR_ERROR_NONE  Successfully encoded the message.
+ * @retval OTBR_ERROR_DBUS  Failed to encode the message.
  */
 template <typename... FieldTypes>
 otbrError TupleToDBusMessage(DBusMessage &aMessage, const std::tuple<FieldTypes...> &aValues)
@@ -576,11 +703,11 @@ otbrError TupleToDBusMessage(DBusMessage &aMessage, const std::tuple<FieldTypes.
 /**
  * This function converts a d-bus message to a tuple of C++ types.
  *
- * @param[in]   aMessage  The dbus message to decode.
- * @param[out]  aValues   The tuple output.
+ * @param[in]  aMessage  The dbus message to decode.
+ * @param[out] aValues   The tuple output.
  *
- * @retval  OTBR_ERROR_NONE   Successfully decoded the message.
- * @retval  OTBR_ERROR_DBUS   Failed to decode the message.
+ * @retval OTBR_ERROR_NONE  Successfully decoded the message.
+ * @retval OTBR_ERROR_DBUS  Failed to decode the message.
  */
 template <typename... FieldTypes>
 otbrError DBusMessageToTuple(UniqueDBusMessage const &aMessage, std::tuple<FieldTypes...> &aValues)

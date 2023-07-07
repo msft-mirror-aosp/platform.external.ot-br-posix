@@ -37,6 +37,8 @@
 #include <chrono>
 #include <memory>
 
+#include <assert.h>
+
 #include <openthread/backbone_router_ftd.h>
 #include <openthread/cli.h>
 #include <openthread/instance.h>
@@ -65,57 +67,60 @@ public:
      * @param[in]   aInterfaceName          A string of the NCP interface name.
      * @param[in]   aRadioUrls              The radio URLs (can be IEEE802.15.4 or TREL radio).
      * @param[in]   aBackboneInterfaceName  The Backbone network interface name.
+     * @param[in]   aDryRun                 TRUE to indicate dry-run mode. FALSE otherwise.
+     * @param[in]   aEnableAutoAttach       Whether or not to automatically attach to the saved network.
      *
      */
     ControllerOpenThread(const char *                     aInterfaceName,
                          const std::vector<const char *> &aRadioUrls,
-                         const char *                     aBackboneInterfaceName);
+                         const char *                     aBackboneInterfaceName,
+                         bool                             aDryRun,
+                         bool                             aEnableAutoAttach);
 
     /**
-     * This method initalize the NCP controller.
-     *
-     * @retval  OTBR_ERROR_NONE     Successfully initialized NCP controller.
+     * This method initialize the NCP controller.
      *
      */
-    otbrError Init(void);
+    void Init(void);
+
+    /**
+     * This method deinitialize the NCP controller.
+     *
+     */
+    void Deinit(void);
 
     /**
      * This method get mInstance pointer.
      *
-     * @retval  the pointer of mInstance.
+     * @retval The pointer of mInstance.
      *
      */
-    otInstance *GetInstance(void) { return mInstance; }
+    otInstance *GetInstance(void)
+    {
+        assert(mInstance != nullptr);
+        return mInstance;
+    }
 
     /**
      * This method gets the thread functionality helper.
      *
-     * @retval  the pointer to the helper object.
+     * @retval The pointer to the helper object.
      *
      */
-    otbr::agent::ThreadHelper *GetThreadHelper(void) { return mThreadHelper.get(); }
+    otbr::agent::ThreadHelper *GetThreadHelper(void)
+    {
+        assert(mThreadHelper != nullptr);
+        return mThreadHelper.get();
+    }
 
-    /**
-     * This method updates the mainloop context.
-     *
-     * @param[inout]  aMainloop  A reference to the mainloop to be updated.
-     *
-     */
     void Update(MainloopContext &aMainloop) override;
-
-    /**
-     * This method processes mainloop events.
-     *
-     * @param[in]  aMainloop  A reference to the mainloop context.
-     *
-     */
     void Process(const MainloopContext &aMainloop) override;
 
     /**
      * This method posts a task to the timer
      *
-     * @param[in]   aDelay  The delay in milliseconds before executing the task.
-     * @param[in]   aTask   The task function.
+     * @param[in] aDelay  The delay in milliseconds before executing the task.
+     * @param[in] aTask   The task function.
      *
      */
     void PostTimerTask(Milliseconds aDelay, TaskRunner::Task<void> aTask);
@@ -123,7 +128,7 @@ public:
     /**
      * This method registers a reset handler.
      *
-     * @param[in]   aHandler  The handler function.
+     * @param[in] aHandler  The handler function.
      *
      */
     void RegisterResetHandler(std::function<void(void)> aHandler);
@@ -131,7 +136,7 @@ public:
     /**
      * This method adds a event listener for Thread state changes.
      *
-     * @param[in]  aCallback  The callback to receive Thread state changed events.
+     * @param[in] aCallback  The callback to receive Thread state changed events.
      *
      */
     void AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback);
@@ -145,7 +150,7 @@ public:
     /**
      * This method returns the Thread protocol version as a string.
      *
-     * @returns  A pointer to the Thread version string.
+     * @returns A pointer to the Thread version string.
      *
      */
     static const char *GetThreadVersion(void);
@@ -153,10 +158,12 @@ public:
     /**
      * This method returns the Thread network interface name.
      *
-     * @returns  A pointer to the Thread network interface name string.
+     * @returns A pointer to the Thread network interface name string.
      *
      */
     const char *GetInterfaceName(void) const { return mConfig.mInterfaceName; }
+
+    static otbrLogLevel ConvertToOtbrLogLevel(otLogLevel aLogLevel);
 
     ~ControllerOpenThread(void) override;
 
@@ -180,6 +187,11 @@ private:
     void        HandleBackboneRouterNdProxyEvent(otBackboneRouterNdProxyEvent aEvent, const otIp6Address *aAddress);
 #endif
 
+    bool IsAutoAttachEnabled(void);
+    void DisableAutoAttach(void);
+
+    static otLogLevel ConvertToOtLogLevel(otbrLogLevel aLevel);
+
     otInstance *mInstance;
 
     otPlatformConfig                           mConfig;
@@ -187,6 +199,7 @@ private:
     std::vector<std::function<void(void)>>     mResetHandlers;
     TaskRunner                                 mTaskRunner;
     std::vector<ThreadStateChangedCallback>    mThreadStateChangedCallbacks;
+    bool                                       mEnableAutoAttach = false;
 };
 
 } // namespace Ncp

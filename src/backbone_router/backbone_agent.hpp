@@ -38,9 +38,9 @@
 
 #include <openthread/backbone_router_ftd.h>
 
-#include "agent/instance_params.hpp"
 #include "backbone_router/dua_routing_manager.hpp"
 #include "backbone_router/nd_proxy.hpp"
+#include "common/code_utils.hpp"
 #include "ncp/ncp_openthread.hpp"
 
 namespace otbr {
@@ -59,7 +59,7 @@ namespace BackboneRouter {
  * This class implements Thread Backbone agent functionality.
  *
  */
-class BackboneAgent
+class BackboneAgent : private NonCopyable
 {
 public:
     static constexpr uint16_t kBackboneUdpPort = 61631; ///< The BBR port.
@@ -70,7 +70,9 @@ public:
      * @param[in] aNcp  The Thread instance.
      *
      */
-    BackboneAgent(otbr::Ncp::ControllerOpenThread &aNcp);
+    BackboneAgent(otbr::Ncp::ControllerOpenThread &aNcp,
+                  std::string                      aInterfaceName,
+                  std::string                      aBackboneInterfaceName);
 
     /**
      * This method initializes the Backbone agent.
