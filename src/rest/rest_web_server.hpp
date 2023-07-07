@@ -57,7 +57,7 @@ public:
     /**
      * The constructor to initialize a REST server.
      *
-     * @param[in]  aNcp  A reference to the NCP controller.
+     * @param[in] aNcp  A reference to the NCP controller.
      *
      */
     RestWebServer(ControllerOpenThread &aNcp);
@@ -74,20 +74,7 @@ public:
      */
     void Init(void);
 
-    /**
-     * This method updates the mainloop context.
-     *
-     * @param[inout]  aMainloop  A reference to the mainloop to be updated.
-     *
-     */
     void Update(MainloopContext &aMainloop) override;
-
-    /**
-     * This method processes mainloop events.
-     *
-     * @param[in]  aMainloop  A reference to the mainloop context.
-     *
-     */
     void Process(const MainloopContext &aMainloop) override;
 
 private:
