@@ -123,6 +123,7 @@ DBusHandlerResult ThreadApiDBus::sDBusMessageFilter(DBusConnection *aConnection,
 
 DBusHandlerResult ThreadApiDBus::DBusMessageFilter(DBusConnection *aConnection, DBusMessage *aMessage)
 {
+    DBusHandlerResult handled = DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
     OTBR_UNUSED_VARIABLE(aConnection);
 
     DBusMessageIter iter, subIter, dictEntryIter, valIter;
@@ -150,9 +151,10 @@ DBusHandlerResult ThreadApiDBus::DBusMessageFilter(DBusConnection *aConnection, 
     {
         f(role);
     }
+    handled = DBUS_HANDLER_RESULT_HANDLED;
 
 exit:
-    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+    return handled;
 }
 
 void ThreadApiDBus::AddDeviceRoleHandler(const DeviceRoleHandler &aHandler)
@@ -190,6 +192,39 @@ void ThreadApiDBus::ScanPendingCallHandler(DBusPendingCall *aPending)
 
     mScanHandler(scanResults);
     mScanHandler = nullptr;
+}
+
+ClientError ThreadApiDBus::EnergyScan(uint32_t aScanDuration, const EnergyScanHandler &aHandler)
+{
+    ClientError error = ClientError::ERROR_NONE;
+    const auto  args  = std::tie(aScanDuration);
+
+    VerifyOrExit(mEnergyScanHandler == nullptr, error = ClientError::OT_ERROR_INVALID_STATE);
+    mEnergyScanHandler = aHandler;
+
+    error = CallDBusMethodAsync(OTBR_DBUS_ENERGY_SCAN_METHOD, args,
+                                &ThreadApiDBus::sHandleDBusPendingCall<&ThreadApiDBus::EnergyScanPendingCallHandler>);
+    if (error != ClientError::ERROR_NONE)
+    {
+        mEnergyScanHandler = nullptr;
+    }
+exit:
+    return error;
+}
+
+void ThreadApiDBus::EnergyScanPendingCallHandler(DBusPendingCall *aPending)
+{
+    std::vector<EnergyScanResult> results;
+    UniqueDBusMessage             message(dbus_pending_call_steal_reply(aPending));
+    auto                          args = std::tie(results);
+
+    if (message != nullptr)
+    {
+        DBusMessageToTuple(*message, args);
+    }
+
+    mEnergyScanHandler(results);
+    mEnergyScanHandler = nullptr;
 }
 
 ClientError ThreadApiDBus::PermitUnsecureJoin(uint16_t aPort, uint32_t aSeconds)
@@ -264,6 +299,45 @@ void ThreadApiDBus::AttachPendingCallHandler(DBusPendingCall *aPending)
     }
 
     mAttachHandler = nullptr;
+    handler(ret);
+}
+
+ClientError ThreadApiDBus::Detach(const OtResultHandler &aHandler)
+{
+    ClientError error = ClientError::ERROR_NONE;
+
+    VerifyOrExit(mDetachHandler == nullptr && mJoinerHandler == nullptr, error = ClientError::OT_ERROR_INVALID_STATE);
+    mDetachHandler = aHandler;
+
+    if (aHandler)
+    {
+        error = CallDBusMethodAsync(OTBR_DBUS_DETACH_METHOD,
+                                    &ThreadApiDBus::sHandleDBusPendingCall<&ThreadApiDBus::DetachPendingCallHandler>);
+    }
+    else
+    {
+        error = CallDBusMethodSync(OTBR_DBUS_DETACH_METHOD);
+    }
+    if (error != ClientError::ERROR_NONE)
+    {
+        mDetachHandler = nullptr;
+    }
+exit:
+    return error;
+}
+
+void ThreadApiDBus::DetachPendingCallHandler(DBusPendingCall *aPending)
+{
+    ClientError       ret = ClientError::OT_ERROR_FAILED;
+    UniqueDBusMessage message(dbus_pending_call_steal_reply(aPending));
+    auto              handler = mDetachHandler;
+
+    if (message != nullptr)
+    {
+        ret = CheckErrorMessage(message.get());
+    }
+
+    mDetachHandler = nullptr;
     handler(ret);
 }
 
@@ -544,6 +618,11 @@ ClientError ThreadApiDBus::GetExternalRoutes(std::vector<ExternalRoute> &aExtern
     return GetProperty(OTBR_DBUS_PROPERTY_EXTERNAL_ROUTES, aExternalRoutes);
 }
 
+ClientError ThreadApiDBus::GetOnMeshPrefixes(std::vector<OnMeshPrefix> &aOnMeshPrefixes)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_ON_MESH_PREFIXES, aOnMeshPrefixes);
+}
+
 ClientError ThreadApiDBus::GetActiveDatasetTlvs(std::vector<uint8_t> &aDataset)
 {
     return GetProperty(OTBR_DBUS_PROPERTY_ACTIVE_DATASET_TLVS, aDataset);
@@ -553,6 +632,23 @@ ClientError ThreadApiDBus::GetRadioRegion(std::string &aRadioRegion)
 {
     return GetProperty(OTBR_DBUS_PROPERTY_RADIO_REGION, aRadioRegion);
 }
+
+ClientError ThreadApiDBus::GetSrpServerInfo(SrpServerInfo &aSrpServerInfo)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_SRP_SERVER_INFO, aSrpServerInfo);
+}
+
+ClientError ThreadApiDBus::GetMdnsTelemetryInfo(MdnsTelemetryInfo &aMdnsTelemetryInfo)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_MDNS_TELEMETRY_INFO, aMdnsTelemetryInfo);
+}
+
+#if OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
+ClientError ThreadApiDBus::GetDnssdCounters(DnssdCounters &aDnssdCounters)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_DNSSD_COUNTERS, aDnssdCounters);
+}
+#endif
 
 std::string ThreadApiDBus::GetInterfaceName(void)
 {
@@ -717,6 +813,12 @@ ClientError ThreadApiDBus::AttachAllNodesTo(const std::vector<uint8_t> &aDataset
 {
     auto args = std::tie(aDataset);
     return CallDBusMethodSync(OTBR_DBUS_ATTACH_ALL_NODES_TO_METHOD, args);
+}
+
+ClientError ThreadApiDBus::UpdateVendorMeshCopTxtEntries(std::vector<TxtEntry> &aUpdate)
+{
+    auto args = std::tie(aUpdate);
+    return CallDBusMethodSync(OTBR_DBUS_UPDATE_VENDOR_MESHCOP_TXT_METHOD, args);
 }
 
 } // namespace DBus

@@ -47,16 +47,26 @@ enum SocketBlockOption
 /**
  * This function creates a socket with SOCK_CLOEXEC flag set.
  *
- * @param[in]   aDomain       The communication domain.
- * @param[in]   aType         The semantics of communication.
- * @param[in]   aProtocol     The protocol to use.
- * @param[in]   aBlockOption  Whether to add nonblock flags.
+ * @param[in] aDomain       The communication domain.
+ * @param[in] aType         The semantics of communication.
+ * @param[in] aProtocol     The protocol to use.
+ * @param[in] aBlockOption  Whether to add nonblock flags.
  *
- * @returns The file descriptor of the created socket.
- *
- * @retval  -1  Failed to create socket.
+ * @retval -1   Failed to create socket.
+ * @retval ...  The file descriptor of the created socket.
  *
  */
 int SocketWithCloseExec(int aDomain, int aType, int aProtocol, SocketBlockOption aBlockOption);
+
+/**
+ * This function creates a Linux netlink NETLINK_ROUTE socket for receiving routing and link updates.
+ *
+ * @param[in]  aNlGroups  The netlink multicast groups to listen to.
+ *
+ * @retval  -1  Failed to create the netlink socket.
+ * @retval ...  The file descriptor of the created netlink socket.
+ *
+ */
+int CreateNetLinkRouteSocket(uint32_t aNlGroups);
 
 #endif // OTBR_UTILS_SOCKET_UTILS_HPP_

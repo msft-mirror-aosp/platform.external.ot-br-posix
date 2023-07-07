@@ -41,6 +41,7 @@
 #include <openthread/instance.h>
 #include <openthread/srp_server.h>
 
+#include "common/code_utils.hpp"
 #include "mdns/mdns.hpp"
 #include "ncp/ncp_openthread.hpp"
 
@@ -50,14 +51,14 @@ namespace otbr {
  * This class implements the Advertising Proxy.
  *
  */
-class AdvertisingProxy
+class AdvertisingProxy : private NonCopyable
 {
 public:
     /**
      * This constructor initializes the Advertising Proxy object.
      *
-     * @param[in]  aNcp        A reference to the NCP controller.
-     * @param[in]  aPublisher  A reference to the mDNS publisher.
+     * @param[in] aNcp        A reference to the NCP controller.
+     * @param[in] aPublisher  A reference to the mDNS publisher.
      *
      */
     explicit AdvertisingProxy(Ncp::ControllerOpenThread &aNcp, Mdns::Publisher &aPublisher);
@@ -65,8 +66,8 @@ public:
     /**
      * This method starts the Advertising Proxy.
      *
-     * @retval  OTBR_ERROR_NONE  Successfully started the Advertising Proxy.
-     * @retval  ...              Failed to start the Advertising Proxy.
+     * @retval OTBR_ERROR_NONE  Successfully started the Advertising Proxy.
+     * @retval ...              Failed to start the Advertising Proxy.
      *
      */
     otbrError Start(void);
@@ -86,13 +87,9 @@ public:
 private:
     struct OutstandingUpdate
     {
-        typedef std::vector<std::pair<std::string, std::string>> ServiceNameList;
-
-        otSrpServerServiceUpdateId mId;                    // The ID of the SRP service update transaction.
-        std::string                mHostName;              // The host name.
-        ServiceNameList            mServiceNames;          // The list of service instance and name pairs to be updated.
-        uint32_t                   mCallbackCount     = 0; // The number of callbacks which we are waiting for.
-        bool                       mHostNamePublished = false; // Is the host name already published?
+        otSrpServerServiceUpdateId mId;                // The ID of the SRP service update transaction.
+        std::string                mHostName;          // The host name.
+        uint32_t                   mCallbackCount = 0; // The number of callbacks which we are waiting for.
     };
 
     static void AdvertisingHandler(otSrpServerServiceUpdateId aId,
@@ -103,11 +100,7 @@ private:
 
     static Mdns::Publisher::TxtList     MakeTxtList(const otSrpServerService *aSrpService);
     static Mdns::Publisher::SubTypeList MakeSubTypeList(const otSrpServerService *aSrpService);
-
-    static void PublishServiceHandler(const char *aName, const char *aType, otbrError aError, void *aContext);
-    void        PublishServiceHandler(const char *aName, const char *aType, otbrError aError);
-    static void PublishHostHandler(const char *aName, otbrError aError, void *aContext);
-    void        PublishHostHandler(const char *aName, otbrError aError);
+    void                                OnMdnsPublishResult(otSrpServerServiceUpdateId aUpdateId, otbrError aError);
 
     /**
      * This method publishes a specified host and its services.
