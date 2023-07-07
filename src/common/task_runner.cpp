@@ -70,14 +70,14 @@ TaskRunner::~TaskRunner(void)
     }
 }
 
-void TaskRunner::Post(const Task<void> aTask)
+void TaskRunner::Post(Task<void> aTask)
 {
     Post(Milliseconds::zero(), std::move(aTask));
 }
 
-void TaskRunner::Post(Milliseconds aDelay, const Task<void> aTask)
+TaskRunner::TaskId TaskRunner::Post(Milliseconds aDelay, Task<void> aTask)
 {
-    PushTask(aDelay, std::move(aTask));
+    return PushTask(aDelay, std::move(aTask));
 }
 
 void TaskRunner::Update(MainloopContext &aMainloop)
@@ -85,22 +85,26 @@ void TaskRunner::Update(MainloopContext &aMainloop)
     FD_SET(mEventFd[kRead], &aMainloop.mReadFdSet);
     aMainloop.mMaxFd = std::max(mEventFd[kRead], aMainloop.mMaxFd);
 
-    if (!mTaskQueue.empty())
     {
-        auto  now     = Clock::now();
-        auto &task    = mTaskQueue.top();
-        auto  delay   = std::chrono::duration_cast<Microseconds>(task.GetTimeExecute() - now);
-        auto  timeout = FromTimeval<Microseconds>(aMainloop.mTimeout);
+        std::lock_guard<std::mutex> _(mTaskQueueMutex);
 
-        if (task.GetTimeExecute() < now)
+        if (!mTaskQueue.empty())
         {
-            delay = Microseconds::zero();
-        }
+            auto  now     = Clock::now();
+            auto &task    = mTaskQueue.top();
+            auto  delay   = std::chrono::duration_cast<Microseconds>(task.GetTimeExecute() - now);
+            auto  timeout = FromTimeval<Microseconds>(aMainloop.mTimeout);
 
-        if (delay <= timeout)
-        {
-            aMainloop.mTimeout.tv_sec  = delay.count() / 1000000;
-            aMainloop.mTimeout.tv_usec = delay.count() % 1000000;
+            if (task.GetTimeExecute() < now)
+            {
+                delay = Microseconds::zero();
+            }
+
+            if (delay <= timeout)
+            {
+                aMainloop.mTimeout.tv_sec  = delay.count() / 1000000;
+                aMainloop.mTimeout.tv_usec = delay.count() % 1000000;
+            }
         }
     }
 }
@@ -125,13 +129,21 @@ void TaskRunner::Process(const MainloopContext &aMainloop)
     PopTasks();
 }
 
-void TaskRunner::PushTask(Milliseconds aDelay, const Task<void> aTask)
+TaskRunner::TaskId TaskRunner::PushTask(Milliseconds aDelay, Task<void> aTask)
 {
-    ssize_t                     rval;
-    const uint8_t               kOne = 1;
-    std::lock_guard<std::mutex> _(mTaskQueueMutex);
+    ssize_t       rval;
+    const uint8_t kOne = 1;
+    TaskId        taskId;
 
-    mTaskQueue.emplace(aDelay, std::move(aTask));
+    {
+        std::lock_guard<std::mutex> _(mTaskQueueMutex);
+
+        taskId = mNextTaskId++;
+
+        mActiveTaskIds.insert(taskId);
+        mTaskQueue.emplace(taskId, aDelay, std::move(aTask));
+    }
+
     do
     {
         rval = write(mEventFd[kWrite], &kOne, sizeof(kOne));
@@ -147,7 +159,14 @@ void TaskRunner::PushTask(Milliseconds aDelay, const Task<void> aTask)
     otbrLogWarning("Failed to write fd %d: %s", mEventFd[kWrite], strerror(errno));
 
 exit:
-    return;
+    return taskId;
+}
+
+void TaskRunner::Cancel(TaskRunner::TaskId aTaskId)
+{
+    std::lock_guard<std::mutex> _(mTaskQueueMutex);
+
+    mActiveTaskIds.erase(aTaskId);
 }
 
 void TaskRunner::PopTasks(void)
@@ -155,6 +174,7 @@ void TaskRunner::PopTasks(void)
     while (true)
     {
         Task<void> task;
+        bool       canceled;
 
         // The braces here are necessary for auto-releasing of the mutex.
         {
@@ -162,8 +182,12 @@ void TaskRunner::PopTasks(void)
 
             if (!mTaskQueue.empty() && mTaskQueue.top().GetTimeExecute() <= Clock::now())
             {
-                task = std::move(mTaskQueue.top().mTask);
+                const DelayedTask &top    = mTaskQueue.top();
+                TaskId             taskId = top.mTaskId;
+
+                task = std::move(top.mTask);
                 mTaskQueue.pop();
+                canceled = (mActiveTaskIds.erase(taskId) == 0);
             }
             else
             {
@@ -171,7 +195,10 @@ void TaskRunner::PopTasks(void)
             }
         }
 
-        task();
+        if (!canceled)
+        {
+            task();
+        }
     }
 }
 
