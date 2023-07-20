@@ -74,7 +74,7 @@ genrule {
 }
 
 cc_binary {
-    name: "otbr-agent",
+    name: "ot-daemon",
     generated_headers: ["otbr_version_header"],
 
     include_dirs: [
@@ -133,6 +133,8 @@ cc_binary {
         "libbase",
         "libutils",
         "libcutils",
+        "libbinder_ndk",
+        "android.hardware.threadnetwork-V1-ndk",
     ],
 
     static_libs: [
