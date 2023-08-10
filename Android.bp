@@ -143,7 +143,6 @@ cc_defaults {
     static_libs: [
         "libopenthread-cli",
         "ot-core",
-        "openthread-tcplp",
         "ot-daemon-aidl-ndk",
     ],
 
