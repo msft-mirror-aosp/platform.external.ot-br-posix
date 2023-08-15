@@ -54,8 +54,10 @@ using aidl::com::android::server::openthread::Ipv6AddressInfo;
 class OtDaemonServer : public BnOtDaemon, public MainloopProcessor
 {
 public:
-    static OtDaemonServer &GetInstance(void);
+    OtDaemonServer(void);
     virtual ~OtDaemonServer(void) = default;
+
+    static OtDaemonServer &GetInstance(void);
 
     // Disallow copy and assign.
     OtDaemonServer(const OtDaemonServer &)   = delete;
@@ -69,7 +71,6 @@ public:
 private:
     using DetachCallback = std::function<void()>;
 
-    OtDaemonServer(void);
     otInstance *GetOtInstance(void);
 
     // Implements MainloopProcessor
