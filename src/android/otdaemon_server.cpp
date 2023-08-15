@@ -117,6 +117,8 @@ void OtDaemonServer::BinderDeathCallback(void *aBinderServer)
 
 void OtDaemonServer::StateCallback(otChangedFlags aFlags)
 {
+    assert(GetOtInstance() != nullptr);
+
     if (mCallback == nullptr)
     {
         otbrLogWarning("Ignoring OT state changes: callback is not set");
@@ -228,6 +230,8 @@ void OtDaemonServer::TransmitCallback(void)
     otMessageSettings settings;
     int               fd = mTunFd.get();
 
+    assert(GetOtInstance() != nullptr);
+
     VerifyOrExit(fd != -1);
 
     length = read(fd, packet, sizeof(packet));
@@ -277,7 +281,7 @@ exit:
 
 otInstance *OtDaemonServer::GetOtInstance()
 {
-    return mNcp->GetInstance();
+    return (mNcp == nullptr) ? nullptr : mNcp->GetInstance();
 }
 
 void OtDaemonServer::Update(MainloopContext &aMainloop)
@@ -328,6 +332,7 @@ Status OtDaemonServer::attach(bool                                      aDoForm,
 
     otbrLogInfo("Start attaching...");
 
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
     VerifyOrExit(!isAttached(), error = OT_ERROR_INVALID_STATE, message = "Cannot attach when already attached");
 
     std::copy(aActiveOpDatasetTlvs.begin(), aActiveOpDatasetTlvs.end(), datasetTlvs.mTlvs);
@@ -365,7 +370,14 @@ exit:;
 
 Status OtDaemonServer::detach(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    detachGracefully([=]() { aReceiver->onSuccess(); });
+    if (GetOtInstance() == nullptr)
+    {
+        PropagateResult(OT_ERROR_INVALID_STATE, "OT is not initialized", aReceiver);
+    }
+    else
+    {
+        detachGracefully([=]() { aReceiver->onSuccess(); });
+    }
     return Status::ok();
 }
 
@@ -393,6 +405,12 @@ Status OtDaemonServer::scheduleMigration(const std::vector<uint8_t>             
     otError              error = OT_ERROR_NONE;
     std::string          message;
     otOperationalDataset emptyDataset;
+
+    if (GetOtInstance() == nullptr)
+    {
+        message = "OT is not initialized";
+        ExitNow(error = OT_ERROR_INVALID_STATE);
+    }
 
     if (!isAttached())
     {
@@ -422,10 +440,20 @@ void OtDaemonServer::sendMgmtPendingSetCallback(otError aResult, void *aBinderSe
 
 Status OtDaemonServer::getExtendedMacAddress(std::vector<uint8_t> *aExtendedMacAddress)
 {
-    const otExtAddress *extAddress = otLinkGetExtendedAddress(GetOtInstance());
+    Status status = Status::ok();
+    const otExtAddress *extAddress;
 
+    if (GetOtInstance() == nullptr)
+    {
+        status = Status::fromServiceSpecificErrorWithMessage(OT_ERROR_INVALID_STATE, "OT is not initialized");
+        ExitNow();
+    }
+
+    extAddress = otLinkGetExtendedAddress(GetOtInstance());
     aExtendedMacAddress->assign(extAddress->m8, extAddress->m8 + sizeof(extAddress->m8));
-    return Status::ok();
+
+exit:
+    return status;
 }
 
 Status OtDaemonServer::getThreadVersion(int *aThreadVersion)
