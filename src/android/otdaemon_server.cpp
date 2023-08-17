@@ -68,7 +68,10 @@ static void PropagateResult(otError                                   aError,
                             const std::string                        &aMessage,
                             const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    (aError == OT_ERROR_NONE) ? aReceiver->onSuccess() : aReceiver->onError(aError, aMessage);
+    if (aReceiver != nullptr)
+    {
+        (aError == OT_ERROR_NONE) ? aReceiver->onSuccess() : aReceiver->onError(aError, aMessage);
+    }
 }
 
 static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo)
@@ -305,7 +308,8 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
     }
 }
 
-Status OtDaemonServer::initialize(const ScopedFileDescriptor &aTunFd, const std::shared_ptr<IOtDaemonCallback> &aCallback)
+Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTunFd,
+                                  const std::shared_ptr<IOtDaemonCallback> &aCallback)
 {
     otbrLogDebug("OT daemon is initialized by the binder client (tunFd=%d)", aTunFd.get());
 
@@ -320,8 +324,8 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor &aTunFd, const std:
 }
 
 Status OtDaemonServer::attach(bool                                      aDoForm,
-                            const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
-                            const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+                              const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
+                              const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     otError                  error = OT_ERROR_NONE;
     std::string              message;
@@ -376,8 +380,14 @@ Status OtDaemonServer::detach(const std::shared_ptr<IOtStatusReceiver> &aReceive
     }
     else
     {
-        detachGracefully([=]() { aReceiver->onSuccess(); });
+        detachGracefully([=]() {
+            if (aReceiver != nullptr)
+            {
+                aReceiver->onSuccess();
+            }
+        });
     }
+
     return Status::ok();
 }
 
@@ -400,7 +410,7 @@ bool OtDaemonServer::isAttached()
 }
 
 Status OtDaemonServer::scheduleMigration(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
-                                       const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     otError              error = OT_ERROR_NONE;
     std::string          message;
@@ -440,8 +450,15 @@ void OtDaemonServer::sendMgmtPendingSetCallback(otError aResult, void *aBinderSe
 
 Status OtDaemonServer::getExtendedMacAddress(std::vector<uint8_t> *aExtendedMacAddress)
 {
-    Status status = Status::ok();
+    Status              status = Status::ok();
     const otExtAddress *extAddress;
+
+    if (aExtendedMacAddress == nullptr)
+    {
+        status =
+            Status::fromServiceSpecificErrorWithMessage(OT_ERROR_INVALID_ARGS, "aExtendedMacAddress can not be null");
+        ExitNow();
+    }
 
     if (GetOtInstance() == nullptr)
     {
@@ -458,8 +475,18 @@ exit:
 
 Status OtDaemonServer::getThreadVersion(int *aThreadVersion)
 {
+    Status status = Status::ok();
+
+    if (aThreadVersion == nullptr)
+    {
+        status = Status::fromServiceSpecificErrorWithMessage(OT_ERROR_INVALID_ARGS, "aThreadVersion can not be null");
+        ExitNow();
+    }
+
     *aThreadVersion = otThreadGetVersion();
-    return Status::ok();
+
+exit:
+    return status;
 }
 
 } // namespace Android
