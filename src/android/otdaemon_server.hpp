@@ -60,7 +60,7 @@ public:
     static OtDaemonServer &GetInstance(void);
 
     // Disallow copy and assign.
-    OtDaemonServer(const OtDaemonServer &)   = delete;
+    OtDaemonServer(const OtDaemonServer &) = delete;
     void operator=(const OtDaemonServer &) = delete;
 
     // TODO(wgtdkp): dump service info for debugging.
