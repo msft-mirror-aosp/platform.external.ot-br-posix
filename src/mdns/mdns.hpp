@@ -97,6 +97,7 @@ public:
 
     typedef std::vector<TxtEntry>    TxtList;
     typedef std::vector<std::string> SubTypeList;
+    typedef std::vector<Ip6Address>  AddressList;
 
     /**
      * This structure represents information of a discovered service instance.
@@ -188,7 +189,8 @@ public:
      *                          provided, this service resides on local host and it is the implementation
      *                          to provide specific host name. Otherwise, the caller MUST publish the host
      *                          with method PublishHost.
-     * @param[in] aName         The name of this service.
+     * @param[in] aName         The name of this service. If an empty string is provided, the service's name will be the
+     *                          same as the platform's hostname.
      * @param[in] aType         The type of this service.
      * @param[in] aSubTypeList  A list of service subtypes.
      * @param[in] aPort         The port number of this service.
@@ -205,8 +207,8 @@ public:
                         const std::string &aType,
                         const SubTypeList &aSubTypeList,
                         uint16_t           aPort,
-                        const TxtList &    aTxtList,
-                        ResultCallback &&  aCallback);
+                        const TxtList     &aTxtList,
+                        ResultCallback   &&aCallback);
 
     /**
      * This method un-publishes a service.
@@ -224,16 +226,16 @@ public:
      * Publishing a host is advertising an AAAA RR for the host name. This method should be called
      * before a service with non-empty host name is published.
      *
-     * @param[in] aName      The name of the host.
-     * @param[in] aAddress   The address of the host.
-     * @param[in] aCallback  The callback for receiving the publishing result.`OTBR_ERROR_NONE` will be
-     *                       returned if the operation is successful and all other values indicate a
-     *                       failure. Specifically, `OTBR_ERROR_DUPLICATED` indicates that the name has
-     *                       already been published and the caller can re-publish with a new name if an
-     *                       alternative name is available/acceptable.
+     * @param[in] aName       The name of the host.
+     * @param[in] aAddresses  The addresses of the host.
+     * @param[in] aCallback   The callback for receiving the publishing result.`OTBR_ERROR_NONE` will be
+     *                        returned if the operation is successful and all other values indicate a
+     *                        failure. Specifically, `OTBR_ERROR_DUPLICATED` indicates that the name has
+     *                        already been published and the caller can re-publish with a new name if an
+     *                        alternative name is available/acceptable.
      *
      */
-    void PublishHost(const std::string &aName, const std::vector<uint8_t> &aAddress, ResultCallback &&aCallback);
+    void PublishHost(const std::string &aName, const std::vector<Ip6Address> &aAddresses, ResultCallback &&aCallback);
 
     /**
      * This method un-publishes a host.
@@ -387,7 +389,7 @@ protected:
     {
     public:
         ResultCallback mCallback;
-        Publisher *    mPublisher;
+        Publisher     *mPublisher;
 
         Registration(ResultCallback &&aCallback, Publisher *aPublisher)
             : mCallback(std::move(aCallback))
@@ -411,6 +413,7 @@ protected:
         }
     };
 
+    // TODO: We may need a registration ID to fetch the information of a registration.
     class ServiceRegistration : public Registration
     {
     public:
@@ -428,7 +431,7 @@ protected:
                             uint16_t         aPort,
                             TxtList          aTxtList,
                             ResultCallback &&aCallback,
-                            Publisher *      aPublisher)
+                            Publisher       *aPublisher)
             : Registration(std::move(aCallback), aPublisher)
             , mHostName(std::move(aHostName))
             , mName(std::move(aName))
@@ -450,22 +453,19 @@ protected:
                         const std::string &aType,
                         const SubTypeList &aSubTypeList,
                         uint16_t           aPort,
-                        const TxtList &    aTxtList) const;
+                        const TxtList     &aTxtList) const;
     };
 
     class HostRegistration : public Registration
     {
     public:
-        std::string          mName;
-        std::vector<uint8_t> mAddress;
+        std::string             mName;
+        std::vector<Ip6Address> mAddresses;
 
-        HostRegistration(std::string          aName,
-                         std::vector<uint8_t> aAddress,
-                         ResultCallback &&    aCallback,
-                         Publisher *          aPublisher)
+        HostRegistration(std::string aName, AddressList aAddresses, ResultCallback &&aCallback, Publisher *aPublisher)
             : Registration(std::move(aCallback), aPublisher)
             , mName(std::move(aName))
-            , mAddress(std::move(aAddress))
+            , mAddresses(SortAddressList(std::move(aAddresses)))
         {
         }
 
@@ -476,7 +476,7 @@ protected:
         void OnComplete(otbrError);
 
         // Tells whether this `HostRegistration` object is outdated comparing to the given parameters.
-        bool IsOutdated(const std::string &aName, const std::vector<uint8_t> &aAddress) const;
+        bool IsOutdated(const std::string &aName, const std::vector<Ip6Address> &aAddresses) const;
     };
 
     using ServiceRegistrationPtr = std::unique_ptr<ServiceRegistration>;
@@ -486,23 +486,24 @@ protected:
 
     static SubTypeList SortSubTypeList(SubTypeList aSubTypeList);
     static TxtList     SortTxtList(TxtList aTxtList);
+    static AddressList SortAddressList(AddressList aAddressList);
     static std::string MakeFullServiceName(const std::string &aName, const std::string &aType);
     static std::string MakeFullHostName(const std::string &aName);
 
-    virtual void PublishServiceImpl(const std::string &aHostName,
-                                    const std::string &aName,
-                                    const std::string &aType,
-                                    const SubTypeList &aSubTypeList,
-                                    uint16_t           aPort,
-                                    const TxtList &    aTxtList,
-                                    ResultCallback &&  aCallback)                            = 0;
-    virtual void PublishHostImpl(const std::string &         aName,
-                                 const std::vector<uint8_t> &aAddress,
-                                 ResultCallback &&           aCallback)                               = 0;
-    virtual void OnServiceResolveFailedImpl(const std::string &aType,
-                                            const std::string &aInstanceName,
-                                            int32_t            aErrorCode)                            = 0;
-    virtual void OnHostResolveFailedImpl(const std::string &aHostName, int32_t aErrorCode) = 0;
+    virtual otbrError PublishServiceImpl(const std::string &aHostName,
+                                         const std::string &aName,
+                                         const std::string &aType,
+                                         const SubTypeList &aSubTypeList,
+                                         uint16_t           aPort,
+                                         const TxtList     &aTxtList,
+                                         ResultCallback   &&aCallback)                            = 0;
+    virtual otbrError PublishHostImpl(const std::string             &aName,
+                                      const std::vector<Ip6Address> &aAddresses,
+                                      ResultCallback               &&aCallback)                               = 0;
+    virtual void      OnServiceResolveFailedImpl(const std::string &aType,
+                                                 const std::string &aInstanceName,
+                                                 int32_t            aErrorCode)                            = 0;
+    virtual void      OnHostResolveFailedImpl(const std::string &aHostName, int32_t aErrorCode) = 0;
 
     virtual otbrError DnsErrorToOtbrError(int32_t aError) = 0;
 
@@ -523,12 +524,12 @@ protected:
                                                       const std::string &aType,
                                                       const SubTypeList &aSubTypeList,
                                                       uint16_t           aPort,
-                                                      const TxtList &    aTxtList,
-                                                      ResultCallback &&  aCallback);
+                                                      const TxtList     &aTxtList,
+                                                      ResultCallback   &&aCallback);
 
-    ResultCallback HandleDuplicateHostRegistration(const std::string &         aName,
-                                                   const std::vector<uint8_t> &aAddress,
-                                                   ResultCallback &&           aCallback);
+    ResultCallback HandleDuplicateHostRegistration(const std::string             &aName,
+                                                   const std::vector<Ip6Address> &aAddresses,
+                                                   ResultCallback               &&aCallback);
 
     void              AddHostRegistration(HostRegistrationPtr &&aHostReg);
     void              RemoveHostRegistration(const std::string &aName, otbrError aError);
