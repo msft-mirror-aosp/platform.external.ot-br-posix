@@ -70,13 +70,14 @@
  *  @param[in] aStatus  A scalar status to be evaluated against zero (0).
  *
  */
-#define SuccessOrExit(aStatus) \
-    do                         \
-    {                          \
-        if ((aStatus) != 0)    \
-        {                      \
-            goto exit;         \
-        }                      \
+#define SuccessOrExit(aStatus, ...) \
+    do                              \
+    {                               \
+        if ((aStatus) != 0)         \
+        {                           \
+            __VA_ARGS__;            \
+            goto exit;              \
+        }                           \
     } while (false)
 
 /**
@@ -87,14 +88,14 @@
  * @param[in] aMessage  A message (text string) to print on failure.
  *
  */
-#define SuccessOrDie(aStatus, aMessage)                                      \
-    do                                                                       \
-    {                                                                        \
-        if ((aStatus) != 0)                                                  \
-        {                                                                    \
-            otbrLogEmerg("FAILED %s:%d - %s", __FILE__, __LINE__, aMessage); \
-            exit(-1);                                                        \
-        }                                                                    \
+#define SuccessOrDie(aStatus, aMessage)                                                   \
+    do                                                                                    \
+    {                                                                                     \
+        if ((aStatus) != 0)                                                               \
+        {                                                                                 \
+            otbrLogEmerg("FAILED %s:%d - %d: %s", __FILE__, __LINE__, aStatus, aMessage); \
+            exit(-1);                                                                     \
+        }                                                                                 \
     } while (false)
 
 /**
@@ -157,7 +158,7 @@
 #define OTBR_NOOP
 #define OTBR_UNUSED_VARIABLE(variable) ((void)(variable))
 
-template <typename T, typename... Args> std::unique_ptr<T> MakeUnique(Args &&... args)
+template <typename T, typename... Args> std::unique_ptr<T> MakeUnique(Args &&...args)
 {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
 }
@@ -169,7 +170,7 @@ template <typename T, typename... Args> std::unique_ptr<T> MakeUnique(Args &&...
 class NonCopyable
 {
 public:
-    NonCopyable(const NonCopyable &) = delete;
+    NonCopyable(const NonCopyable &)            = delete;
     NonCopyable &operator=(const NonCopyable &) = delete;
 
 protected:
@@ -189,9 +190,9 @@ public:
 
     Optional &operator=(const Optional &aOther) { AssignFrom(aOther); }
 
-    constexpr const T *operator->(void)const { return &GetValue(); }
+    constexpr const T *operator->(void) const { return &GetValue(); }
 
-    constexpr const T &operator*(void)const { return GetValue(); }
+    constexpr const T &operator*(void) const { return GetValue(); }
 
     constexpr bool HasValue(void) const { return mHasValue; }
 
