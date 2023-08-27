@@ -32,23 +32,5 @@
 
 set -uo pipefail
 
-main()
-{
-    # "Usage: config-android-version-gen.sh < src/android/otbr-config-android-version.h.in > otbr-config-android-version.h"
-
-    OTBR_VERSION_GEN_FILE="$0"
-    OTBR_VERSION_GEN_FILE_PATH=$(dirname "${OTBR_VERSION_GEN_FILE}")
-
-    cd ${OTBR_VERSION_GEN_FILE_PATH}
-    INSIDE_GIT_REPO=$(git rev-parse --is-inside-work-tree 2>/dev/null)
-
-    if [ "${INSIDE_GIT_REPO}" == "true" ]; then
-        OTBR_GIT_VERSION=$(git describe --dirty --always)
-    else
-        OTBR_GIT_VERSION="Unknown"
-    fi
-
-    sed -e s/@OTBR_SOURCE_VERSION@/"${OTBR_GIT_VERSION}"/
-}
-
-main "$@"
+# "Usage: config-android-version-gen.sh < src/android/otbr-config-android-version.h.in > otbr-config-android-version.h"
+sed -e s/@OTBR_SOURCE_VERSION@/Unknown/ "$@"
