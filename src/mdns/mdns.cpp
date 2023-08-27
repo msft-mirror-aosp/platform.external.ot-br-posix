@@ -52,19 +52,33 @@ void Publisher::PublishService(const std::string &aHostName,
                                const std::string &aType,
                                const SubTypeList &aSubTypeList,
                                uint16_t           aPort,
-                               const TxtList &    aTxtList,
-                               ResultCallback &&  aCallback)
+                               const TxtList     &aTxtList,
+                               ResultCallback   &&aCallback)
 {
+    otbrError error;
+
     mServiceRegistrationBeginTime[std::make_pair(aName, aType)] = Clock::now();
 
-    PublishServiceImpl(aHostName, aName, aType, aSubTypeList, aPort, aTxtList, std::move(aCallback));
+    error = PublishServiceImpl(aHostName, aName, aType, aSubTypeList, aPort, aTxtList, std::move(aCallback));
+    if (error != OTBR_ERROR_NONE)
+    {
+        UpdateMdnsResponseCounters(mTelemetryInfo.mServiceRegistrations, error);
+    }
 }
 
-void Publisher::PublishHost(const std::string &aName, const std::vector<uint8_t> &aAddress, ResultCallback &&aCallback)
+void Publisher::PublishHost(const std::string             &aName,
+                            const std::vector<Ip6Address> &aAddresses,
+                            ResultCallback               &&aCallback)
 {
+    otbrError error;
+
     mHostRegistrationBeginTime[aName] = Clock::now();
 
-    PublishHostImpl(aName, aAddress, std::move(aCallback));
+    error = PublishHostImpl(aName, aAddresses, std::move(aCallback));
+    if (error != OTBR_ERROR_NONE)
+    {
+        UpdateMdnsResponseCounters(mTelemetryInfo.mHostRegistrations, error);
+    }
 }
 
 void Publisher::OnServiceResolveFailed(const std::string &aType, const std::string &aInstanceName, int32_t aErrorCode)
@@ -87,8 +101,8 @@ otbrError Publisher::EncodeTxtData(const TxtList &aTxtList, std::vector<uint8_t>
 
     for (const auto &txtEntry : aTxtList)
     {
-        const auto & name        = txtEntry.mName;
-        const auto & value       = txtEntry.mValue;
+        const auto  &name        = txtEntry.mName;
+        const auto  &value       = txtEntry.mValue;
         const size_t entryLength = name.length() + 1 + value.size();
 
         VerifyOrExit(entryLength <= kMaxTextEntrySize, error = OTBR_ERROR_INVALID_ARGS);
@@ -163,6 +177,8 @@ uint64_t Publisher::AddSubscriptionCallbacks(Publisher::DiscoveredServiceInstanc
 
 void Publisher::OnServiceResolved(const std::string &aType, const DiscoveredInstanceInfo &aInstanceInfo)
 {
+    std::vector<uint64_t> subscriberIds;
+
     otbrLogInfo("Service %s is resolved successfully: %s %s host %s addresses %zu", aType.c_str(),
                 aInstanceInfo.mRemoved ? "remove" : "add", aInstanceInfo.mName.c_str(), aInstanceInfo.mHostName.c_str(),
                 aInstanceInfo.mAddresses.size());
@@ -179,11 +195,23 @@ void Publisher::OnServiceResolved(const std::string &aType, const DiscoveredInst
     UpdateMdnsResponseCounters(mTelemetryInfo.mServiceResolutions, OTBR_ERROR_NONE);
     UpdateServiceInstanceResolutionEmaLatency(aInstanceInfo.mName, aType, OTBR_ERROR_NONE);
 
+    // In a callback, the mDiscoveredCallbacks may get changed which invalidates the running iterator. We need to refer
+    // to the callbacks by subscriberId to avoid invalid memory access.
+    subscriberIds.reserve(mDiscoveredCallbacks.size());
     for (const auto &subCallback : mDiscoveredCallbacks)
     {
-        if (subCallback.second.first != nullptr)
+        subscriberIds.push_back(subCallback.first);
+    }
+    for (const auto &subscriberId : subscriberIds)
+    {
+        auto it = mDiscoveredCallbacks.find(subscriberId);
+        if (it != mDiscoveredCallbacks.end())
         {
-            subCallback.second.first(aType, aInstanceInfo);
+            const auto &subCallback = *it;
+            if (subCallback.second.first != nullptr)
+            {
+                subCallback.second.first(aType, aInstanceInfo);
+            }
         }
     }
 }
@@ -236,6 +264,12 @@ Publisher::TxtList Publisher::SortTxtList(TxtList aTxtList)
     return aTxtList;
 }
 
+Publisher::AddressList Publisher::SortAddressList(AddressList aAddressList)
+{
+    std::sort(aAddressList.begin(), aAddressList.end());
+    return aAddressList;
+}
+
 std::string Publisher::MakeFullServiceName(const std::string &aName, const std::string &aType)
 {
     return aName + "." + aType + ".local";
@@ -282,8 +316,8 @@ Publisher::ResultCallback Publisher::HandleDuplicateServiceRegistration(const st
                                                                         const std::string &aType,
                                                                         const SubTypeList &aSubTypeList,
                                                                         uint16_t           aPort,
-                                                                        const TxtList &    aTxtList,
-                                                                        ResultCallback &&  aCallback)
+                                                                        const TxtList     &aTxtList,
+                                                                        ResultCallback   &&aCallback)
 {
     ServiceRegistration *serviceReg = FindServiceRegistration(aName, aType);
 
@@ -318,15 +352,15 @@ exit:
     return std::move(aCallback);
 }
 
-Publisher::ResultCallback Publisher::HandleDuplicateHostRegistration(const std::string &         aName,
-                                                                     const std::vector<uint8_t> &aAddress,
-                                                                     ResultCallback &&           aCallback)
+Publisher::ResultCallback Publisher::HandleDuplicateHostRegistration(const std::string             &aName,
+                                                                     const std::vector<Ip6Address> &aAddresses,
+                                                                     ResultCallback               &&aCallback)
 {
     HostRegistration *hostReg = FindHostRegistration(aName);
 
     VerifyOrExit(hostReg != nullptr);
 
-    if (hostReg->IsOutdated(aName, aAddress))
+    if (hostReg->IsOutdated(aName, aAddresses))
     {
         otbrLogInfo("Removing existing host %s: outdated", aName.c_str());
         RemoveHostRegistration(hostReg->mName, OTBR_ERROR_ABORTED);
@@ -374,6 +408,7 @@ void Publisher::RemoveHostRegistration(const std::string &aName, otbrError aErro
     hostReg = std::move(it->second);
     mHostRegistrations.erase(it);
     hostReg->Complete(aError);
+    otbrLogInfo("Removed host %s", aName.c_str());
 
 exit:
     return;
@@ -396,7 +431,7 @@ bool Publisher::ServiceRegistration::IsOutdated(const std::string &aHostName,
                                                 const std::string &aType,
                                                 const SubTypeList &aSubTypeList,
                                                 uint16_t           aPort,
-                                                const TxtList &    aTxtList) const
+                                                const TxtList     &aTxtList) const
 {
     return !(mHostName == aHostName && mName == aName && mType == aType && mSubTypeList == aSubTypeList &&
              mPort == aPort && mTxtList == aTxtList);
@@ -417,9 +452,9 @@ void Publisher::ServiceRegistration::OnComplete(otbrError aError)
     }
 }
 
-bool Publisher::HostRegistration::IsOutdated(const std::string &aName, const std::vector<uint8_t> &aAddress) const
+bool Publisher::HostRegistration::IsOutdated(const std::string &aName, const std::vector<Ip6Address> &aAddresses) const
 {
-    return !(mName == aName && mAddress == aAddress);
+    return !(mName == aName && mAddresses == aAddresses);
 }
 
 void Publisher::HostRegistration::Complete(otbrError aError)
@@ -455,6 +490,12 @@ void Publisher::UpdateMdnsResponseCounters(otbr::MdnsResponseCounters &aCounters
         break;
     case OTBR_ERROR_NOT_IMPLEMENTED:
         ++aCounters.mNotImplemented;
+        break;
+    case OTBR_ERROR_ABORTED:
+        ++aCounters.mAborted;
+        break;
+    case OTBR_ERROR_INVALID_STATE:
+        ++aCounters.mInvalidState;
         break;
     case OTBR_ERROR_MDNS:
     default:
