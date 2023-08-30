@@ -71,8 +71,8 @@ exit:
     return error;
 }
 
-void DBusObject::RegisterMethod(const std::string &      aInterfaceName,
-                                const std::string &      aMethodName,
+void DBusObject::RegisterMethod(const std::string       &aInterfaceName,
+                                const std::string       &aMethodName,
                                 const MethodHandlerType &aHandler)
 {
     std::string fullPath = aInterfaceName + "." + aMethodName;
@@ -81,15 +81,15 @@ void DBusObject::RegisterMethod(const std::string &      aInterfaceName,
     mMethodHandlers.emplace(fullPath, aHandler);
 }
 
-void DBusObject::RegisterGetPropertyHandler(const std::string &        aInterfaceName,
-                                            const std::string &        aPropertyName,
+void DBusObject::RegisterGetPropertyHandler(const std::string         &aInterfaceName,
+                                            const std::string         &aPropertyName,
                                             const PropertyHandlerType &aHandler)
 {
     mGetPropertyHandlers[aInterfaceName].emplace(aPropertyName, aHandler);
 }
 
-void DBusObject::RegisterSetPropertyHandler(const std::string &        aInterfaceName,
-                                            const std::string &        aPropertyName,
+void DBusObject::RegisterSetPropertyHandler(const std::string         &aInterfaceName,
+                                            const std::string         &aPropertyName,
                                             const PropertyHandlerType &aHandler)
 {
     std::string fullPath = aInterfaceName + "." + aPropertyName;
@@ -148,7 +148,7 @@ void DBusObject::GetPropertyMethodHandler(DBusRequest &aRequest)
         VerifyOrExit(propertyIter != mGetPropertyHandlers.end(), error = OT_ERROR_NOT_FOUND);
         {
             DBusMessageIter replyIter;
-            auto &          interfaceHandlers = propertyIter->second;
+            auto           &interfaceHandlers = propertyIter->second;
             auto            interfaceIter     = interfaceHandlers.find(propertyName);
 
             VerifyOrExit(interfaceIter != interfaceHandlers.end(), error = OT_ERROR_NOT_FOUND);
@@ -259,6 +259,11 @@ DBusObject::~DBusObject(void)
 UniqueDBusMessage DBusObject::NewSignalMessage(const std::string &aInterfaceName, const std::string &aSignalName)
 {
     return UniqueDBusMessage(dbus_message_new_signal(mObjectPath.c_str(), aInterfaceName.c_str(), aSignalName.c_str()));
+}
+
+void DBusObject::Flush(void)
+{
+    dbus_connection_flush(mConnection);
 }
 
 } // namespace DBus
