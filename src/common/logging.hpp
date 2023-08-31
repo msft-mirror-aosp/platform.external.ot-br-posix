@@ -66,6 +66,11 @@ typedef enum
 otbrLogLevel otbrLogGetLevel(void);
 
 /**
+ * Get default log level.
+ */
+otbrLogLevel otbrLogGetDefaultLevel(void);
+
+/**
  * Set current log level.
  */
 void otbrLogSetLevel(otbrLogLevel aLevel);
@@ -81,12 +86,12 @@ void otbrLogEnableSyslog(bool aEnabled);
 /**
  * This function initialize the logging service.
  *
- * @param[in] aIdent        Identity of the logger.
+ * @param[in] aProgramName  The name of this runnable program.
  * @param[in] aLevel        Log level of the logger.
  * @param[in] aPrintStderr  Whether to log to stderr.
  *
  */
-void otbrLogInit(const char *aIdent, otbrLogLevel aLevel, bool aPrintStderr);
+void otbrLogInit(const char *aProgramName, otbrLogLevel aLevel, bool aPrintStderr);
 
 /**
  * This function log at level @p aLevel.
