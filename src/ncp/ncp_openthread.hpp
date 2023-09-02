@@ -50,6 +50,11 @@
 #include "utils/thread_helper.hpp"
 
 namespace otbr {
+#if OTBR_ENABLE_FEATURE_FLAGS
+// Forward declaration of FeatureFlagList proto.
+class FeatureFlagList;
+#endif
+
 namespace Ncp {
 
 /**
@@ -71,9 +76,9 @@ public:
      * @param[in]   aEnableAutoAttach       Whether or not to automatically attach to the saved network.
      *
      */
-    ControllerOpenThread(const char *                     aInterfaceName,
+    ControllerOpenThread(const char                      *aInterfaceName,
                          const std::vector<const char *> &aRadioUrls,
-                         const char *                     aBackboneInterfaceName,
+                         const char                      *aBackboneInterfaceName,
                          bool                             aDryRun,
                          bool                             aEnableAutoAttach);
 
@@ -165,6 +170,29 @@ public:
 
     static otbrLogLevel ConvertToOtbrLogLevel(otLogLevel aLogLevel);
 
+#if OTBR_ENABLE_FEATURE_FLAGS
+    /**
+     * Apply the feature flag values to OpenThread through OpenThread APIs.
+     *
+     * @param[in] aFeatureFlagList  The feature flag list to be applied to OpenThread.
+     *
+     * @returns The error value of underlying OpenThread API calls.
+     *
+     */
+    otError ApplyFeatureFlagList(const FeatureFlagList &aFeatureFlagList);
+
+    /**
+     * This method returns the applied FeatureFlagList in ApplyFeatureFlagList call.
+     *
+     * @returns the applied FeatureFlagList's serialized bytes.
+     *
+     */
+    const std::string &GetAppliedFeatureFlagListBytes(void)
+    {
+        return mAppliedFeatureFlagListBytes;
+    }
+#endif
+
     ~ControllerOpenThread(void) override;
 
 private:
@@ -174,16 +202,16 @@ private:
     }
     void HandleStateChanged(otChangedFlags aFlags);
 
-    static void HandleBackboneRouterDomainPrefixEvent(void *                            aContext,
+    static void HandleBackboneRouterDomainPrefixEvent(void                             *aContext,
                                                       otBackboneRouterDomainPrefixEvent aEvent,
-                                                      const otIp6Prefix *               aDomainPrefix);
+                                                      const otIp6Prefix                *aDomainPrefix);
     void        HandleBackboneRouterDomainPrefixEvent(otBackboneRouterDomainPrefixEvent aEvent,
-                                                      const otIp6Prefix *               aDomainPrefix);
+                                                      const otIp6Prefix                *aDomainPrefix);
 
 #if OTBR_ENABLE_DUA_ROUTING
-    static void HandleBackboneRouterNdProxyEvent(void *                       aContext,
+    static void HandleBackboneRouterNdProxyEvent(void                        *aContext,
                                                  otBackboneRouterNdProxyEvent aEvent,
-                                                 const otIp6Address *         aAddress);
+                                                 const otIp6Address          *aAddress);
     void        HandleBackboneRouterNdProxyEvent(otBackboneRouterNdProxyEvent aEvent, const otIp6Address *aAddress);
 #endif
 
@@ -191,6 +219,8 @@ private:
     void DisableAutoAttach(void);
 
     static otLogLevel ConvertToOtLogLevel(otbrLogLevel aLevel);
+
+    otError SetOtbrAndOtLogLevel(otbrLogLevel aLevel);
 
     otInstance *mInstance;
 
@@ -200,6 +230,10 @@ private:
     TaskRunner                                 mTaskRunner;
     std::vector<ThreadStateChangedCallback>    mThreadStateChangedCallbacks;
     bool                                       mEnableAutoAttach = false;
+#if OTBR_ENABLE_FEATURE_FLAGS
+    // The applied FeatureFlagList in ApplyFeatureFlagList call, used for debugging purpose.
+    std::string mAppliedFeatureFlagListBytes;
+#endif
 };
 
 } // namespace Ncp
