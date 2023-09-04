@@ -82,16 +82,16 @@ public:
     void Process(const MainloopContext &aMainloop) override;
 
 protected:
-    void      PublishServiceImpl(const std::string &aHostName,
+    otbrError PublishServiceImpl(const std::string &aHostName,
                                  const std::string &aName,
                                  const std::string &aType,
                                  const SubTypeList &aSubTypeList,
                                  uint16_t           aPort,
-                                 const TxtList &    aTxtList,
-                                 ResultCallback &&  aCallback) override;
-    void      PublishHostImpl(const std::string &         aName,
-                              const std::vector<uint8_t> &aAddress,
-                              ResultCallback &&           aCallback) override;
+                                 const TxtList     &aTxtList,
+                                 ResultCallback   &&aCallback) override;
+    otbrError PublishHostImpl(const std::string             &aName,
+                              const std::vector<Ip6Address> &aAddress,
+                              ResultCallback               &&aCallback) override;
     void      OnServiceResolveFailedImpl(const std::string &aType,
                                          const std::string &aInstanceName,
                                          int32_t            aErrorCode) override;
@@ -109,10 +109,10 @@ private:
                                  const std::string &aType,
                                  const SubTypeList &aSubTypeList,
                                  uint16_t           aPort,
-                                 const TxtList &    aTxtList,
-                                 ResultCallback &&  aCallback,
+                                 const TxtList     &aTxtList,
+                                 ResultCallback   &&aCallback,
                                  DNSServiceRef      aServiceRef,
-                                 PublisherMDnsSd *  aPublisher)
+                                 PublisherMDnsSd   *aPublisher)
             : ServiceRegistration(aHostName,
                                   aName,
                                   aType,
@@ -135,25 +135,29 @@ private:
     class DnssdHostRegistration : public HostRegistration
     {
     public:
-        DnssdHostRegistration(const std::string &         aName,
-                              const std::vector<uint8_t> &aAddress,
-                              ResultCallback &&           aCallback,
-                              DNSServiceRef               aServiceRef,
-                              DNSRecordRef                aRecordRef,
-                              Publisher *                 aPublisher)
-            : HostRegistration(aName, aAddress, std::move(aCallback), aPublisher)
+        DnssdHostRegistration(const std::string             &aName,
+                              const std::vector<Ip6Address> &aAddresses,
+                              ResultCallback               &&aCallback,
+                              DNSServiceRef                  aServiceRef,
+                              Publisher                     *aPublisher)
+            : HostRegistration(aName, aAddresses, std::move(aCallback), aPublisher)
             , mServiceRef(aServiceRef)
-            , mRecordRef(aRecordRef)
+            , mRecordRefMap()
+            , mCallbackCount(aAddresses.size())
         {
         }
 
         ~DnssdHostRegistration(void) override;
-        const DNSServiceRef &GetServiceRef() const { return mServiceRef; }
-        const DNSRecordRef & GetRecordRef() const { return mRecordRef; }
+        const DNSServiceRef                      &GetServiceRef() const { return mServiceRef; }
+        const std::map<DNSRecordRef, Ip6Address> &GetRecordRefMap() const { return mRecordRefMap; }
+        std::map<DNSRecordRef, Ip6Address>       &GetRecordRefMap() { return mRecordRefMap; }
 
     private:
         DNSServiceRef mServiceRef;
-        DNSRecordRef  mRecordRef;
+
+    public:
+        std::map<DNSRecordRef, Ip6Address> mRecordRefMap;
+        uint32_t                           mCallbackCount;
     };
 
     struct ServiceRef : private ::NonCopyable
@@ -199,18 +203,18 @@ private:
                                         DNSServiceFlags      aFlags,
                                         uint32_t             aInterfaceIndex,
                                         DNSServiceErrorType  aErrorCode,
-                                        const char *         aFullName,
-                                        const char *         aHostTarget,
+                                        const char          *aFullName,
+                                        const char          *aHostTarget,
                                         uint16_t             aPort, // In network byte order.
                                         uint16_t             aTxtLen,
                                         const unsigned char *aTxtRecord,
-                                        void *               aContext);
+                                        void                *aContext);
         void        HandleResolveResult(DNSServiceRef        aServiceRef,
                                         DNSServiceFlags      aFlags,
                                         uint32_t             aInterfaceIndex,
                                         DNSServiceErrorType  aErrorCode,
-                                        const char *         aFullName,
-                                        const char *         aHostTarget,
+                                        const char          *aFullName,
+                                        const char          *aHostTarget,
                                         uint16_t             aPort, // In network byte order.
                                         uint16_t             aTxtLen,
                                         const unsigned char *aTxtRecord);
@@ -218,19 +222,19 @@ private:
                                             DNSServiceFlags        aFlags,
                                             uint32_t               aInterfaceIndex,
                                             DNSServiceErrorType    aErrorCode,
-                                            const char *           aHostName,
+                                            const char            *aHostName,
                                             const struct sockaddr *aAddress,
                                             uint32_t               aTtl,
-                                            void *                 aContext);
+                                            void                  *aContext);
         void        HandleGetAddrInfoResult(DNSServiceRef          aServiceRef,
                                             DNSServiceFlags        aFlags,
                                             uint32_t               aInterfaceIndex,
                                             DNSServiceErrorType    aErrorCode,
-                                            const char *           aHostName,
+                                            const char            *aHostName,
                                             const struct sockaddr *aAddress,
                                             uint32_t               aTtl);
 
-        ServiceSubscription *  mSubscription;
+        ServiceSubscription   *mSubscription;
         std::string            mInstanceName;
         std::string            mTypeEndWithDot;
         std::string            mDomain;
@@ -261,17 +265,17 @@ private:
                                        DNSServiceFlags     aFlags,
                                        uint32_t            aInterfaceIndex,
                                        DNSServiceErrorType aErrorCode,
-                                       const char *        aInstanceName,
-                                       const char *        aType,
-                                       const char *        aDomain,
-                                       void *              aContext);
+                                       const char         *aInstanceName,
+                                       const char         *aType,
+                                       const char         *aDomain,
+                                       void               *aContext);
         void        HandleBrowseResult(DNSServiceRef       aServiceRef,
                                        DNSServiceFlags     aFlags,
                                        uint32_t            aInterfaceIndex,
                                        DNSServiceErrorType aErrorCode,
-                                       const char *        aInstanceName,
-                                       const char *        aType,
-                                       const char *        aDomain);
+                                       const char         *aInstanceName,
+                                       const char         *aType,
+                                       const char         *aDomain);
 
         PublisherMDnsSd *mMDnsSd;
         std::string      mType;
@@ -294,19 +298,19 @@ private:
                                         DNSServiceFlags        aFlags,
                                         uint32_t               aInterfaceIndex,
                                         DNSServiceErrorType    aErrorCode,
-                                        const char *           aHostName,
+                                        const char            *aHostName,
                                         const struct sockaddr *aAddress,
                                         uint32_t               aTtl,
-                                        void *                 aContext);
+                                        void                  *aContext);
         void        HandleResolveResult(DNSServiceRef          aServiceRef,
                                         DNSServiceFlags        aFlags,
                                         uint32_t               aInterfaceIndex,
                                         DNSServiceErrorType    aErrorCode,
-                                        const char *           aHostName,
+                                        const char            *aHostName,
                                         const struct sockaddr *aAddress,
                                         uint32_t               aTtl);
 
-        PublisherMDnsSd *  mMDnsSd;
+        PublisherMDnsSd   *mMDnsSd;
         std::string        mHostName;
         DiscoveredHostInfo mHostInfo;
     };
@@ -317,21 +321,21 @@ private:
     static void HandleServiceRegisterResult(DNSServiceRef         aService,
                                             const DNSServiceFlags aFlags,
                                             DNSServiceErrorType   aError,
-                                            const char *          aName,
-                                            const char *          aType,
-                                            const char *          aDomain,
-                                            void *                aContext);
+                                            const char           *aName,
+                                            const char           *aType,
+                                            const char           *aDomain,
+                                            void                 *aContext);
     void        HandleServiceRegisterResult(DNSServiceRef         aService,
                                             const DNSServiceFlags aFlags,
                                             DNSServiceErrorType   aError,
-                                            const char *          aName,
-                                            const char *          aType,
-                                            const char *          aDomain);
+                                            const char           *aName,
+                                            const char           *aType,
+                                            const char           *aDomain);
     static void HandleRegisterHostResult(DNSServiceRef       aHostsConnection,
                                          DNSRecordRef        aHostRecord,
                                          DNSServiceFlags     aFlags,
                                          DNSServiceErrorType aErrorCode,
-                                         void *              aContext);
+                                         void               *aContext);
     void        HandleRegisterHostResult(DNSServiceRef       aHostsConnection,
                                          DNSRecordRef        aHostRecord,
                                          DNSServiceFlags     aFlags,
@@ -340,7 +344,7 @@ private:
     static std::string MakeRegType(const std::string &aType, SubTypeList aSubTypeList);
 
     ServiceRegistration *FindServiceRegistration(const DNSServiceRef &aServiceRef);
-    HostRegistration *   FindHostRegistration(const DNSServiceRef &aServiceRef, const DNSRecordRef &aRecordRef);
+    HostRegistration    *FindHostRegistration(const DNSServiceRef &aServiceRef, const DNSRecordRef &aRecordRef);
 
     DNSServiceRef mHostsRef;
     State         mState;
