@@ -74,20 +74,26 @@ genrule {
 }
 
 cc_defaults {
-    name: "ot-daemon-release-cc-defaults",
-    release: {
-        cflags: [
-            // Optimize for size
-            "-Os",
+    name: "ot-daemon-debuggable-cc-defaults",
+    cflags: [
+        // Optimize for size
+        "-Os",
 
-            // Disable exception since OT never uses exceptions
-            "-fno-exceptions",
-            "-fno-asynchronous-unwind-tables",
-            "-fno-unwind-tables",
+        // Disable exception since OT never uses exceptions
+        "-fno-exceptions",
+        "-fno-asynchronous-unwind-tables",
+        "-fno-unwind-tables",
+    ],
+    product_variables: {
+        debuggable: {
+            cflags: [
+                // Optimize for debugging
+                "-Og",
 
-            // Disable daemon CLI in releases
-            "-DOPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE=0",
-        ]
+                // Enable daemon CLI for debugging
+                "-DOPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE=1",
+            ]
+        }
     }
 }
 
@@ -173,7 +179,7 @@ cc_binary {
     name: "ot-daemon",
     defaults: [
         "ot-daemon-defaults",
-        "ot-daemon-release-cc-defaults",
+        "ot-daemon-debuggable-cc-defaults",
     ],
     srcs: [
         "src/agent/main.cpp",
