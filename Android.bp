@@ -73,8 +73,32 @@ genrule {
     ],
 }
 
-cc_binary {
-    name: "otbr-agent",
+cc_defaults {
+    name: "ot-daemon-debuggable-cc-defaults",
+    cflags: [
+        // Optimize for size
+        "-Os",
+
+        // Disable exception since OT never uses exceptions
+        "-fno-exceptions",
+        "-fno-asynchronous-unwind-tables",
+        "-fno-unwind-tables",
+    ],
+    product_variables: {
+        debuggable: {
+            cflags: [
+                // Optimize for debugging
+                "-Og",
+
+                // Enable daemon CLI for debugging
+                "-DOPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE=1",
+            ]
+        }
+    }
+}
+
+cc_defaults {
+    name: "ot-daemon-defaults",
     generated_headers: ["otbr_version_header"],
 
     include_dirs: [
@@ -82,6 +106,7 @@ cc_binary {
         "external/openthread/include",
         "external/openthread/src",
         "external/openthread/src/posix/platform/include",
+        "external/openthread/third_party/mbedtls/repo/include",
     ],
 
     local_include_dirs: [
@@ -95,6 +120,8 @@ cc_binary {
         "-DOTBR_CONFIG_ANDROID_PROPERTY_ENABLE=1",
         "-DOTBR_CONFIG_ANDROID_VERSION_HEADER_ENABLE=1",
         "-DOTBR_CONFIG_FILE=\"src/android/otbr-config-android.h\"",
+        "-DOTBR_ENABLE_VENDOR_SERVER=1", // for OtDaemonServer
+        "-DOTBR_ENABLE_BORDER_ROUTING=1",
         "-DOTBR_ENABLE_MDNS_MDNSSD=1",
         "-DOTBR_ENABLE_SRP_ADVERTISING_PROXY=1",
         "-DOTBR_ENABLE_DNSSD_DISCOVERY_PROXY=1",
@@ -103,39 +130,77 @@ cc_binary {
 
     srcs: [
         "src/agent/application.cpp",
-        "src/agent/main.cpp",
+        "src/android/otdaemon_server.cpp",
+        "src/android/infra_if.cpp",
         "src/border_agent/border_agent.cpp",
         "src/ncp/ncp_openthread.cpp",
         "src/sdp_proxy/advertising_proxy.cpp",
         "src/sdp_proxy/discovery_proxy.cpp",
-        "src/utils/thread_helper.cpp",
         "src/common/dns_utils.cpp",
         "src/common/logging.cpp",
-        "src/common/task_runner.cpp",
-        "src/common/types.cpp",
         "src/common/mainloop.cpp",
         "src/common/mainloop_manager.cpp",
+        "src/common/task_runner.cpp",
+        "src/common/types.cpp",
         "src/mdns/mdns.cpp",
         "src/mdns/mdns_mdnssd.cpp",
+        "src/utils/crc16.cpp",
         "src/utils/dns_utils.cpp",
         "src/utils/hex.cpp",
         "src/utils/infra_link_selector.cpp",
+        "src/utils/pskc.cpp",
         "src/utils/socket_utils.cpp",
+        "src/utils/steering_data.cpp",
         "src/utils/string_utils.cpp",
+        "src/utils/system_utils.cpp",
+        "src/utils/thread_helper.cpp",
     ],
 
     shared_libs: [
         "libbase",
         "libutils",
         "libcutils",
-        "libmdnssd",
+        "libbinder_ndk",
+        "android.hardware.threadnetwork-V1-ndk",
     ],
 
     static_libs: [
         "libopenthread-cli",
         "ot-core",
-        "openthread-tcplp",
+        "ot-daemon-aidl-ndk",
     ],
 
     host_ldlibs: ["-lutil"],
+    min_sdk_version: "33",
+    apex_available: [ "com.android.threadnetwork" ],
+}
+
+cc_binary {
+    name: "ot-daemon",
+    defaults: [
+        "ot-daemon-defaults",
+        "ot-daemon-debuggable-cc-defaults",
+    ],
+    srcs: [
+        "src/agent/main.cpp",
+    ],
+}
+
+cc_fuzz {
+    name: "ot_daemon_service_fuzzer",
+    defaults:[
+        "ot-daemon-defaults",
+        "service_fuzzer_defaults"
+    ],
+    srcs: [
+        "src/android/otdaemon_fuzzer.cpp",
+    ],
+    shared_libs: [
+        "liblog",
+    ],
+    fuzz_config: {
+        cc: [
+            "wgtdkp@google.com",
+        ],
+    },
 }
