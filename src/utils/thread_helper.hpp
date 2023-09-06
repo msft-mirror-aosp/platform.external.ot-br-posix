@@ -137,7 +137,7 @@ public:
      * @param[in] aHandler      The attach result handler.
      *
      */
-    void Attach(const std::string &         aNetworkName,
+    void Attach(const std::string          &aNetworkName,
                 uint16_t                    aPanId,
                 uint64_t                    aExtPanId,
                 const std::vector<uint8_t> &aNetworkKey,
@@ -248,6 +248,8 @@ public:
     void OnUpdateMeshCopTxt(std::map<std::string, std::vector<uint8_t>> aUpdate);
 #endif
 
+    void DetachGracefully(ResultHandler aHandler);
+
     /**
      * This method logs OpenThread action result.
      *
@@ -270,10 +272,13 @@ private:
     static void MgmtSetResponseHandler(otError aResult, void *aContext);
     void        MgmtSetResponseHandler(otError aResult);
 
+    static void DetachGracefullyCallback(void *aContext);
+    void        DetachGracefullyCallback(void);
+
     void    RandomFill(void *aBuf, size_t size);
     uint8_t RandomChannelFromChannelMask(uint32_t aChannelMask);
 
-    void ActiveDatasetChangedCallback();
+    void ActiveDatasetChangedCallback(void);
 
     otInstance *mInstance;
 
@@ -289,9 +294,13 @@ private:
 
     std::map<uint16_t, size_t> mUnsecurePortRefCounter;
 
+    bool mWaitingMgmtSetResponse =
+        false; // During waiting for mgmt set response, calls to AttachHandler by StateChangedCallback will be ignored
     int64_t       mAttachDelayMs = 0;
     AttachHandler mAttachHandler;
     ResultHandler mJoinerHandler;
+
+    ResultHandler mDetachGracefullyHandler = nullptr;
 
     otOperationalDatasetTlvs mAttachPendingDatasetTlvs = {};
 
