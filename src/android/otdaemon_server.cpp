@@ -49,9 +49,9 @@ namespace otbr {
 
 namespace vendor {
 
-void VendorServer::Init(void)
+std::shared_ptr<VendorServer> VendorServer::newInstance(otbr::Ncp::ControllerOpenThread &aNcp)
 {
-    Android::OtDaemonServer::GetInstance().InitOrDie(&mNcp);
+    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aNcp);
 }
 
 } // namespace vendor
@@ -85,28 +85,23 @@ static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo
     return addrInfo;
 }
 
-OtDaemonServer::OtDaemonServer(void)
+OtDaemonServer::OtDaemonServer(otbr::Ncp::ControllerOpenThread &aNcp)
+    : mNcp(aNcp)
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
 }
 
-OtDaemonServer &OtDaemonServer::GetInstance()
-{
-    static OtDaemonServer service;
-
-    return service;
-}
-
-void OtDaemonServer::InitOrDie(otbr::Ncp::ControllerOpenThread *aNcp)
+void OtDaemonServer::Init(void)
 {
     binder_exception_t exp = AServiceManager_registerLazyService(asBinder().get(), OTBR_SERVICE_NAME);
     SuccessOrDie(exp, "Failed to register OT daemon binder service");
 
-    mNcp = aNcp;
-    mNcp->AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
-    otIp6SetAddressCallback(mNcp->GetInstance(), OtDaemonServer::AddressCallback, this);
-    otIp6SetReceiveCallback(mNcp->GetInstance(), OtDaemonServer::ReceiveCallback, this);
+    assert(GetOtInstance() != nullptr);
+
+    mNcp.AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
+    otIp6SetAddressCallback(GetOtInstance(), OtDaemonServer::AddressCallback, this);
+    otIp6SetReceiveCallback(GetOtInstance(), OtDaemonServer::ReceiveCallback, this);
 }
 
 void OtDaemonServer::BinderDeathCallback(void *aBinderServer)
@@ -284,7 +279,7 @@ exit:
 
 otInstance *OtDaemonServer::GetOtInstance()
 {
-    return (mNcp == nullptr) ? nullptr : mNcp->GetInstance();
+    return mNcp.GetInstance();
 }
 
 void OtDaemonServer::Update(MainloopContext &aMainloop)
