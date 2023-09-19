@@ -73,6 +73,7 @@ genrule {
     ],
 }
 
+// The config shared by all ot-daemon dependency libraries
 cc_defaults {
     name: "ot-daemon-debuggable-cc-defaults",
     cflags: [
@@ -94,7 +95,14 @@ cc_defaults {
                 "-DOPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE=1",
             ]
         }
-    }
+    },
+
+    // Enable security checks
+    sanitize: {
+      misc_undefined: ["bounds"],
+      cfi: true,
+      scs: true,
+   },
 }
 
 cc_defaults {
