@@ -26,7 +26,7 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.android.server.openthread;
+package com.android.server.thread.openthread;
 
 /** Receives the status of an OpenThread operation which may fail with an {@code otError} code. */
 oneway interface IOtStatusReceiver {
