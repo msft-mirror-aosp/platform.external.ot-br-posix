@@ -33,7 +33,7 @@
 #include <memory>
 #include <vector>
 
-#include <aidl/com/android/server/openthread/BnOtDaemon.h>
+#include <aidl/com/android/server/thread/openthread/BnOtDaemon.h>
 #include <openthread/instance.h>
 #include <openthread/ip6.h>
 
@@ -47,10 +47,10 @@ namespace Android {
 using BinderDeathRecipient = ::ndk::ScopedAIBinder_DeathRecipient;
 using ScopedFileDescriptor = ::ndk::ScopedFileDescriptor;
 using Status               = ::ndk::ScopedAStatus;
-using aidl::com::android::server::openthread::BnOtDaemon;
-using aidl::com::android::server::openthread::IOtDaemonCallback;
-using aidl::com::android::server::openthread::IOtStatusReceiver;
-using aidl::com::android::server::openthread::Ipv6AddressInfo;
+using aidl::com::android::server::thread::openthread::BnOtDaemon;
+using aidl::com::android::server::thread::openthread::IOtDaemonCallback;
+using aidl::com::android::server::thread::openthread::IOtStatusReceiver;
+using aidl::com::android::server::thread::openthread::Ipv6AddressInfo;
 
 class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendor::VendorServer
 {
