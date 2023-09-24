@@ -26,13 +26,13 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.android.server.openthread;
+package com.android.server.thread.openthread;
 
 import android.os.ParcelFileDescriptor;
 
-import com.android.server.openthread.Ipv6AddressInfo;
-import com.android.server.openthread.IOtStatusReceiver;
-import com.android.server.openthread.IOtDaemonCallback;
+import com.android.server.thread.openthread.Ipv6AddressInfo;
+import com.android.server.thread.openthread.IOtStatusReceiver;
+import com.android.server.thread.openthread.IOtDaemonCallback;
 
 /**
  * The OpenThread daemon service which provides access to the core Thread stack for
