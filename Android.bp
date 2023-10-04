@@ -73,8 +73,40 @@ genrule {
     ],
 }
 
-cc_binary {
-    name: "ot-daemon",
+// The config shared by all ot-daemon dependency libraries
+cc_defaults {
+    name: "ot-daemon-debuggable-cc-defaults",
+    cflags: [
+        // Optimize for size
+        "-Os",
+
+        // Disable exception since OT never uses exceptions
+        "-fno-exceptions",
+        "-fno-asynchronous-unwind-tables",
+        "-fno-unwind-tables",
+    ],
+    product_variables: {
+        debuggable: {
+            cflags: [
+                // Optimize for debugging
+                "-Og",
+
+                // Enable daemon CLI for debugging
+                "-DOPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE=1",
+            ]
+        }
+    },
+
+    // Enable security checks
+    sanitize: {
+      misc_undefined: ["bounds"],
+      cfi: true,
+      scs: true,
+   },
+}
+
+cc_defaults {
+    name: "ot-daemon-defaults",
     generated_headers: ["otbr_version_header"],
 
     include_dirs: [
@@ -93,9 +125,17 @@ cc_binary {
     cflags: [
         "-Wall",
         "-Wextra",
+
+        // The HAL client implementation requires features which are
+        // available on only 31+, but it's guaranteed that ot-daemon
+        // will never run on Android U- devices.
+        "-Wno-unguarded-availability",
+
         "-DOTBR_CONFIG_ANDROID_PROPERTY_ENABLE=1",
         "-DOTBR_CONFIG_ANDROID_VERSION_HEADER_ENABLE=1",
         "-DOTBR_CONFIG_FILE=\"src/android/otbr-config-android.h\"",
+        "-DOTBR_ENABLE_VENDOR_SERVER=1", // for OtDaemonServer
+        "-DOTBR_ENABLE_BORDER_ROUTING=1",
         "-DOTBR_ENABLE_MDNS_MDNSSD=1",
         "-DOTBR_ENABLE_SRP_ADVERTISING_PROXY=1",
         "-DOTBR_ENABLE_DNSSD_DISCOVERY_PROXY=1",
@@ -104,7 +144,8 @@ cc_binary {
 
     srcs: [
         "src/agent/application.cpp",
-        "src/agent/main.cpp",
+        "src/android/otdaemon_server.cpp",
+        "src/android/infra_if.cpp",
         "src/border_agent/border_agent.cpp",
         "src/ncp/ncp_openthread.cpp",
         "src/sdp_proxy/advertising_proxy.cpp",
@@ -140,10 +181,40 @@ cc_binary {
     static_libs: [
         "libopenthread-cli",
         "ot-core",
-        "openthread-tcplp",
+        "ot-daemon-aidl-ndk",
     ],
 
     host_ldlibs: ["-lutil"],
-    min_sdk_version: "33",
-    apex_available: [ "com.android.threadnetwork" ],
+    min_sdk_version: "30",
+    apex_available: [ "com.android.tethering" ],
+}
+
+cc_binary {
+    name: "ot-daemon",
+    defaults: [
+        "ot-daemon-defaults",
+        "ot-daemon-debuggable-cc-defaults",
+    ],
+    srcs: [
+        "src/agent/main.cpp",
+    ],
+}
+
+cc_fuzz {
+    name: "ot_daemon_service_fuzzer",
+    defaults:[
+        "ot-daemon-defaults",
+        "service_fuzzer_defaults"
+    ],
+    srcs: [
+        "src/android/otdaemon_fuzzer.cpp",
+    ],
+    shared_libs: [
+        "liblog",
+    ],
+    fuzz_config: {
+        cc: [
+            "wgtdkp@google.com",
+        ],
+    },
 }
