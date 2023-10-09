@@ -343,10 +343,11 @@ void AppendVendorTxtEntries(const std::map<std::string, std::vector<uint8_t>> &a
 
         for (auto &addedEntry : aTxtList)
         {
-            if (addedEntry.mName == key)
+            if (addedEntry.mKey == key)
             {
-                addedEntry.mValue = value;
-                found             = true;
+                addedEntry.mValue              = value;
+                addedEntry.mIsBooleanAttribute = false;
+                found                          = true;
                 break;
             }
         }
@@ -367,27 +368,23 @@ void BorderAgent::PublishMeshCopService(void)
     const otExtAddress      *extAddr     = otLinkGetExtendedAddress(instance);
     const char              *networkName = otThreadGetNetworkName(instance);
     Mdns::Publisher::TxtList txtList{{"rv", "1"}};
+    Mdns::Publisher::TxtData txtData;
     int                      port;
+    otbrError                error;
+
+    OTBR_UNUSED_VARIABLE(error);
 
     otbrLogInfo("Publish meshcop service %s.%s.local.", mServiceInstanceName.c_str(), kBorderAgentServiceType);
 
 #if OTBR_ENABLE_PUBLISH_MESHCOP_BA_ID
     {
-        otError  error;
-        uint8_t  id[OT_BORDER_AGENT_ID_LENGTH];
-        uint16_t idLength = OT_BORDER_AGENT_ID_LENGTH;
+        otError         error;
+        otBorderAgentId id;
 
-        error = otBorderAgentGetId(instance, id, &idLength);
+        error = otBorderAgentGetId(instance, &id);
         if (error == OT_ERROR_NONE)
         {
-            if (idLength == OT_BORDER_AGENT_ID_LENGTH)
-            {
-                txtList.emplace_back("id", id, idLength);
-            }
-            else
-            {
-                otbrLogWarning("Border Agent ID length is %d, but expect %d", idLength, OT_BORDER_AGENT_ID_LENGTH);
-            }
+            txtList.emplace_back("id", id.mId, sizeof(id));
         }
         else
         {
@@ -441,8 +438,11 @@ void BorderAgent::PublishMeshCopService(void)
         port = kBorderAgentServiceDummyPort;
     }
 
+    error = Mdns::Publisher::EncodeTxtData(txtList, txtData);
+    assert(error == OTBR_ERROR_NONE);
+
     mPublisher->PublishService(/* aHostName */ "", mServiceInstanceName, kBorderAgentServiceType,
-                               Mdns::Publisher::SubTypeList{}, port, txtList, [this](otbrError aError) {
+                               Mdns::Publisher::SubTypeList{}, port, txtData, [this](otbrError aError) {
                                    if (aError == OTBR_ERROR_ABORTED)
                                    {
                                        // OTBR_ERROR_ABORTED is thrown when an ongoing service registration is
