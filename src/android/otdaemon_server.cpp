@@ -49,9 +49,9 @@ namespace otbr {
 
 namespace vendor {
 
-std::shared_ptr<VendorServer> VendorServer::newInstance(otbr::Ncp::ControllerOpenThread &aNcp)
+std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplication)
 {
-    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aNcp);
+    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aApplication.GetNcp());
 }
 
 } // namespace vendor
