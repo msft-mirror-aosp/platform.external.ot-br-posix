@@ -9,15 +9,22 @@
       <literallayout>
         struct {
           uint64 ext_address
+          string network_name
+          uint64 ext_panid
+          uint8[] steering_data
           uint16 panid
-          uint16 channel
-          uint16 rssi
+          uint16 joiner_udp_port
+          uint8 channel
+          int16 rssi
           uint8 lqi
+          uint8 version
+          bool is_native
+          bool is_joinable
         }
       </literallayout>
     -->
     <method name="Scan">
-      <arg name="scan_result" type="a(tqqqy)" direction="out"/>
+      <arg name="scan_result" type="a(tstayqqynyybb)" direction="out"/>
     </method>
 
     <!-- Energy Scan: Perform a Thread energy scan.
@@ -529,6 +536,11 @@
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
     </property>
 
+    <!-- PendingDatasetTlvs: The Thread pending dataset tlv in binary form. -->
+    <property name="PendingDatasetTlvs" type="ay" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
      <!-- FeatureFlagListData: The Thread feature flags (defined as proto/feature_flag.proto)
       in binary form. -->
     <property name="FeatureFlagListData" type="ay" access="readwrite">
@@ -861,6 +873,11 @@
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
     </property>
 
+    <!-- Nat64Cidr: The CIDR used for NAT64 -->
+    <property name="Nat64Cidr" type="s" access="readwrite">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
     <!-- BorderRoutingCounters: The counters for inbound/outbound packets
     <literallayout>
         struct {
@@ -913,6 +930,18 @@
     <!-- DnsUpstreamQueryState: Whether the server will / should forward DNS queries platform
     specified upstream DNS servers. -->
     <property name="DnsUpstreamQueryState" type="b" access="readwrite">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
+    <!-- TelemetryData: The Thread telemetry data (defined as proto/thread_telemetry.proto)
+      in binary form. -->
+    <property name="TelemetryData" type="ay" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
+    <!-- Capabilities: The Thread capabilities data (defined as proto/capabilities.proto)
+      in binary form. -->
+    <property name="Capabilities" type="ay" access="read">
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
     </property>
 
