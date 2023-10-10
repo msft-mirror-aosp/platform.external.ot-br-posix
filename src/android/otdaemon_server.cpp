@@ -33,6 +33,7 @@
 #include <net/if.h>
 #include <string.h>
 
+#include <android-base/file.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
 #include <openthread/border_router.h>
@@ -49,9 +50,9 @@ namespace otbr {
 
 namespace vendor {
 
-void VendorServer::Init(void)
+std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplication)
 {
-    Android::OtDaemonServer::GetInstance().InitOrDie(&mNcp);
+    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aApplication.GetNcp());
 }
 
 } // namespace vendor
@@ -85,28 +86,23 @@ static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo
     return addrInfo;
 }
 
-OtDaemonServer::OtDaemonServer(void)
+OtDaemonServer::OtDaemonServer(otbr::Ncp::ControllerOpenThread &aNcp)
+    : mNcp(aNcp)
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
 }
 
-OtDaemonServer &OtDaemonServer::GetInstance()
-{
-    static OtDaemonServer service;
-
-    return service;
-}
-
-void OtDaemonServer::InitOrDie(otbr::Ncp::ControllerOpenThread *aNcp)
+void OtDaemonServer::Init(void)
 {
     binder_exception_t exp = AServiceManager_registerLazyService(asBinder().get(), OTBR_SERVICE_NAME);
     SuccessOrDie(exp, "Failed to register OT daemon binder service");
 
-    mNcp = aNcp;
-    mNcp->AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
-    otIp6SetAddressCallback(mNcp->GetInstance(), OtDaemonServer::AddressCallback, this);
-    otIp6SetReceiveCallback(mNcp->GetInstance(), OtDaemonServer::ReceiveCallback, this);
+    assert(GetOtInstance() != nullptr);
+
+    mNcp.AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
+    otIp6SetAddressCallback(GetOtInstance(), OtDaemonServer::AddressCallback, this);
+    otIp6SetReceiveCallback(GetOtInstance(), OtDaemonServer::ReceiveCallback, this);
 }
 
 void OtDaemonServer::BinderDeathCallback(void *aBinderServer)
@@ -284,7 +280,7 @@ exit:
 
 otInstance *OtDaemonServer::GetOtInstance()
 {
-    return (mNcp == nullptr) ? nullptr : mNcp->GetInstance();
+    return mNcp.GetInstance();
 }
 
 void OtDaemonServer::Update(MainloopContext &aMainloop)
@@ -489,5 +485,15 @@ exit:
     return status;
 }
 
+binder_status_t OtDaemonServer::dump(int aFd, const char** aArgs, uint32_t aNumArgs)
+{
+    OT_UNUSED_VARIABLE(aArgs);
+    OT_UNUSED_VARIABLE(aNumArgs);
+
+    // TODO: Use ::android::base::WriteStringToFd to dump infomration.
+    fsync(aFd);
+
+    return STATUS_OK;
+}
 } // namespace Android
 } // namespace otbr
