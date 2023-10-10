@@ -36,11 +36,13 @@ ARG OTBR_OPTIONS
 ARG DNS64
 ARG NAT64
 ARG NAT64_SERVICE
+ARG NAT64_DYNAMIC_POOL
 ARG REFERENCE_DEVICE
 ARG RELEASE
 ARG REST_API
 ARG WEB_GUI
 ARG MDNS
+ARG FIREWALL
 
 ENV INFRA_IF_NAME=${INFRA_IF_NAME:-eth0}
 ENV BORDER_ROUTING=${BORDER_ROUTING:-1}
@@ -53,16 +55,15 @@ ENV PLATFORM ubuntu
 ENV REFERENCE_DEVICE=${REFERENCE_DEVICE:-0}
 ENV RELEASE=${RELEASE:-1}
 ENV NAT64=${NAT64:-1}
-ENV NAT64_SERVICE=${NAT64_SERVICE:-tayga}
+ENV NAT64_SERVICE=${NAT64_SERVICE:-openthread}
+ENV NAT64_DYNAMIC_POOL=${NAT64_DYNAMIC_POOL:-192.168.255.0/24}
 ENV DNS64=${DNS64:-0}
 ENV WEB_GUI=${WEB_GUI:-1}
 ENV REST_API=${REST_API:-1}
+ENV FIREWALL=${FIREWALL:-1}
 ENV DOCKER 1
 
 RUN env
-
-COPY . /app
-WORKDIR /app
 
 # Required during build or run
 ENV OTBR_DOCKER_REQS sudo python3
@@ -77,7 +78,7 @@ ENV OTBR_BUILD_DEPS apt-utils build-essential psmisc ninja-build cmake wget ca-c
   libnetfilter-queue-dev
 
 # Required for OpenThread Backbone CI
-ENV OTBR_OT_BACKBONE_CI_DEPS curl lcov wget build-essential
+ENV OTBR_OT_BACKBONE_CI_DEPS curl lcov wget build-essential python3-dbus python3-zeroconf
 
 # Required and installed during build (script/bootstrap) when RELEASE=1, could be removed
 ENV OTBR_NORELEASE_DEPS \
@@ -86,10 +87,17 @@ ENV OTBR_NORELEASE_DEPS \
 RUN apt-get update \
   && apt-get install --no-install-recommends -y $OTBR_DOCKER_REQS $OTBR_DOCKER_DEPS \
   && ([ "${OT_BACKBONE_CI}" != "1" ] || apt-get install --no-install-recommends -y $OTBR_OT_BACKBONE_CI_DEPS) \
-  && ln -fs /usr/share/zoneinfo/UTC /etc/localtime \
-  && ./script/bootstrap \
-  && ./script/setup \
-  && ([ "${DNS64}" = "0" ] || chmod 644 /etc/bind/named.conf.options) \
+  && ln -fs /usr/share/zoneinfo/UTC /etc/localtime
+
+COPY ./script /app/script
+COPY ./third_party/mDNSResponder /app/third_party/mDNSResponder
+WORKDIR /app
+
+RUN ./script/bootstrap
+COPY . .
+RUN ./script/setup
+
+RUN ([ "${DNS64}" = "0" ] || chmod 644 /etc/bind/named.conf.options) \
   && ([ "${OT_BACKBONE_CI}" = "1" ] || ( \
     mv ./script /tmp \
     && mv ./etc /tmp \
@@ -101,6 +109,7 @@ RUN apt-get update \
     && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false $OTBR_BUILD_DEPS  \
     && ([ "${RELEASE}" = 1 ] ||  apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false "$OTBR_NORELEASE_DEPS";) \
     && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
   ))
 
 ENTRYPOINT ["/app/etc/docker/docker_entrypoint.sh"]

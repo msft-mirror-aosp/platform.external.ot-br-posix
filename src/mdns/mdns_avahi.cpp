@@ -53,30 +53,42 @@
 #include "common/logging.hpp"
 #include "common/time.hpp"
 
+namespace otbr {
+namespace Mdns {
+
+class AvahiPoller;
+
+} // namespace Mdns
+} // namespace otbr
+
 struct AvahiWatch
 {
-    int                mFd;       ///< The file descriptor to watch.
-    AvahiWatchEvent    mEvents;   ///< The interested events.
-    int                mHappened; ///< The events happened.
-    AvahiWatchCallback mCallback; ///< The function to be called when interested events happened on mFd.
-    void *             mContext;  ///< A pointer to application-specific context.
-    void *             mPoller;   ///< The poller created this watch.
+    typedef otbr::Mdns::AvahiPoller AvahiPoller;
+
+    int                mFd;           ///< The file descriptor to watch.
+    AvahiWatchEvent    mEvents;       ///< The interested events.
+    int                mHappened;     ///< The events happened.
+    AvahiWatchCallback mCallback;     ///< The function to be called to report events happened on `mFd`.
+    void              *mContext;      ///< A pointer to application-specific context to use with `mCallback`.
+    bool               mShouldReport; ///< Whether or not we need to report events (invoking callback).
+    AvahiPoller       &mPoller;       ///< The poller owning this watch.
 
     /**
      * The constructor to initialize an Avahi watch.
      *
      * @param[in] aFd        The file descriptor to watch.
      * @param[in] aEvents    The events to watch.
-     * @param[in] aCallback  The function to be called when events happend on this file descriptor.
+     * @param[in] aCallback  The function to be called when events happened on this file descriptor.
      * @param[in] aContext   A pointer to application-specific context.
      * @param[in] aPoller    The AvahiPoller this watcher belongs to.
      *
      */
-    AvahiWatch(int aFd, AvahiWatchEvent aEvents, AvahiWatchCallback aCallback, void *aContext, void *aPoller)
+    AvahiWatch(int aFd, AvahiWatchEvent aEvents, AvahiWatchCallback aCallback, void *aContext, AvahiPoller &aPoller)
         : mFd(aFd)
         , mEvents(aEvents)
         , mCallback(aCallback)
         , mContext(aContext)
+        , mShouldReport(false)
         , mPoller(aPoller)
     {
     }
@@ -88,10 +100,13 @@ struct AvahiWatch
  */
 struct AvahiTimeout
 {
-    otbr::Timepoint      mTimeout;  ///< Absolute time when this timer timeout.
-    AvahiTimeoutCallback mCallback; ///< The function to be called when timeout.
-    void *               mContext;  ///< The pointer to application-specific context.
-    void *               mPoller;   ///< The poller created this timer.
+    typedef otbr::Mdns::AvahiPoller AvahiPoller;
+
+    otbr::Timepoint      mTimeout;      ///< Absolute time when this timer timeout.
+    AvahiTimeoutCallback mCallback;     ///< The function to be called when timeout.
+    void                *mContext;      ///< The pointer to application-specific context.
+    bool                 mShouldReport; ///< Whether or not timeout occurred and need to reported (invoking callback).
+    AvahiPoller         &mPoller;       ///< The poller created this timer.
 
     /**
      * The constructor to initialize an AvahiTimeout.
@@ -102,9 +117,10 @@ struct AvahiTimeout
      * @param[in] aPoller    The AvahiPoller this timeout belongs to.
      *
      */
-    AvahiTimeout(const struct timeval *aTimeout, AvahiTimeoutCallback aCallback, void *aContext, void *aPoller)
+    AvahiTimeout(const struct timeval *aTimeout, AvahiTimeoutCallback aCallback, void *aContext, AvahiPoller &aPoller)
         : mCallback(aCallback)
         , mContext(aContext)
+        , mShouldReport(false)
         , mPoller(aPoller)
     {
         if (aTimeout)
@@ -168,63 +184,63 @@ public:
     void Update(MainloopContext &aMainloop) override;
     void Process(const MainloopContext &aMainloop) override;
 
-    const AvahiPoll *GetAvahiPoll(void) const { return &mAvahiPoller; }
+    const AvahiPoll *GetAvahiPoll(void) const { return &mAvahiPoll; }
 
 private:
     typedef std::vector<AvahiWatch *>   Watches;
     typedef std::vector<AvahiTimeout *> Timers;
 
-    static AvahiWatch *    WatchNew(const struct AvahiPoll *aPoller,
+    static AvahiWatch     *WatchNew(const struct AvahiPoll *aPoll,
                                     int                     aFd,
                                     AvahiWatchEvent         aEvent,
                                     AvahiWatchCallback      aCallback,
-                                    void *                  aContext);
-    AvahiWatch *           WatchNew(int aFd, AvahiWatchEvent aEvent, AvahiWatchCallback aCallback, void *aContext);
+                                    void                   *aContext);
+    AvahiWatch            *WatchNew(int aFd, AvahiWatchEvent aEvent, AvahiWatchCallback aCallback, void *aContext);
     static void            WatchUpdate(AvahiWatch *aWatch, AvahiWatchEvent aEvent);
     static AvahiWatchEvent WatchGetEvents(AvahiWatch *aWatch);
     static void            WatchFree(AvahiWatch *aWatch);
     void                   WatchFree(AvahiWatch &aWatch);
-    static AvahiTimeout *  TimeoutNew(const AvahiPoll *     aPoller,
+    static AvahiTimeout   *TimeoutNew(const AvahiPoll      *aPoll,
                                       const struct timeval *aTimeout,
                                       AvahiTimeoutCallback  aCallback,
-                                      void *                aContext);
-    AvahiTimeout *         TimeoutNew(const struct timeval *aTimeout, AvahiTimeoutCallback aCallback, void *aContext);
+                                      void                 *aContext);
+    AvahiTimeout          *TimeoutNew(const struct timeval *aTimeout, AvahiTimeoutCallback aCallback, void *aContext);
     static void            TimeoutUpdate(AvahiTimeout *aTimer, const struct timeval *aTimeout);
     static void            TimeoutFree(AvahiTimeout *aTimer);
     void                   TimeoutFree(AvahiTimeout &aTimer);
 
     Watches   mWatches;
     Timers    mTimers;
-    AvahiPoll mAvahiPoller;
+    AvahiPoll mAvahiPoll;
 };
 
 AvahiPoller::AvahiPoller(void)
 {
-    mAvahiPoller.userdata         = this;
-    mAvahiPoller.watch_new        = WatchNew;
-    mAvahiPoller.watch_update     = WatchUpdate;
-    mAvahiPoller.watch_get_events = WatchGetEvents;
-    mAvahiPoller.watch_free       = WatchFree;
+    mAvahiPoll.userdata         = this;
+    mAvahiPoll.watch_new        = WatchNew;
+    mAvahiPoll.watch_update     = WatchUpdate;
+    mAvahiPoll.watch_get_events = WatchGetEvents;
+    mAvahiPoll.watch_free       = WatchFree;
 
-    mAvahiPoller.timeout_new    = TimeoutNew;
-    mAvahiPoller.timeout_update = TimeoutUpdate;
-    mAvahiPoller.timeout_free   = TimeoutFree;
+    mAvahiPoll.timeout_new    = TimeoutNew;
+    mAvahiPoll.timeout_update = TimeoutUpdate;
+    mAvahiPoll.timeout_free   = TimeoutFree;
 }
 
-AvahiWatch *AvahiPoller::WatchNew(const struct AvahiPoll *aPoller,
+AvahiWatch *AvahiPoller::WatchNew(const struct AvahiPoll *aPoll,
                                   int                     aFd,
                                   AvahiWatchEvent         aEvent,
                                   AvahiWatchCallback      aCallback,
-                                  void *                  aContext)
+                                  void                   *aContext)
 {
-    return reinterpret_cast<AvahiPoller *>(aPoller->userdata)->WatchNew(aFd, aEvent, aCallback, aContext);
+    return reinterpret_cast<AvahiPoller *>(aPoll->userdata)->WatchNew(aFd, aEvent, aCallback, aContext);
 }
 
 AvahiWatch *AvahiPoller::WatchNew(int aFd, AvahiWatchEvent aEvent, AvahiWatchCallback aCallback, void *aContext)
 {
     assert(aEvent && aCallback && aFd >= 0);
 
-    mWatches.push_back(new AvahiWatch(aFd, aEvent, aCallback, aContext, this));
+    mWatches.push_back(new AvahiWatch(aFd, aEvent, aCallback, aContext, *this));
 
     return mWatches.back();
 }
@@ -241,7 +257,7 @@ AvahiWatchEvent AvahiPoller::WatchGetEvents(AvahiWatch *aWatch)
 
 void AvahiPoller::WatchFree(AvahiWatch *aWatch)
 {
-    reinterpret_cast<AvahiPoller *>(aWatch->mPoller)->WatchFree(*aWatch);
+    aWatch->mPoller.WatchFree(*aWatch);
 }
 
 void AvahiPoller::WatchFree(AvahiWatch &aWatch)
@@ -257,18 +273,18 @@ void AvahiPoller::WatchFree(AvahiWatch &aWatch)
     }
 }
 
-AvahiTimeout *AvahiPoller::TimeoutNew(const AvahiPoll *     aPoller,
+AvahiTimeout *AvahiPoller::TimeoutNew(const AvahiPoll      *aPoll,
                                       const struct timeval *aTimeout,
                                       AvahiTimeoutCallback  aCallback,
-                                      void *                aContext)
+                                      void                 *aContext)
 {
-    assert(aPoller && aCallback);
-    return static_cast<AvahiPoller *>(aPoller->userdata)->TimeoutNew(aTimeout, aCallback, aContext);
+    assert(aPoll && aCallback);
+    return static_cast<AvahiPoller *>(aPoll->userdata)->TimeoutNew(aTimeout, aCallback, aContext);
 }
 
 AvahiTimeout *AvahiPoller::TimeoutNew(const struct timeval *aTimeout, AvahiTimeoutCallback aCallback, void *aContext)
 {
-    mTimers.push_back(new AvahiTimeout(aTimeout, aCallback, aContext, this));
+    mTimers.push_back(new AvahiTimeout(aTimeout, aCallback, aContext, *this));
     return mTimers.back();
 }
 
@@ -286,7 +302,7 @@ void AvahiPoller::TimeoutUpdate(AvahiTimeout *aTimer, const struct timeval *aTim
 
 void AvahiPoller::TimeoutFree(AvahiTimeout *aTimer)
 {
-    static_cast<AvahiPoller *>(aTimer->mPoller)->TimeoutFree(*aTimer);
+    aTimer->mPoller.TimeoutFree(*aTimer);
 }
 
 void AvahiPoller::TimeoutFree(AvahiTimeout &aTimer)
@@ -306,10 +322,10 @@ void AvahiPoller::Update(MainloopContext &aMainloop)
 {
     Timepoint now = Clock::now();
 
-    for (Watches::iterator it = mWatches.begin(); it != mWatches.end(); ++it)
+    for (AvahiWatch *watch : mWatches)
     {
-        int             fd     = (*it)->mFd;
-        AvahiWatchEvent events = (*it)->mEvents;
+        int             fd     = watch->mFd;
+        AvahiWatchEvent events = watch->mEvents;
 
         if (AVAHI_WATCH_IN & events)
         {
@@ -333,12 +349,12 @@ void AvahiPoller::Update(MainloopContext &aMainloop)
 
         aMainloop.mMaxFd = std::max(aMainloop.mMaxFd, fd);
 
-        (*it)->mHappened = 0;
+        watch->mHappened = 0;
     }
 
-    for (Timers::iterator it = mTimers.begin(); it != mTimers.end(); ++it)
+    for (AvahiTimeout *timer : mTimers)
     {
-        Timepoint timeout = (*it)->mTimeout;
+        Timepoint timeout = timer->mTimeout;
 
         if (timeout == Timepoint::min())
         {
@@ -364,56 +380,92 @@ void AvahiPoller::Update(MainloopContext &aMainloop)
 
 void AvahiPoller::Process(const MainloopContext &aMainloop)
 {
-    Timepoint                   now = Clock::now();
-    std::vector<AvahiTimeout *> expired;
+    Timepoint now          = Clock::now();
+    bool      shouldReport = false;
 
-    for (Watches::iterator it = mWatches.begin(); it != mWatches.end(); ++it)
+    for (AvahiWatch *watch : mWatches)
     {
-        int             fd     = (*it)->mFd;
-        AvahiWatchEvent events = (*it)->mEvents;
+        int             fd     = watch->mFd;
+        AvahiWatchEvent events = watch->mEvents;
 
-        (*it)->mHappened = 0;
+        watch->mHappened = 0;
 
         if ((AVAHI_WATCH_IN & events) && FD_ISSET(fd, &aMainloop.mReadFdSet))
         {
-            (*it)->mHappened |= AVAHI_WATCH_IN;
+            watch->mHappened |= AVAHI_WATCH_IN;
         }
 
         if ((AVAHI_WATCH_OUT & events) && FD_ISSET(fd, &aMainloop.mWriteFdSet))
         {
-            (*it)->mHappened |= AVAHI_WATCH_OUT;
+            watch->mHappened |= AVAHI_WATCH_OUT;
         }
 
         if ((AVAHI_WATCH_ERR & events) && FD_ISSET(fd, &aMainloop.mErrorFdSet))
         {
-            (*it)->mHappened |= AVAHI_WATCH_ERR;
+            watch->mHappened |= AVAHI_WATCH_ERR;
         }
 
-        // TODO hup events
-        if ((*it)->mHappened)
+        if (watch->mHappened != 0)
         {
-            (*it)->mCallback(*it, (*it)->mFd, static_cast<AvahiWatchEvent>((*it)->mHappened), (*it)->mContext);
+            watch->mShouldReport = true;
+            shouldReport         = true;
         }
     }
 
-    for (Timers::iterator it = mTimers.begin(); it != mTimers.end(); ++it)
+    // When we invoke the callback for an `AvahiWatch` or `AvahiTimeout`,
+    // the Avahi module can call any of `mAvahiPoll` APIs we provided to
+    // it. For example, it can update or free any of `AvahiWatch/Timeout`
+    // entries, which in turn, modifies our `mWatches` or `mTimers` list.
+    // So, before invoking the callback, we update the entry's state and
+    // then restart the iteration over the `mWacthes` list to find the
+    // next entry to report, as the list may have changed.
+
+    while (shouldReport)
     {
-        if ((*it)->mTimeout == Timepoint::min())
+        shouldReport = false;
+
+        for (AvahiWatch *watch : mWatches)
+        {
+            if (watch->mShouldReport)
+            {
+                shouldReport         = true;
+                watch->mShouldReport = false;
+                watch->mCallback(watch, watch->mFd, WatchGetEvents(watch), watch->mContext);
+
+                break;
+            }
+        }
+    }
+
+    for (AvahiTimeout *timer : mTimers)
+    {
+        if (timer->mTimeout == Timepoint::min())
         {
             continue;
         }
 
-        if ((*it)->mTimeout <= now)
+        if (timer->mTimeout <= now)
         {
-            expired.push_back(*it);
+            timer->mShouldReport = true;
+            shouldReport         = true;
         }
     }
 
-    for (std::vector<AvahiTimeout *>::iterator it = expired.begin(); it != expired.end(); ++it)
+    while (shouldReport)
     {
-        AvahiTimeout *avahiTimeout = *it;
+        shouldReport = false;
 
-        avahiTimeout->mCallback(avahiTimeout, avahiTimeout->mContext);
+        for (AvahiTimeout *timer : mTimers)
+        {
+            if (timer->mShouldReport)
+            {
+                shouldReport         = true;
+                timer->mShouldReport = false;
+                timer->mCallback(timer, timer->mContext);
+
+                break;
+            }
+        }
     }
 }
 
@@ -523,7 +575,7 @@ void PublisherAvahi::HandleGroupState(AvahiEntryGroup *aGroup, AvahiEntryGroupSt
 void PublisherAvahi::CallHostOrServiceCallback(AvahiEntryGroup *aGroup, otbrError aError)
 {
     ServiceRegistration *serviceReg;
-    HostRegistration *   hostReg;
+    HostRegistration    *hostReg;
 
     if ((serviceReg = FindServiceRegistration(aGroup)) != nullptr)
     {
@@ -634,21 +686,21 @@ void PublisherAvahi::HandleClientState(AvahiClient *aClient, AvahiClientState aS
     }
 }
 
-void PublisherAvahi::PublishServiceImpl(const std::string &aHostName,
-                                        const std::string &aName,
-                                        const std::string &aType,
-                                        const SubTypeList &aSubTypeList,
-                                        uint16_t           aPort,
-                                        const TxtList &    aTxtList,
-                                        ResultCallback &&  aCallback)
+otbrError PublisherAvahi::PublishServiceImpl(const std::string &aHostName,
+                                             const std::string &aName,
+                                             const std::string &aType,
+                                             const SubTypeList &aSubTypeList,
+                                             uint16_t           aPort,
+                                             const TxtData     &aTxtData,
+                                             ResultCallback   &&aCallback)
 {
     otbrError         error             = OTBR_ERROR_NONE;
     int               avahiError        = AVAHI_OK;
     SubTypeList       sortedSubTypeList = SortSubTypeList(aSubTypeList);
-    TxtList           sortedTxtList     = SortTxtList(aTxtList);
     const std::string logHostName       = !aHostName.empty() ? aHostName : "localhost";
     std::string       fullHostName;
-    AvahiEntryGroup * group = nullptr;
+    std::string       serviceName = aName;
+    AvahiEntryGroup  *group       = nullptr;
 
     // Aligned with AvahiStringList
     AvahiStringList  txtBuffer[(kMaxSizeOfTxtRecord - 1) / sizeof(AvahiStringList) + 1];
@@ -661,34 +713,38 @@ void PublisherAvahi::PublishServiceImpl(const std::string &aHostName,
     {
         fullHostName = MakeFullHostName(aHostName);
     }
+    if (serviceName.empty())
+    {
+        serviceName = avahi_client_get_host_name(mClient);
+    }
 
-    aCallback = HandleDuplicateServiceRegistration(aHostName, aName, aType, sortedSubTypeList, aPort, sortedTxtList,
+    aCallback = HandleDuplicateServiceRegistration(aHostName, serviceName, aType, sortedSubTypeList, aPort, aTxtData,
                                                    std::move(aCallback));
     VerifyOrExit(!aCallback.IsNull());
 
-    SuccessOrExit(error = TxtListToAvahiStringList(aTxtList, txtBuffer, sizeof(txtBuffer), txtHead));
+    SuccessOrExit(error = TxtDataToAvahiStringList(aTxtData, txtBuffer, sizeof(txtBuffer), txtHead));
     VerifyOrExit((group = CreateGroup(mClient)) != nullptr, error = OTBR_ERROR_MDNS);
     avahiError = avahi_entry_group_add_service_strlst(group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, AvahiPublishFlags{},
-                                                      aName.c_str(), aType.c_str(),
+                                                      serviceName.c_str(), aType.c_str(),
                                                       /* domain */ nullptr, fullHostName.c_str(), aPort, txtHead);
     VerifyOrExit(avahiError == AVAHI_OK);
 
     for (const std::string &subType : aSubTypeList)
     {
-        otbrLogInfo("Add subtype %s for service %s.%s", subType.c_str(), aName.c_str(), aType.c_str());
+        otbrLogInfo("Add subtype %s for service %s.%s", subType.c_str(), serviceName.c_str(), aType.c_str());
         std::string fullSubType = subType + "._sub." + aType;
         avahiError              = avahi_entry_group_add_service_subtype(group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC,
-                                                           AvahiPublishFlags{}, aName.c_str(), aType.c_str(),
-                                                           /* domain */ nullptr, fullSubType.c_str());
+                                                                        AvahiPublishFlags{}, serviceName.c_str(), aType.c_str(),
+                                                                        /* domain */ nullptr, fullSubType.c_str());
         VerifyOrExit(avahiError == AVAHI_OK);
     }
 
-    otbrLogInfo("Commit avahi service %s.%s", aName.c_str(), aType.c_str());
+    otbrLogInfo("Commit avahi service %s.%s", serviceName.c_str(), aType.c_str());
     avahiError = avahi_entry_group_commit(group);
     VerifyOrExit(avahiError == AVAHI_OK);
 
     AddServiceRegistration(std::unique_ptr<AvahiServiceRegistration>(new AvahiServiceRegistration(
-        aHostName, aName, aType, sortedSubTypeList, aPort, sortedTxtList, std::move(aCallback), group, this)));
+        aHostName, serviceName, aType, sortedSubTypeList, aPort, aTxtData, std::move(aCallback), group, this)));
 
 exit:
     if (avahiError != AVAHI_OK || error != OTBR_ERROR_NONE)
@@ -705,6 +761,7 @@ exit:
         }
         std::move(aCallback)(error);
     }
+    return error;
 }
 
 void PublisherAvahi::UnpublishService(const std::string &aName, const std::string &aType, ResultCallback &&aCallback)
@@ -718,38 +775,42 @@ exit:
     std::move(aCallback)(error);
 }
 
-void PublisherAvahi::PublishHostImpl(const std::string &         aName,
-                                     const std::vector<uint8_t> &aAddress,
-                                     ResultCallback &&           aCallback)
+otbrError PublisherAvahi::PublishHostImpl(const std::string &aName,
+                                          const AddressList &aAddresses,
+                                          ResultCallback   &&aCallback)
 {
     otbrError        error      = OTBR_ERROR_NONE;
     int              avahiError = AVAHI_OK;
     std::string      fullHostName;
-    AvahiAddress     address;
     AvahiEntryGroup *group = nullptr;
 
     VerifyOrExit(mState == State::kReady, error = OTBR_ERROR_INVALID_STATE);
     VerifyOrExit(mClient != nullptr, error = OTBR_ERROR_INVALID_STATE);
-    VerifyOrExit(aAddress.size() == sizeof(address.data.ipv6.address), error = OTBR_ERROR_INVALID_ARGS);
 
-    aCallback = HandleDuplicateHostRegistration(aName, aAddress, std::move(aCallback));
+    aCallback = HandleDuplicateHostRegistration(aName, aAddresses, std::move(aCallback));
     VerifyOrExit(!aCallback.IsNull());
-
-    address.proto = AVAHI_PROTO_INET6;
-    memcpy(address.data.ipv6.address, aAddress.data(), aAddress.size());
-    fullHostName = MakeFullHostName(aName);
+    VerifyOrExit(!aAddresses.empty(), std::move(aCallback)(OTBR_ERROR_NONE));
 
     VerifyOrExit((group = CreateGroup(mClient)) != nullptr, error = OTBR_ERROR_MDNS);
-    avahiError = avahi_entry_group_add_address(group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, AVAHI_PUBLISH_NO_REVERSE,
-                                               fullHostName.c_str(), &address);
-    VerifyOrExit(avahiError == AVAHI_OK);
+
+    fullHostName = MakeFullHostName(aName);
+    for (const auto &address : aAddresses)
+    {
+        AvahiAddress avahiAddress;
+
+        avahiAddress.proto = AVAHI_PROTO_INET6;
+        memcpy(avahiAddress.data.ipv6.address, address.m8, sizeof(address.m8));
+        avahiError = avahi_entry_group_add_address(group, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, AVAHI_PUBLISH_NO_REVERSE,
+                                                   fullHostName.c_str(), &avahiAddress);
+        VerifyOrExit(avahiError == AVAHI_OK);
+    }
 
     otbrLogInfo("Commit avahi host %s", aName.c_str());
     avahiError = avahi_entry_group_commit(group);
     VerifyOrExit(avahiError == AVAHI_OK);
 
     AddHostRegistration(std::unique_ptr<AvahiHostRegistration>(
-        new AvahiHostRegistration(aName, aAddress, std::move(aCallback), group, this)));
+        new AvahiHostRegistration(aName, aAddresses, std::move(aCallback), group, this)));
 
 exit:
     if (avahiError != AVAHI_OK || error != OTBR_ERROR_NONE)
@@ -766,6 +827,7 @@ exit:
         }
         std::move(aCallback)(error);
     }
+    return error;
 }
 
 void PublisherAvahi::UnpublishHost(const std::string &aName, ResultCallback &&aCallback)
@@ -779,8 +841,8 @@ exit:
     std::move(aCallback)(error);
 }
 
-otbrError PublisherAvahi::TxtListToAvahiStringList(const TxtList &   aTxtList,
-                                                   AvahiStringList * aBuffer,
+otbrError PublisherAvahi::TxtDataToAvahiStringList(const TxtData    &aTxtData,
+                                                   AvahiStringList  *aBuffer,
                                                    size_t            aBufferSize,
                                                    AvahiStringList *&aHead)
 {
@@ -788,32 +850,40 @@ otbrError PublisherAvahi::TxtListToAvahiStringList(const TxtList &   aTxtList,
     size_t           used  = 0;
     AvahiStringList *last  = nullptr;
     AvahiStringList *curr  = aBuffer;
+    const uint8_t   *next;
+    const uint8_t   *data    = aTxtData.data();
+    const uint8_t   *dataEnd = aTxtData.data() + aTxtData.size();
 
     aHead = nullptr;
-    for (const auto &txtEntry : aTxtList)
+
+    while (data < dataEnd)
     {
-        const char *   name        = txtEntry.mName.c_str();
-        size_t         nameLength  = txtEntry.mName.length();
-        const uint8_t *value       = txtEntry.mValue.data();
-        size_t         valueLength = txtEntry.mValue.size();
-        // +1 for the size of "=", avahi doesn't need '\0' at the end of the entry
-        size_t needed = sizeof(AvahiStringList) - sizeof(AvahiStringList::text) + nameLength + valueLength + 1;
+        uint8_t entryLength = *data++;
+        size_t  needed      = sizeof(AvahiStringList) - sizeof(AvahiStringList::text) + entryLength;
+
+        if (entryLength == 0)
+        {
+            continue;
+        }
+
+        VerifyOrExit(data + entryLength <= dataEnd, error = OTBR_ERROR_PARSE);
 
         VerifyOrExit(used + needed <= aBufferSize, error = OTBR_ERROR_INVALID_ARGS);
         curr->next = last;
         last       = curr;
-        memcpy(curr->text, name, nameLength);
-        curr->text[nameLength] = '=';
-        memcpy(curr->text + nameLength + 1, value, valueLength);
-        curr->size = nameLength + valueLength + 1;
-        {
-            const uint8_t *next = curr->text + curr->size;
-            curr                = OTBR_ALIGNED(next, AvahiStringList *);
-        }
+
+        memcpy(curr->text, data, entryLength);
+        curr->size = entryLength;
+
+        data += entryLength;
+
+        next = curr->text + curr->size;
+        curr = OTBR_ALIGNED(next, AvahiStringList *);
         used = static_cast<size_t>(reinterpret_cast<uint8_t *>(curr) - reinterpret_cast<uint8_t *>(aBuffer));
     }
-    SuccessOrExit(error);
+
     aHead = last;
+
 exit:
     return error;
 }
@@ -986,12 +1056,16 @@ void PublisherAvahi::ServiceSubscription::Browse(void)
 
 void PublisherAvahi::ServiceSubscription::Release(void)
 {
-    for (AvahiServiceResolver *resolver : mServiceResolvers)
-    {
-        avahi_service_resolver_free(resolver);
-    }
+    std::vector<std::string> instanceNames;
 
-    mServiceResolvers.clear();
+    for (const auto &resolvers : mServiceResolvers)
+    {
+        instanceNames.push_back(resolvers.first);
+    }
+    for (const auto &name : instanceNames)
+    {
+        RemoveServiceResolver(name);
+    }
 
     if (mServiceBrowser != nullptr)
     {
@@ -1000,27 +1074,27 @@ void PublisherAvahi::ServiceSubscription::Release(void)
     }
 }
 
-void PublisherAvahi::ServiceSubscription::HandleBrowseResult(AvahiServiceBrowser *  aServiceBrowser,
+void PublisherAvahi::ServiceSubscription::HandleBrowseResult(AvahiServiceBrowser   *aServiceBrowser,
                                                              AvahiIfIndex           aInterfaceIndex,
                                                              AvahiProtocol          aProtocol,
                                                              AvahiBrowserEvent      aEvent,
-                                                             const char *           aName,
-                                                             const char *           aType,
-                                                             const char *           aDomain,
+                                                             const char            *aName,
+                                                             const char            *aType,
+                                                             const char            *aDomain,
                                                              AvahiLookupResultFlags aFlags,
-                                                             void *                 aContext)
+                                                             void                  *aContext)
 {
     static_cast<PublisherAvahi::ServiceSubscription *>(aContext)->HandleBrowseResult(
         aServiceBrowser, aInterfaceIndex, aProtocol, aEvent, aName, aType, aDomain, aFlags);
 }
 
-void PublisherAvahi::ServiceSubscription::HandleBrowseResult(AvahiServiceBrowser *  aServiceBrowser,
+void PublisherAvahi::ServiceSubscription::HandleBrowseResult(AvahiServiceBrowser   *aServiceBrowser,
                                                              AvahiIfIndex           aInterfaceIndex,
                                                              AvahiProtocol          aProtocol,
                                                              AvahiBrowserEvent      aEvent,
-                                                             const char *           aName,
-                                                             const char *           aType,
-                                                             const char *           aDomain,
+                                                             const char            *aName,
+                                                             const char            *aType,
+                                                             const char            *aDomain,
                                                              AvahiLookupResultFlags aFlags)
 {
     OTBR_UNUSED_VARIABLE(aServiceBrowser);
@@ -1039,6 +1113,7 @@ void PublisherAvahi::ServiceSubscription::HandleBrowseResult(AvahiServiceBrowser
         break;
     case AVAHI_BROWSER_REMOVE:
         mPublisherAvahi->OnServiceRemoved(static_cast<uint32_t>(aInterfaceIndex), aType, aName);
+        RemoveServiceResolver(aName);
         break;
     case AVAHI_BROWSER_CACHE_EXHAUSTED:
     case AVAHI_BROWSER_ALL_FOR_NOW:
@@ -1055,18 +1130,22 @@ void PublisherAvahi::ServiceSubscription::Resolve(uint32_t           aInterfaceI
                                                   const std::string &aInstanceName,
                                                   const std::string &aType)
 {
-    AvahiServiceResolver *resolver;
+    auto serviceResolver = MakeUnique<ServiceResolver>();
 
     mPublisherAvahi->mServiceInstanceResolutionBeginTime[std::make_pair(aInstanceName, aType)] = Clock::now();
 
     otbrLogInfo("Resolve service %s.%s inf %" PRIu32, aInstanceName.c_str(), aType.c_str(), aInterfaceIndex);
 
-    resolver = avahi_service_resolver_new(
+    serviceResolver->mType            = aType;
+    serviceResolver->mPublisherAvahi  = this->mPublisherAvahi;
+    serviceResolver->mServiceResolver = avahi_service_resolver_new(
         mPublisherAvahi->mClient, aInterfaceIndex, aProtocol, aInstanceName.c_str(), aType.c_str(),
-        /* domain */ nullptr, AVAHI_PROTO_INET6, static_cast<AvahiLookupFlags>(0), HandleResolveResult, this);
-    if (resolver != nullptr)
+        /* domain */ nullptr, AVAHI_PROTO_UNSPEC, static_cast<AvahiLookupFlags>(AVAHI_LOOKUP_NO_ADDRESS),
+        &ServiceResolver::HandleResolveServiceResult, serviceResolver.get());
+
+    if (serviceResolver->mServiceResolver != nullptr)
     {
-        AddServiceResolver(resolver);
+        AddServiceResolver(aInstanceName, serviceResolver.release());
     }
     else
     {
@@ -1075,117 +1154,204 @@ void PublisherAvahi::ServiceSubscription::Resolve(uint32_t           aInterfaceI
     }
 }
 
-void PublisherAvahi::ServiceSubscription::HandleResolveResult(AvahiServiceResolver * aServiceResolver,
-                                                              AvahiIfIndex           aInterfaceIndex,
-                                                              AvahiProtocol          aProtocol,
-                                                              AvahiResolverEvent     aEvent,
-                                                              const char *           aName,
-                                                              const char *           aType,
-                                                              const char *           aDomain,
-                                                              const char *           aHostName,
-                                                              const AvahiAddress *   aAddress,
-                                                              uint16_t               aPort,
-                                                              AvahiStringList *      aTxt,
-                                                              AvahiLookupResultFlags aFlags,
-                                                              void *                 aContext)
+void PublisherAvahi::ServiceResolver::HandleResolveServiceResult(AvahiServiceResolver  *aServiceResolver,
+                                                                 AvahiIfIndex           aInterfaceIndex,
+                                                                 AvahiProtocol          aProtocol,
+                                                                 AvahiResolverEvent     aEvent,
+                                                                 const char            *aName,
+                                                                 const char            *aType,
+                                                                 const char            *aDomain,
+                                                                 const char            *aHostName,
+                                                                 const AvahiAddress    *aAddress,
+                                                                 uint16_t               aPort,
+                                                                 AvahiStringList       *aTxt,
+                                                                 AvahiLookupResultFlags aFlags,
+                                                                 void                  *aContext)
 {
-    static_cast<PublisherAvahi::ServiceSubscription *>(aContext)->HandleResolveResult(
+    static_cast<PublisherAvahi::ServiceResolver *>(aContext)->HandleResolveServiceResult(
         aServiceResolver, aInterfaceIndex, aProtocol, aEvent, aName, aType, aDomain, aHostName, aAddress, aPort, aTxt,
         aFlags);
 }
 
-void PublisherAvahi::ServiceSubscription::HandleResolveResult(AvahiServiceResolver * aServiceResolver,
-                                                              AvahiIfIndex           aInterfaceIndex,
-                                                              AvahiProtocol          aProtocol,
-                                                              AvahiResolverEvent     aEvent,
-                                                              const char *           aName,
-                                                              const char *           aType,
-                                                              const char *           aDomain,
-                                                              const char *           aHostName,
-                                                              const AvahiAddress *   aAddress,
-                                                              uint16_t               aPort,
-                                                              AvahiStringList *      aTxt,
-                                                              AvahiLookupResultFlags aFlags)
+void PublisherAvahi::ServiceResolver::HandleResolveServiceResult(AvahiServiceResolver  *aServiceResolver,
+                                                                 AvahiIfIndex           aInterfaceIndex,
+                                                                 AvahiProtocol          aProtocol,
+                                                                 AvahiResolverEvent     aEvent,
+                                                                 const char            *aName,
+                                                                 const char            *aType,
+                                                                 const char            *aDomain,
+                                                                 const char            *aHostName,
+                                                                 const AvahiAddress    *aAddress,
+                                                                 uint16_t               aPort,
+                                                                 AvahiStringList       *aTxt,
+                                                                 AvahiLookupResultFlags aFlags)
 {
     OT_UNUSED_VARIABLE(aServiceResolver);
     OT_UNUSED_VARIABLE(aInterfaceIndex);
     OT_UNUSED_VARIABLE(aProtocol);
     OT_UNUSED_VARIABLE(aType);
     OT_UNUSED_VARIABLE(aDomain);
+    OT_UNUSED_VARIABLE(aAddress);
 
-    char                   addrBuf[AVAHI_ADDRESS_STR_MAX] = "";
-    Ip6Address             address;
-    size_t                 totalTxtSize = 0;
-    DiscoveredInstanceInfo instanceInfo;
-    bool                   resolved   = false;
-    int                    avahiError = AVAHI_OK;
+    size_t totalTxtSize = 0;
+    bool   resolved     = false;
+    int    avahiError   = AVAHI_OK;
 
     otbrLog(aEvent == AVAHI_RESOLVER_FOUND ? OTBR_LOG_INFO : OTBR_LOG_WARNING, OTBR_LOG_TAG,
             "Resolve service reply: protocol %d %s.%s.%s = host %s port %" PRIu16 " flags %d event %d", aProtocol,
             aName, aType, aDomain, aHostName, aPort, static_cast<int>(aFlags), static_cast<int>(aEvent));
 
     VerifyOrExit(aEvent == AVAHI_RESOLVER_FOUND, avahiError = avahi_client_errno(mPublisherAvahi->mClient));
-    avahi_address_snprint(addrBuf, sizeof(addrBuf), aAddress);
-    otbrLogInfo("Resolve service reply: address %s", addrBuf);
-
-    RemoveServiceResolver(aServiceResolver);
     VerifyOrExit(aHostName != nullptr, avahiError = AVAHI_ERR_INVALID_HOST_NAME);
 
-    instanceInfo.mNetifIndex = static_cast<uint32_t>(aInterfaceIndex);
-    instanceInfo.mName       = aName;
-    instanceInfo.mHostName   = std::string(aHostName) + ".";
-    instanceInfo.mPort       = aPort;
-    VerifyOrExit(otbrError::OTBR_ERROR_NONE == Ip6Address::FromString(addrBuf, address),
-                 otbrLogErr("Failed to parse the IP address: %s", addrBuf), avahiError = AVAHI_ERR_INVALID_ADDRESS);
+    mInstanceInfo.mNetifIndex = static_cast<uint32_t>(aInterfaceIndex);
+    mInstanceInfo.mName       = aName;
+    mInstanceInfo.mHostName   = std::string(aHostName) + ".";
+    mInstanceInfo.mPort       = aPort;
 
     otbrLogInfo("Resolve service reply: flags=%u, host=%s", aFlags, aHostName);
-
-    VerifyOrExit(!address.IsLinkLocal() && !address.IsMulticast() && !address.IsLoopback() && !address.IsUnspecified(),
-                 otbrLogInfo("Ignoring address %s", address.ToString().c_str()),
-                 avahiError = AVAHI_ERR_INVALID_ADDRESS);
-
-    instanceInfo.mAddresses.push_back(address);
 
     // TODO priority
     // TODO weight
     // TODO use a more proper TTL
-    instanceInfo.mTtl = kDefaultTtl;
+    mInstanceInfo.mTtl = kDefaultTtl;
     for (auto p = aTxt; p; p = avahi_string_list_get_next(p))
     {
         totalTxtSize += avahi_string_list_get_size(p) + 1;
     }
-    instanceInfo.mTxtData.resize(totalTxtSize);
-    avahi_string_list_serialize(aTxt, instanceInfo.mTxtData.data(), totalTxtSize);
+    mInstanceInfo.mTxtData.resize(totalTxtSize);
+    avahi_string_list_serialize(aTxt, mInstanceInfo.mTxtData.data(), totalTxtSize);
 
-    otbrLogInfo("Resolve service reply: address=%s, ttl=%" PRIu32, address.ToString().c_str(), instanceInfo.mTtl);
+    // NOTE: Avahi only returns one of the host's addresses in the service resolution callback. However, the address may
+    // be link-local so it may not be preferred from Thread's perspective. We want to go through the complete list of
+    // addresses associated with the host and choose a routable address. Therefore, as below we will resolve the host
+    // and go through all its addresses.
 
     resolved = true;
 
 exit:
     if (resolved)
     {
-        // NOTE: This `ServiceSubscrption` object may be freed in `OnServiceResolved`.
-        mPublisherAvahi->OnServiceResolved(mType, instanceInfo);
+        // In case the callback is triggered when a service instance is updated, there may already be a record browser.
+        // We should free it before switching to the new record browser.
+        if (mRecordBrowser)
+        {
+            avahi_record_browser_free(mRecordBrowser);
+            mRecordBrowser = nullptr;
+        }
+        // NOTE: This `ServiceResolver` object may be freed in `OnServiceResolved`.
+        mRecordBrowser = avahi_record_browser_new(mPublisherAvahi->mClient, aInterfaceIndex, AVAHI_PROTO_UNSPEC,
+                                                  aHostName, AVAHI_DNS_CLASS_IN, AVAHI_DNS_TYPE_AAAA,
+                                                  static_cast<AvahiLookupFlags>(0), HandleResolveHostResult, this);
+        if (!mRecordBrowser)
+        {
+            resolved   = false;
+            avahiError = avahi_client_errno(mPublisherAvahi->mClient);
+        }
     }
-    else if (avahiError != AVAHI_OK)
+    if (!resolved && avahiError != AVAHI_OK)
     {
         mPublisherAvahi->OnServiceResolveFailed(aType, aName, avahiError);
     }
 }
 
-void PublisherAvahi::ServiceSubscription::AddServiceResolver(AvahiServiceResolver *aServiceResolver)
+void PublisherAvahi::ServiceResolver::HandleResolveHostResult(AvahiRecordBrowser    *aRecordBrowser,
+                                                              AvahiIfIndex           aInterfaceIndex,
+                                                              AvahiProtocol          aProtocol,
+                                                              AvahiBrowserEvent      aEvent,
+                                                              const char            *aName,
+                                                              uint16_t               aClazz,
+                                                              uint16_t               aType,
+                                                              const void            *aRdata,
+                                                              size_t                 aSize,
+                                                              AvahiLookupResultFlags aFlags,
+                                                              void                  *aContext)
 {
-    assert(aServiceResolver != nullptr);
-    mServiceResolvers.insert(aServiceResolver);
+    static_cast<PublisherAvahi::ServiceResolver *>(aContext)->HandleResolveHostResult(
+        aRecordBrowser, aInterfaceIndex, aProtocol, aEvent, aName, aClazz, aType, aRdata, aSize, aFlags);
 }
 
-void PublisherAvahi::ServiceSubscription::RemoveServiceResolver(AvahiServiceResolver *aServiceResolver)
+void PublisherAvahi::ServiceResolver::HandleResolveHostResult(AvahiRecordBrowser    *aRecordBrowser,
+                                                              AvahiIfIndex           aInterfaceIndex,
+                                                              AvahiProtocol          aProtocol,
+                                                              AvahiBrowserEvent      aEvent,
+                                                              const char            *aName,
+                                                              uint16_t               aClazz,
+                                                              uint16_t               aType,
+                                                              const void            *aRdata,
+                                                              size_t                 aSize,
+                                                              AvahiLookupResultFlags aFlags)
+{
+    OTBR_UNUSED_VARIABLE(aRecordBrowser);
+    OTBR_UNUSED_VARIABLE(aInterfaceIndex);
+    OTBR_UNUSED_VARIABLE(aProtocol);
+    OTBR_UNUSED_VARIABLE(aEvent);
+    OTBR_UNUSED_VARIABLE(aClazz);
+    OTBR_UNUSED_VARIABLE(aType);
+    OTBR_UNUSED_VARIABLE(aFlags);
+
+    Ip6Address address;
+    bool       resolved   = false;
+    int        avahiError = AVAHI_OK;
+
+    otbrLog(aEvent != AVAHI_BROWSER_FAILURE ? OTBR_LOG_INFO : OTBR_LOG_WARNING, OTBR_LOG_TAG,
+            "Resolve host reply: %s inf %d protocol %d class %" PRIu16 " type %" PRIu16 " size %zu flags %d event %d",
+            aName, aInterfaceIndex, aProtocol, aClazz, aType, aSize, static_cast<int>(aFlags),
+            static_cast<int>(aEvent));
+
+    VerifyOrExit(aEvent == AVAHI_BROWSER_NEW);
+    VerifyOrExit(aSize == OTBR_IP6_ADDRESS_SIZE || aSize == OTBR_IP4_ADDRESS_SIZE,
+                 otbrLogErr("Unexpected address data length: %zu", aSize), avahiError = AVAHI_ERR_INVALID_ADDRESS);
+    VerifyOrExit(aSize == OTBR_IP6_ADDRESS_SIZE, otbrLogInfo("IPv4 address ignored"),
+                 avahiError = AVAHI_ERR_INVALID_ADDRESS);
+    address = Ip6Address(*static_cast<const uint8_t(*)[OTBR_IP6_ADDRESS_SIZE]>(aRdata));
+
+    VerifyOrExit(!address.IsLinkLocal() && !address.IsMulticast() && !address.IsLoopback() && !address.IsUnspecified(),
+                 avahiError = AVAHI_ERR_INVALID_ADDRESS);
+    otbrLogInfo("Resolved host address: %s", address.ToString().c_str());
+
+    mInstanceInfo.mAddresses.push_back(std::move(address));
+    resolved = true;
+
+exit:
+    if (resolved)
+    {
+        // NOTE: This `HostSubscrption` object may be freed in `OnHostResolved`.
+        mPublisherAvahi->OnServiceResolved(mType, mInstanceInfo);
+    }
+    else if (avahiError != AVAHI_OK)
+    {
+        mPublisherAvahi->OnServiceResolveFailed(mType, mInstanceInfo.mName, avahiError);
+    }
+}
+
+void PublisherAvahi::ServiceSubscription::AddServiceResolver(const std::string &aInstanceName,
+                                                             ServiceResolver   *aServiceResolver)
 {
     assert(aServiceResolver != nullptr);
-    assert(mServiceResolvers.find(aServiceResolver) != mServiceResolvers.end());
+    mServiceResolvers[aInstanceName].insert(aServiceResolver);
 
-    avahi_service_resolver_free(aServiceResolver);
-    mServiceResolvers.erase(aServiceResolver);
+    otbrLogDebug("Added service resolver for instance %s", aInstanceName.c_str());
+}
+
+void PublisherAvahi::ServiceSubscription::RemoveServiceResolver(const std::string &aInstanceName)
+{
+    int numResolvers = 0;
+
+    VerifyOrExit(mServiceResolvers.find(aInstanceName) != mServiceResolvers.end());
+
+    numResolvers = mServiceResolvers[aInstanceName].size();
+
+    for (auto resolver : mServiceResolvers[aInstanceName])
+    {
+        delete resolver;
+    }
+
+    mServiceResolvers.erase(aInstanceName);
+
+exit:
+    otbrLogDebug("Removed %d service resolver for instance %s", numResolvers, aInstanceName.c_str());
+    return;
 }
 
 void PublisherAvahi::HostSubscription::Release(void)
@@ -1214,30 +1380,30 @@ void PublisherAvahi::HostSubscription::Resolve(void)
     }
 }
 
-void PublisherAvahi::HostSubscription::HandleResolveResult(AvahiRecordBrowser *   aRecordBrowser,
+void PublisherAvahi::HostSubscription::HandleResolveResult(AvahiRecordBrowser    *aRecordBrowser,
                                                            AvahiIfIndex           aInterfaceIndex,
                                                            AvahiProtocol          aProtocol,
                                                            AvahiBrowserEvent      aEvent,
-                                                           const char *           aName,
+                                                           const char            *aName,
                                                            uint16_t               aClazz,
                                                            uint16_t               aType,
-                                                           const void *           aRdata,
+                                                           const void            *aRdata,
                                                            size_t                 aSize,
                                                            AvahiLookupResultFlags aFlags,
-                                                           void *                 aContext)
+                                                           void                  *aContext)
 {
     static_cast<PublisherAvahi::HostSubscription *>(aContext)->HandleResolveResult(
         aRecordBrowser, aInterfaceIndex, aProtocol, aEvent, aName, aClazz, aType, aRdata, aSize, aFlags);
 }
 
-void PublisherAvahi::HostSubscription::HandleResolveResult(AvahiRecordBrowser *   aRecordBrowser,
+void PublisherAvahi::HostSubscription::HandleResolveResult(AvahiRecordBrowser    *aRecordBrowser,
                                                            AvahiIfIndex           aInterfaceIndex,
                                                            AvahiProtocol          aProtocol,
                                                            AvahiBrowserEvent      aEvent,
-                                                           const char *           aName,
+                                                           const char            *aName,
                                                            uint16_t               aClazz,
                                                            uint16_t               aType,
-                                                           const void *           aRdata,
+                                                           const void            *aRdata,
                                                            size_t                 aSize,
                                                            AvahiLookupResultFlags aFlags)
 {

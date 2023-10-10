@@ -32,6 +32,8 @@ set -euxo pipefail
 TOOLS_HOME="$HOME"/.cache/tools
 [[ -d $TOOLS_HOME ]] || mkdir -p "$TOOLS_HOME"
 
+MDNSRESPONDER_PATCH_PATH=$(realpath "$(dirname "$0")"/../../third_party/mDNSResponder)
+
 disable_install_recommends()
 {
     OTBR_APT_CONF_FILE=/etc/apt/apt.conf
@@ -63,11 +65,15 @@ install_common_dependencies()
         libreadline-dev \
         libncurses-dev \
         libjsoncpp-dev \
-        coreutils
+        coreutils \
+        git \
+        libprotobuf-dev \
+        protobuf-compiler
 }
 
 install_openthread_binraries()
 {
+    pip3 install -U pip
     pip3 install -U cmake
     cd third_party/openthread/repo
     mkdir -p build && cd build
@@ -111,36 +117,29 @@ case "$(uname)" in
             configure_network
         fi
 
-        if [ "$BUILD_TARGET" == android-check ]; then
-            sudo apt-get install --no-install-recommends -y wget unzip libexpat1-dev gcc-multilib g++-multilib
-            (
-                cd "$HOME"
-                wget -nv https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip
-                unzip android-ndk-r17c-linux-x86_64.zip >/dev/null
-                mv android-ndk-r17c ndk-bundle
-            )
-            exit 0
-        fi
-
         if [ "$BUILD_TARGET" == scan-build ]; then
             pip3 install -U cmake
             sudo apt-get install --no-install-recommends -y clang clang-tools
         fi
 
         if [ "$BUILD_TARGET" == pretty-check ]; then
-            sudo apt-get install -y clang-format-9 shellcheck
+            sudo apt-get install -y clang-format-14 shellcheck
             sudo snap install shfmt
         fi
 
         if [ "${OTBR_MDNS-}" == 'mDNSResponder' ]; then
-            SOURCE_NAME=mDNSResponder-1310.80.1
-            wget https://opensource.apple.com/tarballs/mDNSResponder/$SOURCE_NAME.tar.gz \
-                && tar xvf $SOURCE_NAME.tar.gz \
-                && cd $SOURCE_NAME/Clients \
-                && sed -i '/#include <ctype.h>/a #include <stdarg.h>' dns-sd.c \
-                && sed -i '/#include <ctype.h>/a #include <sys/param.h>' dns-sd.c \
-                && cd ../mDNSPosix \
-                && make os=linux && sudo make install os=linux
+            SOURCE_NAME=mDNSResponder-1790.80.10
+            wget https://github.com/apple-oss-distributions/mDNSResponder/archive/refs/tags/$SOURCE_NAME.tar.gz \
+                && mkdir -p $SOURCE_NAME \
+                && tar xvf $SOURCE_NAME.tar.gz -C $SOURCE_NAME --strip-components=1 \
+                && cd "$SOURCE_NAME" \
+                && (
+                    for patch in "$MDNSRESPONDER_PATCH_PATH"/*.patch; do
+                        patch -p1 <"$patch"
+                    done
+                ) \
+                && cd mDNSPosix \
+                && make os=linux tls=no && sudo make install os=linux tls=no
         fi
 
         # Enable IPv6

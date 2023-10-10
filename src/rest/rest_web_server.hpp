@@ -34,6 +34,8 @@
 #ifndef OTBR_REST_REST_WEB_SERVER_HPP_
 #define OTBR_REST_REST_WEB_SERVER_HPP_
 
+#include "openthread-br/config.h"
+
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <sys/socket.h>
@@ -60,7 +62,7 @@ public:
      * @param[in] aNcp  A reference to the NCP controller.
      *
      */
-    RestWebServer(ControllerOpenThread &aNcp);
+    RestWebServer(ControllerOpenThread &aNcp, const std::string &aRestListenAddress, int aRestListenPort);
 
     /**
      * The destructor destroys the server instance.
@@ -81,13 +83,14 @@ private:
     void      UpdateConnections(const fd_set &aReadFdSet);
     void      CreateNewConnection(int32_t &aFd);
     otbrError Accept(int32_t aListenFd);
+    bool      ParseListenAddress(const std::string listenAddress, struct in6_addr *sin6_addr);
     void      InitializeListenFd(void);
     bool      SetFdNonblocking(int32_t fd);
 
     // Resource handler
     Resource mResource;
     // Struct for server configuration
-    sockaddr_in mAddress;
+    sockaddr_in6 mAddress;
     // File descriptor for listening
     int32_t mListenFd;
     // Connection List

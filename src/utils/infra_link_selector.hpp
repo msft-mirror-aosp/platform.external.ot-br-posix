@@ -34,6 +34,8 @@
 #ifndef INFRA_LINK_SELECTOR_HPP_
 #define INFRA_LINK_SELECTOR_HPP_
 
+#include "openthread-br/config.h"
+
 #if __linux__
 
 #include <assert.h>
@@ -138,7 +140,7 @@ private:
     std::vector<const char *>        mInfraLinkNames;
     std::map<const char *, LinkInfo> mInfraLinkInfos;
     int                              mNetlinkSocket    = -1;
-    const char *                     mCurrentInfraLink = nullptr;
+    const char                      *mCurrentInfraLink = nullptr;
     TaskRunner                       mTaskRunner;
     bool                             mRequireReselect = true;
 };
