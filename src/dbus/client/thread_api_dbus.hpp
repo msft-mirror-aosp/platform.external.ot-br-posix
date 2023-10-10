@@ -34,6 +34,8 @@
 #ifndef OTBR_THREAD_API_DBUS_HPP_
 #define OTBR_THREAD_API_DBUS_HPP_
 
+#include "openthread-br/config.h"
+
 #include <functional>
 
 #include <dbus/dbus.h>
@@ -719,6 +721,18 @@ public:
     ClientError GetActiveDatasetTlvs(std::vector<uint8_t> &aDataset);
 
     /**
+     * This method gets the pending operational dataset
+     *
+     * @param[out] aDataset  The pending operational dataset
+     *
+     * @retval ERROR_NONE  Successfully performed the dbus function call
+     * @retval ERROR_DBUS  dbus encode/decode error
+     * @retval ...         OpenThread defined error value otherwise
+     *
+     */
+    ClientError GetPendingDatasetTlvs(std::vector<uint8_t> &aDataset);
+
+    /**
      * This method gets the feature flag list proto serialized byte data.
      *
      * @param[out] aFeatureFlagListData  The feature flag list proto serialized
@@ -855,6 +869,32 @@ public:
      *
      */
     ClientError GetNat64ErrorCounters(Nat64ErrorCounters &aCounters);
+
+    /**
+     * This method gets the telemetry data proto serialized byte data.
+     *
+     * @param[out] aTelemetryData  The telemetry data proto serialized
+     *                             byte data (see proto/thread_telemetry.proto)
+     *
+     * @retval ERROR_NONE  Successfully performed the dbus function call
+     * @retval ERROR_DBUS  dbus encode/decode error
+     * @retval ...         OpenThread defined error value otherwise
+     *
+     */
+    ClientError GetTelemetryData(std::vector<uint8_t> &aTelemetryData);
+
+    /**
+     * This method gets the capabilities data proto serialized byte data.
+     *
+     * @param[out] aCapabilities The capabilities proto serialized byte data
+     *                           (see proto/capabilities.proto)
+     *
+     * @retval ERROR_NONE  Successfully performed the dbus function call
+     * @retval ERROR_DBUS  dbus encode/decode error
+     * @retval ...         OpenThread defined error value otherwise
+     *
+     */
+    ClientError GetCapabilities(std::vector<uint8_t> &aCapabilities);
 
 private:
     ClientError CallDBusMethodSync(const std::string &aMethodName);
