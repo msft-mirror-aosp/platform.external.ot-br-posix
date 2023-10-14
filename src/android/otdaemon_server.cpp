@@ -33,6 +33,7 @@
 #include <net/if.h>
 #include <string.h>
 
+#include <android-base/file.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
 #include <openthread/border_router.h>
@@ -49,9 +50,9 @@ namespace otbr {
 
 namespace vendor {
 
-std::shared_ptr<VendorServer> VendorServer::newInstance(otbr::Ncp::ControllerOpenThread &aNcp)
+std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplication)
 {
-    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aNcp);
+    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aApplication.GetNcp());
 }
 
 } // namespace vendor
@@ -484,5 +485,15 @@ exit:
     return status;
 }
 
+binder_status_t OtDaemonServer::dump(int aFd, const char** aArgs, uint32_t aNumArgs)
+{
+    OT_UNUSED_VARIABLE(aArgs);
+    OT_UNUSED_VARIABLE(aNumArgs);
+
+    // TODO: Use ::android::base::WriteStringToFd to dump infomration.
+    fsync(aFd);
+
+    return STATUS_OK;
+}
 } // namespace Android
 } // namespace otbr
