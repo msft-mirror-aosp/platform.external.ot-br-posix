@@ -29,8 +29,10 @@
 add_executable(otbr-test-dbus-client
     test_dbus_client.cpp
 )
+
 target_link_libraries(otbr-test-dbus-client PRIVATE
     otbr-dbus-client
+    otbr-proto
 )
 
 add_executable(otbr-test-dbus-server

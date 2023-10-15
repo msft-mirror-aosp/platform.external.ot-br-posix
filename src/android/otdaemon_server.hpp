@@ -62,8 +62,8 @@ public:
     OtDaemonServer(const OtDaemonServer &) = delete;
     void operator=(const OtDaemonServer &) = delete;
 
-    // TODO(wgtdkp): dump service info for debugging.
-    // status_t dump(int fd, const Vector<String16> &args) override;
+    // Dump information for debugging.
+    binder_status_t dump(int aFd, const char** aArgs, uint32_t aNumArgs) override;
 
 private:
     using DetachCallback = std::function<void()>;
