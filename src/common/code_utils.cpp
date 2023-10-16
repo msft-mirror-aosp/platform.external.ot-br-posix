@@ -26,10 +26,15 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.android.server.openthread;
+#include "common/code_utils.hpp"
 
-/** Receives the status of an OpenThread operation which may fail with an {@code otError} code. */
-oneway interface IOtStatusReceiver {
-    void onSuccess();
-    void onError(int errorCode, String errorMessage);
+uint64_t ConvertOpenThreadUint64(const uint8_t *aValue)
+{
+    uint64_t val = 0;
+
+    for (size_t i = 0; i < sizeof(uint64_t); i++)
+    {
+        val = (val << 8) | aValue[i];
+    }
+    return val;
 }
