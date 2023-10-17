@@ -139,6 +139,7 @@ cc_defaults {
         "-DOTBR_ENABLE_MDNS_MDNSSD=1",
         "-DOTBR_ENABLE_SRP_ADVERTISING_PROXY=1",
         "-DOTBR_ENABLE_DNSSD_DISCOVERY_PROXY=1",
+        "-DOTBR_ENABLE_TELEMETRY_DATA_API=1",
         "-DOTBR_PACKAGE_NAME=\"OTBR_AGENT\"",
     ],
 
@@ -150,6 +151,7 @@ cc_defaults {
         "src/ncp/ncp_openthread.cpp",
         "src/sdp_proxy/advertising_proxy.cpp",
         "src/sdp_proxy/discovery_proxy.cpp",
+        "src/common/code_utils.cpp",
         "src/common/dns_utils.cpp",
         "src/common/logging.cpp",
         "src/common/mainloop.cpp",
@@ -176,12 +178,15 @@ cc_defaults {
         "libcutils",
         "libbinder_ndk",
         "android.hardware.threadnetwork-V1-ndk",
+        "liblog",
     ],
 
     static_libs: [
         "libopenthread-cli",
         "ot-core",
         "ot-daemon-aidl-ndk",
+        "ot-daemon-cc-proto-lite",
+        "libprotobuf-cpp-lite",
     ],
 
     host_ldlibs: ["-lutil"],
