@@ -34,7 +34,6 @@
 #include <string.h>
 
 #include <android-base/file.h>
-#include <android-base/stringprintf.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
 #include <openthread/border_router.h>
@@ -44,7 +43,6 @@
 
 #include "agent/vendor.hpp"
 #include "common/code_utils.hpp"
-#include "proto/thread_telemetry.pb.h"
 
 #define BYTE_ARR_END(arr) ((arr) + sizeof(arr))
 
@@ -54,7 +52,7 @@ namespace vendor {
 
 std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplication)
 {
-    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aApplication);
+    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aApplication.GetNcp());
 }
 
 } // namespace vendor
@@ -88,8 +86,8 @@ static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo
     return addrInfo;
 }
 
-OtDaemonServer::OtDaemonServer(Application &aApplication)
-    : mNcp(aApplication.GetNcp())
+OtDaemonServer::OtDaemonServer(otbr::Ncp::ControllerOpenThread &aNcp)
+    : mNcp(aNcp)
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
@@ -487,45 +485,14 @@ exit:
     return status;
 }
 
-/**
- * Dumps a line of content to file.
- *
- * @param[in] aFd       The file descriptor to be dumped with the content.
- * @param[in] aLine     A line of content to be dumped.
- *
- */
-inline void dumpLine(int aFd, const std::string &aLine)
-{
-    android::base::WriteStringToFd(android::base::StringPrintf("ot_daemon->%s\n", aLine.c_str()), aFd);
-}
-
-binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumArgs)
+binder_status_t OtDaemonServer::dump(int aFd, const char** aArgs, uint32_t aNumArgs)
 {
     OT_UNUSED_VARIABLE(aArgs);
     OT_UNUSED_VARIABLE(aNumArgs);
 
-    auto                         threadHelper = mNcp.GetThreadHelper();
-    threadnetwork::TelemetryData telemetryData;
-
-    // TODO: Fix problem APIs: otPlatRadioGetTransmitPower, otPlatRadioGetRssi, otPlatRadioGetCoexMetrics.
-    VerifyOrExit(threadHelper->RetrieveTelemetryData(nullptr, telemetryData) == OT_ERROR_NONE);
-
-    dumpLine(aFd, android::base::StringPrintf("thread version: %u", otThreadGetVersion()));
-
-    // Dump leader data part.
-    dumpLine(aFd, android::base::StringPrintf(
-                      "partition_id: %lu", static_cast<unsigned long>(telemetryData.wpan_topo_full().partition_id())));
-    dumpLine(aFd, android::base::StringPrintf("leader_weight: %u", telemetryData.wpan_topo_full().leader_weight()));
-    dumpLine(aFd, android::base::StringPrintf("network_data_version: %u",
-                                              telemetryData.wpan_topo_full().network_data_version()));
-    dumpLine(aFd, android::base::StringPrintf("stable_network_data_version: %u",
-                                              telemetryData.wpan_topo_full().stable_network_data_version()));
-    dumpLine(aFd,
-             android::base::StringPrintf("leader_router_id: %u", telemetryData.wpan_topo_full().leader_router_id()));
-
+    // TODO: Use ::android::base::WriteStringToFd to dump infomration.
     fsync(aFd);
 
-exit:
     return STATUS_OK;
 }
 } // namespace Android
