@@ -63,7 +63,7 @@ public:
     void operator=(const OtDaemonServer &) = delete;
 
     // Dump information for debugging.
-    binder_status_t dump(int aFd, const char** aArgs, uint32_t aNumArgs) override;
+    binder_status_t dump(int aFd, const char **aArgs, uint32_t aNumArgs) override;
 
 private:
     using DetachCallback = std::function<void()>;
@@ -85,10 +85,10 @@ private:
     Status getExtendedMacAddress(std::vector<uint8_t> *aExtendedMacAddress) override;
     Status getThreadVersion(int *aThreadVersion) override;
     bool   isAttached(void);
-    Status attach(bool                                      aDoForm,
-                  const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
-                  const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    Status detach(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    Status join(bool                                      aDoForm,
+                const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
+                const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    Status leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   detachGracefully(const DetachCallback &aCallback);
     Status scheduleMigration(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
                              const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
@@ -106,7 +106,7 @@ private:
     ScopedFileDescriptor               mTunFd;
     std::shared_ptr<IOtDaemonCallback> mCallback;
     BinderDeathRecipient               mClientDeathRecipient;
-    std::vector<DetachCallback>        mOngoingDetachCallbacks;
+    std::vector<DetachCallback>        mOngoingLeaveCallbacks;
 };
 
 } // namespace Android
