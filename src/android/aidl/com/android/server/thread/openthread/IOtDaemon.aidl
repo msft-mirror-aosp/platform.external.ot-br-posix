@@ -64,26 +64,26 @@ interface IOtDaemon {
     int getThreadVersion();
 
     /**
-     * Attaches this device to the network specified by {@code activeOpDatasetTlvs}.
+     * Joins this device to the network specified by {@code activeOpDatasetTlvs}.
      *
-     * @sa android.net.thread.ThreadNetworkController#attach
-     * @sa android.net.thread.ThreadNetworkController#attachOrForm
+     * @sa android.net.thread.ThreadNetworkController#join
      */
-    oneway void attach(
+    oneway void join(
         boolean doForm, in byte[] activeOpDatasetTlvs, in IOtStatusReceiver receiver);
 
     /**
-     * Detaches from the current network.
+     * Leaves from the current network.
      *
-     * 1. It returns success immediately if this device is already detached or disabled
-     * 2. Else if there is already an onging {@code detach} request, no action will be taken but
+     * 1. It returns success immediately if this device has already left or disabled
+     * 2. Else if there is already an onging {@code join} request, no action will be taken but
      *    the {@code receiver} will be invoked after the previous request is completed
      * 3. Otherwise, OTBR sends Address Release Notification (i.e. ADDR_REL.ntf) to grcefully
      *    detach from the current network and it takes 1 second to finish
+     * 4. The Operational Dataset will be removed from persistent storage
      *
-     * @sa android.net.thread.ThreadNetworkController#detach
+     * @sa android.net.thread.ThreadNetworkController#leave
      */
-    oneway void detach(in IOtStatusReceiver receiver);
+    oneway void leave(in IOtStatusReceiver receiver);
 
     /** Migrates to the new network specified by {@code pendingOpDatasetTlvs}.
      *
