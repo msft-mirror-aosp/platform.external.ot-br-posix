@@ -135,11 +135,11 @@ void OtDaemonServer::StateCallback(otChangedFlags aFlags)
 
         if (!isAttached())
         {
-            for (const auto &detachCallback : mOngoingDetachCallbacks)
+            for (const auto &leaveCallback : mOngoingLeaveCallbacks)
             {
-                detachCallback();
+                leaveCallback();
             }
-            mOngoingDetachCallbacks.clear();
+            mOngoingLeaveCallbacks.clear();
         }
     }
 
@@ -319,21 +319,21 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
     return Status::ok();
 }
 
-Status OtDaemonServer::attach(bool                                      aDoForm,
-                              const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
-                              const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+Status OtDaemonServer::join(bool                                      aDoForm,
+                            const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
+                            const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     otError                  error = OT_ERROR_NONE;
     std::string              message;
     otOperationalDatasetTlvs datasetTlvs;
 
-    // TODO(b/273160198): check how we can implement attach-only behavior
+    // TODO(b/273160198): check how we can implement join as a child
     (void)aDoForm;
 
-    otbrLogInfo("Start attaching...");
+    otbrLogInfo("Start joining...");
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(!isAttached(), error = OT_ERROR_INVALID_STATE, message = "Cannot attach when already attached");
+    VerifyOrExit(!isAttached(), error = OT_ERROR_INVALID_STATE, message = "Cannot join when already attached");
 
     std::copy(aActiveOpDatasetTlvs.begin(), aActiveOpDatasetTlvs.end(), datasetTlvs.mTlvs);
     datasetTlvs.mLength = aActiveOpDatasetTlvs.size();
@@ -353,7 +353,7 @@ void OtDaemonServer::detachGracefully(const DetachCallback &aCallback)
 {
     otError error;
 
-    mOngoingDetachCallbacks.push_back(aCallback);
+    mOngoingLeaveCallbacks.push_back(aCallback);
 
     // The callback is already guarded by a timer inside OT, so the client side shouldn't need to
     // add a callback again.
@@ -361,14 +361,14 @@ void OtDaemonServer::detachGracefully(const DetachCallback &aCallback)
     if (error == OT_ERROR_BUSY)
     {
         // There is already an ongoing detach request, do nothing but enqueue the callback
-        otbrLogDebug("Reuse existing detach() request");
+        otbrLogDebug("Reuse existing detach request");
         ExitNow(error = OT_ERROR_NONE);
     }
 
 exit:;
 }
 
-Status OtDaemonServer::detach(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+Status OtDaemonServer::leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     if (GetOtInstance() == nullptr)
     {
@@ -391,11 +391,11 @@ void OtDaemonServer::DetachGracefullyCallback(void *aBinderServer)
 {
     OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
 
-    for (auto callback : thisServer->mOngoingDetachCallbacks)
+    for (auto callback : thisServer->mOngoingLeaveCallbacks)
     {
         callback();
     }
-    thisServer->mOngoingDetachCallbacks.clear();
+    thisServer->mOngoingLeaveCallbacks.clear();
 }
 
 bool OtDaemonServer::isAttached()
@@ -485,7 +485,7 @@ exit:
     return status;
 }
 
-binder_status_t OtDaemonServer::dump(int aFd, const char** aArgs, uint32_t aNumArgs)
+binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumArgs)
 {
     OT_UNUSED_VARIABLE(aArgs);
     OT_UNUSED_VARIABLE(aNumArgs);
