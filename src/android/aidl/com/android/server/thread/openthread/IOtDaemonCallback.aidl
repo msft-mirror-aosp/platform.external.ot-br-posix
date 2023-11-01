@@ -26,9 +26,9 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.android.server.openthread;
+package com.android.server.thread.openthread;
 
-import com.android.server.openthread.Ipv6AddressInfo;
+import com.android.server.thread.openthread.Ipv6AddressInfo;
 
 /** OpenThread daemon callbacks. */
 oneway interface IOtDaemonCallback {
