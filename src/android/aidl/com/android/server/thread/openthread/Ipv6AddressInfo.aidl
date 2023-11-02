@@ -26,7 +26,7 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.android.server.openthread;
+package com.android.server.thread.openthread;
 
 /**
  * The Thread IPv6 address information which represents both unicast and multicast address.
