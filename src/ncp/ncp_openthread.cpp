@@ -35,6 +35,7 @@
 #include <string.h>
 
 #include <openthread/backbone_router_ftd.h>
+#include <openthread/border_routing.h>
 #include <openthread/dataset.h>
 #include <openthread/dnssd_server.h>
 #include <openthread/logging.h>
@@ -59,9 +60,10 @@
 namespace otbr {
 namespace Ncp {
 
-static const uint16_t kThreadVersion11 = 2; ///< Thread Version 1.1
-static const uint16_t kThreadVersion12 = 3; ///< Thread Version 1.2
-static const uint16_t kThreadVersion13 = 4; ///< Thread Version 1.3
+static const uint16_t kThreadVersion11  = 2; ///< Thread Version 1.1
+static const uint16_t kThreadVersion12  = 3; ///< Thread Version 1.2
+static const uint16_t kThreadVersion13  = 4; ///< Thread Version 1.3
+static const uint16_t kThreadVersion131 = 5; ///< Thread Version 1.3.1
 
 ControllerOpenThread::ControllerOpenThread(const char                      *aInterfaceName,
                                            const std::vector<const char *> &aRadioUrls,
@@ -243,6 +245,9 @@ void ControllerOpenThread::Init(void)
 #if OTBR_ENABLE_DNS_UPSTREAM_QUERY
     otDnssdUpstreamQuerySetEnabled(mInstance, /* aEnabled */ true);
 #endif
+#if OTBR_ENABLE_DHCP6_PD
+    otBorderRoutingDhcp6PdSetEnabled(mInstance, /* aEnabled */ true);
+#endif
 #endif // OTBR_ENABLE_FEATURE_FLAGS
 
     mThreadHelper = std::unique_ptr<otbr::agent::ThreadHelper>(new otbr::agent::ThreadHelper(mInstance, this));
@@ -276,6 +281,9 @@ otError ControllerOpenThread::ApplyFeatureFlagList(const FeatureFlagList &aFeatu
 #endif
 #if OTBR_ENABLE_DNS_UPSTREAM_QUERY
     otDnssdUpstreamQuerySetEnabled(mInstance, aFeatureFlagList.enable_dns_upstream_query());
+#endif
+#if OTBR_ENABLE_DHCP6_PD
+    otBorderRoutingDhcp6PdSetEnabled(mInstance, aFeatureFlagList.enable_dhcp6_pd());
 #endif
 
     return error;
@@ -376,6 +384,9 @@ const char *ControllerOpenThread::GetThreadVersion(void)
         break;
     case kThreadVersion13:
         version = "1.3.0";
+        break;
+    case kThreadVersion131:
+        version = "1.3.1";
         break;
     default:
         otbrLogEmerg("Unexpected thread version %hu", otThreadGetVersion());
