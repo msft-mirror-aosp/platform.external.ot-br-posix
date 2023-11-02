@@ -33,6 +33,7 @@
 #include <net/if.h>
 #include <string.h>
 
+#include <android-base/file.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
 #include <openthread/border_router.h>
@@ -49,9 +50,9 @@ namespace otbr {
 
 namespace vendor {
 
-void VendorServer::Init(void)
+std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplication)
 {
-    Android::OtDaemonServer::GetInstance().InitOrDie(&mNcp);
+    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aApplication.GetNcp());
 }
 
 } // namespace vendor
@@ -85,28 +86,23 @@ static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo
     return addrInfo;
 }
 
-OtDaemonServer::OtDaemonServer(void)
+OtDaemonServer::OtDaemonServer(otbr::Ncp::ControllerOpenThread &aNcp)
+    : mNcp(aNcp)
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
 }
 
-OtDaemonServer &OtDaemonServer::GetInstance()
-{
-    static OtDaemonServer service;
-
-    return service;
-}
-
-void OtDaemonServer::InitOrDie(otbr::Ncp::ControllerOpenThread *aNcp)
+void OtDaemonServer::Init(void)
 {
     binder_exception_t exp = AServiceManager_registerLazyService(asBinder().get(), OTBR_SERVICE_NAME);
     SuccessOrDie(exp, "Failed to register OT daemon binder service");
 
-    mNcp = aNcp;
-    mNcp->AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
-    otIp6SetAddressCallback(mNcp->GetInstance(), OtDaemonServer::AddressCallback, this);
-    otIp6SetReceiveCallback(mNcp->GetInstance(), OtDaemonServer::ReceiveCallback, this);
+    assert(GetOtInstance() != nullptr);
+
+    mNcp.AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
+    otIp6SetAddressCallback(GetOtInstance(), OtDaemonServer::AddressCallback, this);
+    otIp6SetReceiveCallback(GetOtInstance(), OtDaemonServer::ReceiveCallback, this);
 }
 
 void OtDaemonServer::BinderDeathCallback(void *aBinderServer)
@@ -139,11 +135,11 @@ void OtDaemonServer::StateCallback(otChangedFlags aFlags)
 
         if (!isAttached())
         {
-            for (const auto &detachCallback : mOngoingDetachCallbacks)
+            for (const auto &leaveCallback : mOngoingLeaveCallbacks)
             {
-                detachCallback();
+                leaveCallback();
             }
-            mOngoingDetachCallbacks.clear();
+            mOngoingLeaveCallbacks.clear();
         }
     }
 
@@ -284,7 +280,7 @@ exit:
 
 otInstance *OtDaemonServer::GetOtInstance()
 {
-    return (mNcp == nullptr) ? nullptr : mNcp->GetInstance();
+    return mNcp.GetInstance();
 }
 
 void OtDaemonServer::Update(MainloopContext &aMainloop)
@@ -323,21 +319,21 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
     return Status::ok();
 }
 
-Status OtDaemonServer::attach(bool                                      aDoForm,
-                              const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
-                              const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+Status OtDaemonServer::join(bool                                      aDoForm,
+                            const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
+                            const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     otError                  error = OT_ERROR_NONE;
     std::string              message;
     otOperationalDatasetTlvs datasetTlvs;
 
-    // TODO(b/273160198): check how we can implement attach-only behavior
+    // TODO(b/273160198): check how we can implement join as a child
     (void)aDoForm;
 
-    otbrLogInfo("Start attaching...");
+    otbrLogInfo("Start joining...");
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(!isAttached(), error = OT_ERROR_INVALID_STATE, message = "Cannot attach when already attached");
+    VerifyOrExit(!isAttached(), error = OT_ERROR_INVALID_STATE, message = "Cannot join when already attached");
 
     std::copy(aActiveOpDatasetTlvs.begin(), aActiveOpDatasetTlvs.end(), datasetTlvs.mTlvs);
     datasetTlvs.mLength = aActiveOpDatasetTlvs.size();
@@ -357,7 +353,7 @@ void OtDaemonServer::detachGracefully(const DetachCallback &aCallback)
 {
     otError error;
 
-    mOngoingDetachCallbacks.push_back(aCallback);
+    mOngoingLeaveCallbacks.push_back(aCallback);
 
     // The callback is already guarded by a timer inside OT, so the client side shouldn't need to
     // add a callback again.
@@ -365,14 +361,14 @@ void OtDaemonServer::detachGracefully(const DetachCallback &aCallback)
     if (error == OT_ERROR_BUSY)
     {
         // There is already an ongoing detach request, do nothing but enqueue the callback
-        otbrLogDebug("Reuse existing detach() request");
+        otbrLogDebug("Reuse existing detach request");
         ExitNow(error = OT_ERROR_NONE);
     }
 
 exit:;
 }
 
-Status OtDaemonServer::detach(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+Status OtDaemonServer::leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     if (GetOtInstance() == nullptr)
     {
@@ -395,11 +391,11 @@ void OtDaemonServer::DetachGracefullyCallback(void *aBinderServer)
 {
     OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
 
-    for (auto callback : thisServer->mOngoingDetachCallbacks)
+    for (auto callback : thisServer->mOngoingLeaveCallbacks)
     {
         callback();
     }
-    thisServer->mOngoingDetachCallbacks.clear();
+    thisServer->mOngoingLeaveCallbacks.clear();
 }
 
 bool OtDaemonServer::isAttached()
@@ -489,5 +485,15 @@ exit:
     return status;
 }
 
+binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumArgs)
+{
+    OT_UNUSED_VARIABLE(aArgs);
+    OT_UNUSED_VARIABLE(aNumArgs);
+
+    // TODO: Use ::android::base::WriteStringToFd to dump infomration.
+    fsync(aFd);
+
+    return STATUS_OK;
+}
 } // namespace Android
 } // namespace otbr

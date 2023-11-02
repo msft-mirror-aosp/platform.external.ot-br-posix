@@ -33,10 +33,11 @@
 #include <memory>
 #include <vector>
 
-#include <aidl/com/android/server/openthread/BnOtDaemon.h>
+#include <aidl/com/android/server/thread/openthread/BnOtDaemon.h>
 #include <openthread/instance.h>
 #include <openthread/ip6.h>
 
+#include "agent/vendor.hpp"
 #include "common/mainloop.hpp"
 #include "ncp/ncp_openthread.hpp"
 
@@ -46,32 +47,32 @@ namespace Android {
 using BinderDeathRecipient = ::ndk::ScopedAIBinder_DeathRecipient;
 using ScopedFileDescriptor = ::ndk::ScopedFileDescriptor;
 using Status               = ::ndk::ScopedAStatus;
-using aidl::com::android::server::openthread::BnOtDaemon;
-using aidl::com::android::server::openthread::IOtDaemonCallback;
-using aidl::com::android::server::openthread::IOtStatusReceiver;
-using aidl::com::android::server::openthread::Ipv6AddressInfo;
+using aidl::com::android::server::thread::openthread::BnOtDaemon;
+using aidl::com::android::server::thread::openthread::IOtDaemonCallback;
+using aidl::com::android::server::thread::openthread::IOtStatusReceiver;
+using aidl::com::android::server::thread::openthread::Ipv6AddressInfo;
 
-class OtDaemonServer : public BnOtDaemon, public MainloopProcessor
+class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendor::VendorServer
 {
 public:
-    OtDaemonServer(void);
+    explicit OtDaemonServer(otbr::Ncp::ControllerOpenThread &aNcp);
     virtual ~OtDaemonServer(void) = default;
-
-    static OtDaemonServer &GetInstance(void);
 
     // Disallow copy and assign.
     OtDaemonServer(const OtDaemonServer &) = delete;
     void operator=(const OtDaemonServer &) = delete;
 
-    // TODO(wgtdkp): dump service info for debugging.
-    // status_t dump(int fd, const Vector<String16> &args) override;
-
-    void InitOrDie(otbr::Ncp::ControllerOpenThread *aNcp);
+    // Dump information for debugging.
+    binder_status_t dump(int aFd, const char **aArgs, uint32_t aNumArgs) override;
 
 private:
     using DetachCallback = std::function<void()>;
 
     otInstance *GetOtInstance(void);
+
+    // Implements vendor::VendorServer
+
+    void Init(void) override;
 
     // Implements MainloopProcessor
 
@@ -84,10 +85,10 @@ private:
     Status getExtendedMacAddress(std::vector<uint8_t> *aExtendedMacAddress) override;
     Status getThreadVersion(int *aThreadVersion) override;
     bool   isAttached(void);
-    Status attach(bool                                      aDoForm,
-                  const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
-                  const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    Status detach(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    Status join(bool                                      aDoForm,
+                const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
+                const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    Status leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   detachGracefully(const DetachCallback &aCallback);
     Status scheduleMigration(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
                              const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
@@ -101,11 +102,11 @@ private:
     void        TransmitCallback(void);
     static void DetachGracefullyCallback(void *aBinderServer);
 
-    otbr::Ncp::ControllerOpenThread   *mNcp = nullptr;
+    otbr::Ncp::ControllerOpenThread   &mNcp;
     ScopedFileDescriptor               mTunFd;
     std::shared_ptr<IOtDaemonCallback> mCallback;
     BinderDeathRecipient               mClientDeathRecipient;
-    std::vector<DetachCallback>        mOngoingDetachCallbacks;
+    std::vector<DetachCallback>        mOngoingLeaveCallbacks;
 };
 
 } // namespace Android
