@@ -33,7 +33,7 @@ package {
 aidl_interface {
     name: "ot-daemon-aidl",
 
-    // This interface is private to only module "com.android.threadnetwork"
+    // This interface is private to only module "com.android.tethering"
     unstable: true,
     srcs: [
         "com/android/**/*.aidl",
@@ -42,16 +42,16 @@ aidl_interface {
         java: {
             enabled: true,
             apex_available: [
-                "com.android.threadnetwork",
+                "com.android.tethering",
             ],
-            min_sdk_version: "33",
+            min_sdk_version: "30",
         },
         ndk: {
             enabled: true,
             apex_available: [
-                "com.android.threadnetwork",
+                "com.android.tethering",
             ],
-            min_sdk_version: "33",
+            min_sdk_version: "30",
         },
         cpp: {
             enabled: false,
