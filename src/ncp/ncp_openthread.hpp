@@ -34,6 +34,8 @@
 #ifndef OTBR_AGENT_NCP_OPENTHREAD_HPP_
 #define OTBR_AGENT_NCP_OPENTHREAD_HPP_
 
+#include "openthread-br/config.h"
+
 #include <chrono>
 #include <memory>
 
@@ -95,16 +97,12 @@ public:
     void Deinit(void);
 
     /**
-     * This method get mInstance pointer.
+     * Returns an OpenThread instance.
      *
-     * @retval The pointer of mInstance.
-     *
+     * @retval Non-null OpenThread instance if `ControllerOpenThread::Init()` has been called.
+     *         Otherwise, it's guaranteed to be `null`
      */
-    otInstance *GetInstance(void)
-    {
-        assert(mInstance != nullptr);
-        return mInstance;
-    }
+    otInstance *GetInstance(void) { return mInstance; }
 
     /**
      * This method gets the thread functionality helper.
