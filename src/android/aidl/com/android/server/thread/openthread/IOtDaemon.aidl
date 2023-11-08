@@ -38,7 +38,7 @@ import com.android.server.thread.openthread.IOtDaemonCallback;
  * The OpenThread daemon service which provides access to the core Thread stack for
  * system_server.
  */
-interface IOtDaemon {
+oneway interface IOtDaemon {
     /**
      * The Thread tunnel interface name. This interface MUST be created before
      * starting this {@link IOtDaemon} service.
@@ -52,23 +52,14 @@ interface IOtDaemon {
      *              packets to/from Thread PAN
      * @param callback the cllback for receiving all Thread stack events
      */
-    // Okay to be blocking API, this doesn't call into OT stack
     void initialize(in ParcelFileDescriptor tunFd, in IOtDaemonCallback callback);
-
-    /** Returns the Extended MAC Address of this Thread device. */
-    // Okay to be blocking, this is already cached in memory
-    byte[] getExtendedMacAddress();
-
-    /** Returns the Thread version that this Thread device is running. */
-    // Okay to be blocking, this is in-memory-only value
-    int getThreadVersion();
 
     /**
      * Joins this device to the network specified by {@code activeOpDatasetTlvs}.
      *
      * @sa android.net.thread.ThreadNetworkController#join
      */
-    oneway void join(
+    void join(
         boolean doForm, in byte[] activeOpDatasetTlvs, in IOtStatusReceiver receiver);
 
     /**
@@ -83,13 +74,13 @@ interface IOtDaemon {
      *
      * @sa android.net.thread.ThreadNetworkController#leave
      */
-    oneway void leave(in IOtStatusReceiver receiver);
+    void leave(in IOtStatusReceiver receiver);
 
     /** Migrates to the new network specified by {@code pendingOpDatasetTlvs}.
      *
      * @sa android.net.thread.ThreadNetworkController#scheduleMigration
      */
-    oneway void scheduleMigration(
+    void scheduleMigration(
         in byte[] pendingOpDatasetTlvs, in IOtStatusReceiver receiver);
 
     // TODO: add Border Router APIs

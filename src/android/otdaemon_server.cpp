@@ -444,47 +444,6 @@ void OtDaemonServer::sendMgmtPendingSetCallback(otError aResult, void *aBinderSe
     otbrLogDebug("otDatasetSendMgmtPendingSet callback: %d", aResult);
 }
 
-Status OtDaemonServer::getExtendedMacAddress(std::vector<uint8_t> *aExtendedMacAddress)
-{
-    Status              status = Status::ok();
-    const otExtAddress *extAddress;
-
-    if (aExtendedMacAddress == nullptr)
-    {
-        status =
-            Status::fromServiceSpecificErrorWithMessage(OT_ERROR_INVALID_ARGS, "aExtendedMacAddress can not be null");
-        ExitNow();
-    }
-
-    if (GetOtInstance() == nullptr)
-    {
-        status = Status::fromServiceSpecificErrorWithMessage(OT_ERROR_INVALID_STATE, "OT is not initialized");
-        ExitNow();
-    }
-
-    extAddress = otLinkGetExtendedAddress(GetOtInstance());
-    aExtendedMacAddress->assign(extAddress->m8, extAddress->m8 + sizeof(extAddress->m8));
-
-exit:
-    return status;
-}
-
-Status OtDaemonServer::getThreadVersion(int *aThreadVersion)
-{
-    Status status = Status::ok();
-
-    if (aThreadVersion == nullptr)
-    {
-        status = Status::fromServiceSpecificErrorWithMessage(OT_ERROR_INVALID_ARGS, "aThreadVersion can not be null");
-        ExitNow();
-    }
-
-    *aThreadVersion = otThreadGetVersion();
-
-exit:
-    return status;
-}
-
 binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumArgs)
 {
     OT_UNUSED_VARIABLE(aArgs);
