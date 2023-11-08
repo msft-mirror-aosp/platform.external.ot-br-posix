@@ -45,6 +45,24 @@ oneway interface IOtDaemon {
      */
     const String TUN_IF_NAME = "thread-wpan";
 
+    // The error code below MUST be consistent with openthread/include/openthread/error.h
+    // TODO: add a unit test to make sure that values are always match
+    enum ErrorCode {
+        // TODO: Add this error code to OpenThread and make sure `otDatasetSetActiveTlvs()` returns
+        // this error code when an unsupported channel is provided
+        OT_ERROR_UNSUPPORTED_CHANNEL = -1,
+
+        OT_ERROR_NO_BUFS = 3,
+        OT_ERROR_BUSY = 5,
+        OT_ERROR_PARSE = 6,
+        OT_ERROR_ABORT = 11,
+        OT_ERROR_INVALID_STATE = 13,
+        OT_ERROR_DETACHED = 16,
+        OT_ERROR_RESPONSE_TIMEOUT = 28,
+        OT_ERROR_REASSEMBLY_TIMEOUT = 30,
+        OT_ERROR_REJECTED = 37,
+    }
+
     /**
      * Initializes this service with Thread tunnel interface FD and stack callback.
      *
@@ -52,15 +70,23 @@ oneway interface IOtDaemon {
      *              packets to/from Thread PAN
      * @param callback the cllback for receiving all Thread stack events
      */
-    void initialize(in ParcelFileDescriptor tunFd, in IOtDaemonCallback callback);
+    void initialize(in ParcelFileDescriptor tunFd);
+
+    /**
+     * Registers a callback to receive OpenThread daemon state changes.
+     *
+     * @param callback invoked immediately after this method or any time a state is changed
+     * @param listenerId specifies the the ID which will be sent back in callbacks of {@link
+     *                   IOtDaemonCallback}
+     */
+    void registerStateCallback(in IOtDaemonCallback callback, long listenerId);
 
     /**
      * Joins this device to the network specified by {@code activeOpDatasetTlvs}.
      *
      * @sa android.net.thread.ThreadNetworkController#join
      */
-    void join(
-        boolean doForm, in byte[] activeOpDatasetTlvs, in IOtStatusReceiver receiver);
+    void join(in byte[] activeOpDatasetTlvs, in IOtStatusReceiver receiver);
 
     /**
      * Leaves from the current network.
