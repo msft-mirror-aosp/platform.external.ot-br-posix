@@ -71,7 +71,15 @@ static void PropagateResult(otError                                   aError,
 {
     if (aReceiver != nullptr)
     {
-        (aError == OT_ERROR_NONE) ? aReceiver->onSuccess() : aReceiver->onError(aError, aMessage);
+        // If an operation has already been requested or accepted, consider it succeeded
+        if (aError == OT_ERROR_NONE || aError == OT_ERROR_ALREADY)
+        {
+            aReceiver->onSuccess();
+        }
+        else
+        {
+            aReceiver->onError(aError, aMessage);
+        }
     }
 }
 
@@ -118,60 +126,17 @@ void OtDaemonServer::StateCallback(otChangedFlags aFlags)
 {
     assert(GetOtInstance() != nullptr);
 
-    if (mCallback == nullptr)
+    if (RefreshOtDaemonState(aFlags))
     {
-        otbrLogWarning("Ignoring OT state changes: callback is not set");
-        ExitNow();
-    }
-
-    if (aFlags & OT_CHANGED_THREAD_NETIF_STATE)
-    {
-        mCallback->onInterfaceStateChanged(otIp6IsEnabled(GetOtInstance()));
-    }
-
-    if (aFlags & OT_CHANGED_THREAD_ROLE)
-    {
-        mCallback->onDeviceRoleChanged(otThreadGetDeviceRole(GetOtInstance()));
-
-        if (!isAttached())
+        if (mCallback == nullptr)
         {
-            for (const auto &leaveCallback : mOngoingLeaveCallbacks)
-            {
-                leaveCallback();
-            }
-            mOngoingLeaveCallbacks.clear();
+            otbrLogWarning("Ignoring OT state changes: callback is not set");
+        }
+        else
+        {
+            mCallback->onStateChanged(mState, -1);
         }
     }
-
-    if (aFlags & OT_CHANGED_THREAD_PARTITION_ID)
-    {
-        mCallback->onPartitionIdChanged(otThreadGetPartitionId(GetOtInstance()));
-    }
-
-    if (aFlags & OT_CHANGED_ACTIVE_DATASET)
-    {
-        std::vector<uint8_t>     result;
-        otOperationalDatasetTlvs datasetTlvs;
-        if (otDatasetGetActiveTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
-        {
-            result.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
-        }
-        mCallback->onActiveOperationalDatasetChanged(result);
-    }
-
-    if (aFlags & OT_CHANGED_PENDING_DATASET)
-    {
-        std::vector<uint8_t>     result;
-        otOperationalDatasetTlvs datasetTlvs;
-        if (otDatasetGetPendingTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
-        {
-            result.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
-        }
-        mCallback->onPendingOperationalDatasetChanged(result);
-    }
-
-exit:
-    return;
 }
 
 void OtDaemonServer::AddressCallback(const otIp6AddressInfo *aAddressInfo, bool aIsAdded, void *aBinderServer)
@@ -304,68 +269,133 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
     }
 }
 
-Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTunFd,
-                                  const std::shared_ptr<IOtDaemonCallback> &aCallback)
+Status OtDaemonServer::initialize(const ScopedFileDescriptor &aTunFd)
 {
     otbrLogDebug("OT daemon is initialized by the binder client (tunFd=%d)", aTunFd.get());
+    mTunFd = aTunFd.dup();
 
-    mTunFd    = aTunFd.dup();
+    return Status::ok();
+}
+
+Status OtDaemonServer::registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t listenerId)
+{
+    VerifyOrExit(GetOtInstance() != nullptr, otbrLogWarning("OT is not initialized"));
+
     mCallback = aCallback;
     if (mCallback != nullptr)
     {
         AIBinder_linkToDeath(mCallback->asBinder().get(), mClientDeathRecipient.get(), this);
     }
 
+    // To ensure that a client app can get the latest correct state immediately when registering a
+    // state callback, here needs to invoke the callback
+    RefreshOtDaemonState(/* aFlags */ 0xffffffff);
+    mCallback->onStateChanged(mState, listenerId);
+
+exit:
     return Status::ok();
 }
 
-Status OtDaemonServer::join(bool                                      aDoForm,
-                            const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
+bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
+{
+    bool haveUpdates = false;
+
+    if (aFlags & OT_CHANGED_THREAD_NETIF_STATE)
+    {
+        mState.isInterfaceUp = otIp6IsEnabled(GetOtInstance());
+        haveUpdates          = true;
+    }
+
+    if (aFlags & OT_CHANGED_THREAD_ROLE)
+    {
+        mState.deviceRole = otThreadGetDeviceRole(GetOtInstance());
+        haveUpdates       = true;
+    }
+
+    if (aFlags & OT_CHANGED_THREAD_PARTITION_ID)
+    {
+        mState.partitionId = otThreadGetPartitionId(GetOtInstance());
+        haveUpdates        = true;
+    }
+
+    if (aFlags & OT_CHANGED_ACTIVE_DATASET)
+    {
+        otOperationalDatasetTlvs datasetTlvs;
+        if (otDatasetGetActiveTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
+        {
+            mState.activeDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
+        }
+        else
+        {
+            mState.activeDatasetTlvs.clear();
+        }
+        haveUpdates = true;
+    }
+
+    if (aFlags & OT_CHANGED_PENDING_DATASET)
+    {
+        otOperationalDatasetTlvs datasetTlvs;
+        if (otDatasetGetPendingTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
+        {
+            mState.pendingDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
+        }
+        else
+        {
+            mState.pendingDatasetTlvs.clear();
+        }
+        haveUpdates = true;
+    }
+
+    if (isAttached() && !mState.activeDatasetTlvs.empty() && mJoinReceiver != nullptr)
+    {
+        mJoinReceiver->onSuccess();
+        mJoinReceiver = nullptr;
+    }
+
+    return haveUpdates;
+}
+
+Status OtDaemonServer::join(const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
                             const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     otError                  error = OT_ERROR_NONE;
     std::string              message;
     otOperationalDatasetTlvs datasetTlvs;
 
-    // TODO(b/273160198): check how we can implement join as a child
-    (void)aDoForm;
-
     otbrLogInfo("Start joining...");
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(!isAttached(), error = OT_ERROR_INVALID_STATE, message = "Cannot join when already attached");
+
+    if (otThreadGetDeviceRole(GetOtInstance()) != OT_DEVICE_ROLE_DISABLED)
+    {
+        LeaveGracefully([aActiveOpDatasetTlvs, aReceiver, this]() { join(aActiveOpDatasetTlvs, aReceiver); });
+        ExitNow();
+    }
 
     std::copy(aActiveOpDatasetTlvs.begin(), aActiveOpDatasetTlvs.end(), datasetTlvs.mTlvs);
     datasetTlvs.mLength = aActiveOpDatasetTlvs.size();
     SuccessOrExit(error   = otDatasetSetActiveTlvs(GetOtInstance(), &datasetTlvs),
                   message = "Failed to set Active Operational Dataset");
 
+    // TODO(b/273160198): check how we can implement join as a child
+
     // Shouldn't we have an equivalent `otThreadAttach` method vs `otThreadDetachGracefully`?
     SuccessOrExit(error = otIp6SetEnabled(GetOtInstance(), true), message = "Failed to bring up Thread interface");
     SuccessOrExit(error = otThreadSetEnabled(GetOtInstance(), true), message = "Failed to bring up Thread stack");
 
-exit:
-    PropagateResult(error, message, aReceiver);
-    return Status::ok();
-}
-
-void OtDaemonServer::detachGracefully(const DetachCallback &aCallback)
-{
-    otError error;
-
-    mOngoingLeaveCallbacks.push_back(aCallback);
-
-    // The callback is already guarded by a timer inside OT, so the client side shouldn't need to
-    // add a callback again.
-    error = otThreadDetachGracefully(GetOtInstance(), OtDaemonServer::DetachGracefullyCallback, this);
-    if (error == OT_ERROR_BUSY)
+    // Abort an ongoing join()
+    if (mJoinReceiver != nullptr)
     {
-        // There is already an ongoing detach request, do nothing but enqueue the callback
-        otbrLogDebug("Reuse existing detach request");
-        ExitNow(error = OT_ERROR_NONE);
+        mJoinReceiver->onError(OT_ERROR_ABORT, "Join() is aborted");
     }
+    mJoinReceiver = aReceiver;
 
-exit:;
+exit:
+    if (error != OT_ERROR_NONE)
+    {
+        PropagateResult(error, message, aReceiver);
+    }
+    return Status::ok();
 }
 
 Status OtDaemonServer::leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
@@ -376,26 +406,51 @@ Status OtDaemonServer::leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver
     }
     else
     {
-        detachGracefully([=]() {
-            if (aReceiver != nullptr)
-            {
-                aReceiver->onSuccess();
-            }
-        });
+        LeaveGracefully([=]() { aReceiver->onSuccess(); });
     }
 
     return Status::ok();
 }
 
+void OtDaemonServer::LeaveGracefully(const LeaveCallback &aReceiver)
+{
+    mLeaveCallbacks.push_back(aReceiver);
+
+    // Ignores the OT_ERROR_BUSY error if a detach has already been requested
+    (void)otThreadDetachGracefully(GetOtInstance(), DetachGracefullyCallback, this);
+}
+
 void OtDaemonServer::DetachGracefullyCallback(void *aBinderServer)
 {
     OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
+    thisServer->DetachGracefullyCallback();
+}
 
-    for (auto callback : thisServer->mOngoingLeaveCallbacks)
+void OtDaemonServer::DetachGracefullyCallback(void)
+{
+    // Ignore errors as those operations should always succeed
+    (void)otThreadSetEnabled(GetOtInstance(), false);
+    (void)otIp6SetEnabled(GetOtInstance(), false);
+    (void)otInstanceErasePersistentInfo(GetOtInstance());
+    otbrLogInfo("leave() success...");
+
+    if (mJoinReceiver != nullptr)
+    {
+        mJoinReceiver->onError(OT_ERROR_ABORT, "Aborted by leave() operation");
+        mJoinReceiver = nullptr;
+    }
+
+    if (mMigrationReceiver != nullptr)
+    {
+        mMigrationReceiver->onError(OT_ERROR_ABORT, "Aborted by leave() operation");
+        mMigrationReceiver = nullptr;
+    }
+
+    for (auto &callback : mLeaveCallbacks)
     {
         callback();
     }
-    thisServer->mOngoingLeaveCallbacks.clear();
+    mLeaveCallbacks.clear();
 }
 
 bool OtDaemonServer::isAttached()
@@ -424,8 +479,10 @@ Status OtDaemonServer::scheduleMigration(const std::vector<uint8_t>             
         ExitNow(error = OT_ERROR_INVALID_STATE);
     }
 
+    // TODO: check supported channel mask
+
     error = otDatasetSendMgmtPendingSet(GetOtInstance(), &emptyDataset, aPendingOpDatasetTlvs.data(),
-                                        aPendingOpDatasetTlvs.size(), sendMgmtPendingSetCallback,
+                                        aPendingOpDatasetTlvs.size(), SendMgmtPendingSetCallback,
                                         /* aBinderServer= */ this);
     if (error != OT_ERROR_NONE)
     {
@@ -433,15 +490,29 @@ Status OtDaemonServer::scheduleMigration(const std::vector<uint8_t>             
     }
 
 exit:
-    PropagateResult(error, message, aReceiver);
+    if (error != OT_ERROR_NONE)
+    {
+        PropagateResult(error, message, aReceiver);
+    }
+    else
+    {
+        // otDatasetSendMgmtPendingSet() returns OT_ERROR_BUSY if it has already been called before but the
+        // callback hasn't been invoked. So we can guarantee that mMigrationReceiver is always nullptr here
+        assert(mMigrationReceiver == nullptr);
+        mMigrationReceiver = aReceiver;
+    }
     return Status::ok();
 }
 
-void OtDaemonServer::sendMgmtPendingSetCallback(otError aResult, void *aBinderServer)
+void OtDaemonServer::SendMgmtPendingSetCallback(otError aResult, void *aBinderServer)
 {
-    (void)aBinderServer;
+    OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
 
-    otbrLogDebug("otDatasetSendMgmtPendingSet callback: %d", aResult);
+    if (thisServer->mMigrationReceiver != nullptr)
+    {
+        PropagateResult(aResult, "Failed to register Pending Dataset to leader", thisServer->mMigrationReceiver);
+        thisServer->mMigrationReceiver = nullptr;
+    }
 }
 
 binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumArgs)
