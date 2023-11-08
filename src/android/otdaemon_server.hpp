@@ -82,8 +82,6 @@ private:
     // Implements IOtDaemon.aidl
 
     Status initialize(const ScopedFileDescriptor &aTunFd, const std::shared_ptr<IOtDaemonCallback> &aCallback) override;
-    Status getExtendedMacAddress(std::vector<uint8_t> *aExtendedMacAddress) override;
-    Status getThreadVersion(int *aThreadVersion) override;
     bool   isAttached(void);
     Status join(bool                                      aDoForm,
                 const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
