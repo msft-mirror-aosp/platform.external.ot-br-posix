@@ -91,6 +91,7 @@ private:
     Status leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     Status scheduleMigration(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
                              const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    Status setCountryCode(const std::string &aCountryCode, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
                                  const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
 
@@ -106,7 +107,7 @@ private:
     static void ReceiveCallback(otMessage *aMessage, void *aBinderServer);
     void        ReceiveCallback(otMessage *aMessage);
     void        TransmitCallback(void);
-    static void HandleBackboneMulticastListenerEvent(void *aBinderServer,
+    static void HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
                                                      otBackboneRouterMulticastListenerEvent aEvent,
                                                      const otIp6Address                    *aAddress);
 

@@ -38,6 +38,7 @@
 #include <android/binder_process.h>
 #include <openthread/border_router.h>
 #include <openthread/ip6.h>
+#include <openthread/link.h>
 #include <openthread/openthread-system.h>
 #include <openthread/platform/infra_if.h>
 
@@ -249,7 +250,7 @@ exit:
     }
 }
 
-void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                   *aBinderServer,
+void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
                                                           otBackboneRouterMulticastListenerEvent aEvent,
                                                           const otIp6Address                    *aAddress)
 {
@@ -573,6 +574,27 @@ void OtDaemonServer::SendMgmtPendingSetCallback(otError aResult, void *aBinderSe
         PropagateResult(aResult, "Failed to register Pending Dataset to leader", thisServer->mMigrationReceiver);
         thisServer->mMigrationReceiver = nullptr;
     }
+}
+
+Status OtDaemonServer::setCountryCode(const std::string                        &aCountryCode,
+                                      const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    static constexpr int kCountryCodeLength = 2;
+    otError              error              = OT_ERROR_NONE;
+    std::string          message;
+    uint16_t             countryCode;
+
+    VerifyOrExit((aCountryCode.length() == kCountryCodeLength) && isalpha(aCountryCode[0]) && isalpha(aCountryCode[1]),
+                 error = OT_ERROR_INVALID_ARGS, message = "The country code is invalid");
+
+    otbrLogInfo("Set country code: %c%c", aCountryCode[0], aCountryCode[1]);
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+    countryCode = (static_cast<uint16_t>(aCountryCode[0]) << 8) | aCountryCode[1];
+    SuccessOrExit(error = otLinkSetRegion(GetOtInstance(), countryCode), message = "Failed to set the country code");
+
+exit:
+    PropagateResult(error, message, aReceiver);
+    return Status::ok();
 }
 
 Status OtDaemonServer::configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
