@@ -96,9 +96,13 @@ static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo
 
 OtDaemonServer::OtDaemonServer(otbr::Ncp::ControllerOpenThread &aNcp)
     : mNcp(aNcp)
+    , mBorderRouterConfiguration()
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
+    mBorderRouterConfiguration.infraInterfaceName        = "";
+    mBorderRouterConfiguration.infraInterfaceIcmp6Socket = ScopedFileDescriptor();
+    mBorderRouterConfiguration.isBorderRoutingEnabled    = false;
 }
 
 void OtDaemonServer::Init(void)
@@ -513,6 +517,52 @@ void OtDaemonServer::SendMgmtPendingSetCallback(otError aResult, void *aBinderSe
         PropagateResult(aResult, "Failed to register Pending Dataset to leader", thisServer->mMigrationReceiver);
         thisServer->mMigrationReceiver = nullptr;
     }
+}
+
+Status OtDaemonServer::configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
+                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    int         icmp6SocketFd = aBorderRouterConfiguration.infraInterfaceIcmp6Socket.dup().release();
+    std::string message;
+    otError     error = OT_ERROR_NONE;
+
+    otbrLogInfo("Configuring Border Router: %s", aBorderRouterConfiguration.toString().c_str());
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+
+    if (mBorderRouterConfiguration != aBorderRouterConfiguration)
+    {
+        if (aBorderRouterConfiguration.isBorderRoutingEnabled)
+        {
+            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
+                          message = "failed to disable border routing");
+            otSysSetInfraNetif(aBorderRouterConfiguration.infraInterfaceName.c_str(), icmp6SocketFd);
+            icmp6SocketFd = -1;
+            SuccessOrExit(error = otBorderRoutingInit(
+                              GetOtInstance(), if_nametoindex(aBorderRouterConfiguration.infraInterfaceName.c_str()),
+                              false /* aInfraIfIsRunning */),
+                          message = "failed to initialize border routing");
+            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
+                          message = "failed to enable border routing");
+        }
+        else
+        {
+            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
+                          message = "failed to disable border routing");
+        }
+    }
+
+    mBorderRouterConfiguration.isBorderRoutingEnabled = aBorderRouterConfiguration.isBorderRoutingEnabled;
+    mBorderRouterConfiguration.infraInterfaceName     = aBorderRouterConfiguration.infraInterfaceName;
+
+exit:
+    if (error != OT_ERROR_NONE)
+    {
+        close(icmp6SocketFd);
+    }
+    PropagateResult(error, message, aReceiver);
+
+    return Status::ok();
 }
 
 binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumArgs)
