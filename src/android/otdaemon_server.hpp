@@ -48,6 +48,7 @@ using BinderDeathRecipient = ::ndk::ScopedAIBinder_DeathRecipient;
 using ScopedFileDescriptor = ::ndk::ScopedFileDescriptor;
 using Status               = ::ndk::ScopedAStatus;
 using aidl::com::android::server::thread::openthread::BnOtDaemon;
+using aidl::com::android::server::thread::openthread::BorderRouterConfigurationParcel;
 using aidl::com::android::server::thread::openthread::IOtDaemonCallback;
 using aidl::com::android::server::thread::openthread::IOtStatusReceiver;
 using aidl::com::android::server::thread::openthread::Ipv6AddressInfo;
@@ -90,6 +91,8 @@ private:
     Status leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     Status scheduleMigration(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
                              const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    Status configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
+                                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
 
     bool        RefreshOtDaemonState(otChangedFlags aFlags);
     void        LeaveGracefully(const LeaveCallback &aReceiver);
@@ -113,6 +116,7 @@ private:
     std::shared_ptr<IOtStatusReceiver> mJoinReceiver;
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
+    BorderRouterConfigurationParcel    mBorderRouterConfiguration;
 };
 
 } // namespace Android
