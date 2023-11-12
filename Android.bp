@@ -145,7 +145,6 @@ cc_defaults {
     srcs: [
         "src/agent/application.cpp",
         "src/android/otdaemon_server.cpp",
-        "src/android/infra_if.cpp",
         "src/border_agent/border_agent.cpp",
         "src/ncp/ncp_openthread.cpp",
         "src/sdp_proxy/advertising_proxy.cpp",
