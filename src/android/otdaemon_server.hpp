@@ -106,6 +106,9 @@ private:
     static void ReceiveCallback(otMessage *aMessage, void *aBinderServer);
     void        ReceiveCallback(otMessage *aMessage);
     void        TransmitCallback(void);
+    static void HandleBackboneMulticastListenerEvent(void *aBinderServer,
+                                                     otBackboneRouterMulticastListenerEvent aEvent,
+                                                     const otIp6Address                    *aAddress);
 
     otbr::Ncp::ControllerOpenThread   &mNcp;
     TaskRunner                         mTaskRunner;
