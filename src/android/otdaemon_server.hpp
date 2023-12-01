@@ -48,9 +48,11 @@ using BinderDeathRecipient = ::ndk::ScopedAIBinder_DeathRecipient;
 using ScopedFileDescriptor = ::ndk::ScopedFileDescriptor;
 using Status               = ::ndk::ScopedAStatus;
 using aidl::com::android::server::thread::openthread::BnOtDaemon;
+using aidl::com::android::server::thread::openthread::BorderRouterConfigurationParcel;
 using aidl::com::android::server::thread::openthread::IOtDaemonCallback;
 using aidl::com::android::server::thread::openthread::IOtStatusReceiver;
 using aidl::com::android::server::thread::openthread::Ipv6AddressInfo;
+using aidl::com::android::server::thread::openthread::OtDaemonState;
 
 class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendor::VendorServer
 {
@@ -66,7 +68,7 @@ public:
     binder_status_t dump(int aFd, const char **aArgs, uint32_t aNumArgs) override;
 
 private:
-    using DetachCallback = std::function<void()>;
+    using LeaveCallback = std::function<void()>;
 
     otInstance *GetOtInstance(void);
 
@@ -81,18 +83,22 @@ private:
 
     // Implements IOtDaemon.aidl
 
-    Status initialize(const ScopedFileDescriptor &aTunFd, const std::shared_ptr<IOtDaemonCallback> &aCallback) override;
-    Status getExtendedMacAddress(std::vector<uint8_t> *aExtendedMacAddress) override;
-    Status getThreadVersion(int *aThreadVersion) override;
+    Status initialize(const ScopedFileDescriptor &aTunFd) override;
+    Status registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t listenerId) override;
     bool   isAttached(void);
-    Status join(bool                                      aDoForm,
-                const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
+    Status join(const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     Status leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   detachGracefully(const DetachCallback &aCallback);
     Status scheduleMigration(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
                              const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    static void sendMgmtPendingSetCallback(otError aResult, void *aBinderServer);
+    Status configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
+                                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+
+    bool        RefreshOtDaemonState(otChangedFlags aFlags);
+    void        LeaveGracefully(const LeaveCallback &aReceiver);
+    static void DetachGracefullyCallback(void *aBinderServer);
+    void        DetachGracefullyCallback(void);
+    static void SendMgmtPendingSetCallback(otError aResult, void *aBinderServer);
 
     static void BinderDeathCallback(void *aBinderServer);
     void        StateCallback(otChangedFlags aFlags);
@@ -100,13 +106,20 @@ private:
     static void ReceiveCallback(otMessage *aMessage, void *aBinderServer);
     void        ReceiveCallback(otMessage *aMessage);
     void        TransmitCallback(void);
-    static void DetachGracefullyCallback(void *aBinderServer);
+    static void HandleBackboneMulticastListenerEvent(void *aBinderServer,
+                                                     otBackboneRouterMulticastListenerEvent aEvent,
+                                                     const otIp6Address                    *aAddress);
 
     otbr::Ncp::ControllerOpenThread   &mNcp;
+    TaskRunner                         mTaskRunner;
     ScopedFileDescriptor               mTunFd;
+    OtDaemonState                      mState;
     std::shared_ptr<IOtDaemonCallback> mCallback;
     BinderDeathRecipient               mClientDeathRecipient;
-    std::vector<DetachCallback>        mOngoingLeaveCallbacks;
+    std::shared_ptr<IOtStatusReceiver> mJoinReceiver;
+    std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
+    std::vector<LeaveCallback>         mLeaveCallbacks;
+    BorderRouterConfigurationParcel    mBorderRouterConfiguration;
 };
 
 } // namespace Android
