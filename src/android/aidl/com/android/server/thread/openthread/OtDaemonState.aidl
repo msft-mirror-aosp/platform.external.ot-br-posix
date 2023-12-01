@@ -28,38 +28,26 @@
 
 package com.android.server.thread.openthread;
 
-import com.android.server.thread.openthread.Ipv6AddressInfo;
-import com.android.server.thread.openthread.OtDaemonState;
+/**
+ * Contains all OpenThread daemon states which the system_server and/or client apps care about.
+ */
+parcelable OtDaemonState {
+    boolean isInterfaceUp;
 
-/** OpenThread daemon callbacks. */
-oneway interface IOtDaemonCallback {
-    /**
-     * Called when any of the sate in {@link OtDaemonState} has been changed or this {@link
-     * IOtDaemonCallback} object is registered with {#link IOtDaemon#registerStateCallback}.
-     *
-     * @param newState the new OpenThread state
-     * @param listenerId the listenerId passed in {#link IOtDaemon#registerStateCallback} or
-     *                   -1 when this callback is invoked proactively by OT daemon
-     */
-    void onStateChanged(in OtDaemonState newState, long listenerId);
+    // Valid values are DEVICE_ROLE_* defined in {@link ThreadNetworkController}.
+    // Those are also OT_DEVICE_ROLE_* defined in external/openthread/include/openthread/thread.h
+    // TODO: add unit tests to make sure those are equal to each other
+    int deviceRole;
 
-    /**
-     * Called when Thread interface address has been changed.
-     *
-     * @param addressInfo the IPv6 address which has been updated. This can be both unicast and
-     *                    multicast addresses
-     * @param isAdded {@code true} if this address is being added to the Thread interface;
-     *                Otherwise, this address is being removed
-     */
-    void onAddressChanged(in Ipv6AddressInfo addressInfo, boolean isAdded);
+    long partitionId;
 
-    /**
-     * Called when multicast forwarding listening address has been changed.
-     *
-     * @param address the IPv6 address in bytes which has been updated. This is a multicast
-     *                address registered by multicast listeners
-     * @param isAdded {@code true} if this multicast address is being added;
-     *                Otherwise, this multicast address is being removed
-     */
-    void onMulticastForwardingAddressChanged(in byte[] ipv6Address, boolean isAdded);
+    // Active Oprational Dataset encoded as Thread TLVs. Empty array means the dataset doesn't
+    // exist
+    byte[] activeDatasetTlvs;
+
+    // Active Oprational Dataset encoded as Thread TLVs. Empty array means the dataset doesn't
+    // exist
+    byte[] pendingDatasetTlvs;
+
+    boolean multicastForwardingEnabled;
 }
