@@ -26,24 +26,43 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.android.server.openthread;
+package com.android.server.thread.openthread;
 
 import android.os.ParcelFileDescriptor;
 
-import com.android.server.openthread.Ipv6AddressInfo;
-import com.android.server.openthread.IOtStatusReceiver;
-import com.android.server.openthread.IOtDaemonCallback;
+import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
+import com.android.server.thread.openthread.Ipv6AddressInfo;
+import com.android.server.thread.openthread.IOtStatusReceiver;
+import com.android.server.thread.openthread.IOtDaemonCallback;
 
 /**
  * The OpenThread daemon service which provides access to the core Thread stack for
  * system_server.
  */
-interface IOtDaemon {
+oneway interface IOtDaemon {
     /**
      * The Thread tunnel interface name. This interface MUST be created before
      * starting this {@link IOtDaemon} service.
      */
     const String TUN_IF_NAME = "thread-wpan";
+
+    // The error code below MUST be consistent with openthread/include/openthread/error.h
+    // TODO: add a unit test to make sure that values are always match
+    enum ErrorCode {
+        // TODO: Add this error code to OpenThread and make sure `otDatasetSetActiveTlvs()` returns
+        // this error code when an unsupported channel is provided
+        OT_ERROR_UNSUPPORTED_CHANNEL = -1,
+
+        OT_ERROR_NO_BUFS = 3,
+        OT_ERROR_BUSY = 5,
+        OT_ERROR_PARSE = 6,
+        OT_ERROR_ABORT = 11,
+        OT_ERROR_INVALID_STATE = 13,
+        OT_ERROR_DETACHED = 16,
+        OT_ERROR_RESPONSE_TIMEOUT = 28,
+        OT_ERROR_REASSEMBLY_TIMEOUT = 30,
+        OT_ERROR_REJECTED = 37,
+    }
 
     /**
      * Initializes this service with Thread tunnel interface FD and stack callback.
@@ -52,45 +71,54 @@ interface IOtDaemon {
      *              packets to/from Thread PAN
      * @param callback the cllback for receiving all Thread stack events
      */
-    // Okay to be blocking API, this doesn't call into OT stack
-    void initialize(in ParcelFileDescriptor tunFd, in IOtDaemonCallback callback);
-
-    /** Returns the Extended MAC Address of this Thread device. */
-    // Okay to be blocking, this is already cached in memory
-    byte[] getExtendedMacAddress();
-
-    /** Returns the Thread version that this Thread device is running. */
-    // Okay to be blocking, this is in-memory-only value
-    int getThreadVersion();
+    void initialize(in ParcelFileDescriptor tunFd);
 
     /**
-     * Attaches this device to the network specified by {@code activeOpDatasetTlvs}.
+     * Registers a callback to receive OpenThread daemon state changes.
      *
-     * @sa android.net.thread.ThreadNetworkController#attach
-     * @sa android.net.thread.ThreadNetworkController#attachOrForm
+     * @param callback invoked immediately after this method or any time a state is changed
+     * @param listenerId specifies the the ID which will be sent back in callbacks of {@link
+     *                   IOtDaemonCallback}
      */
-    oneway void attach(
-        boolean doForm, in byte[] activeOpDatasetTlvs, in IOtStatusReceiver receiver);
+    void registerStateCallback(in IOtDaemonCallback callback, long listenerId);
 
     /**
-     * Detaches from the current network.
+     * Joins this device to the network specified by {@code activeOpDatasetTlvs}.
      *
-     * 1. It returns success immediately if this device is already detached or disabled
-     * 2. Else if there is already an onging {@code detach} request, no action will be taken but
+     * @sa android.net.thread.ThreadNetworkController#join
+     */
+    void join(in byte[] activeOpDatasetTlvs, in IOtStatusReceiver receiver);
+
+    /**
+     * Leaves from the current network.
+     *
+     * 1. It returns success immediately if this device has already left or disabled
+     * 2. Else if there is already an onging {@code join} request, no action will be taken but
      *    the {@code receiver} will be invoked after the previous request is completed
      * 3. Otherwise, OTBR sends Address Release Notification (i.e. ADDR_REL.ntf) to grcefully
      *    detach from the current network and it takes 1 second to finish
+     * 4. The Operational Dataset will be removed from persistent storage
      *
-     * @sa android.net.thread.ThreadNetworkController#detach
+     * @sa android.net.thread.ThreadNetworkController#leave
      */
-    oneway void detach(in IOtStatusReceiver receiver);
+    void leave(in IOtStatusReceiver receiver);
 
     /** Migrates to the new network specified by {@code pendingOpDatasetTlvs}.
      *
      * @sa android.net.thread.ThreadNetworkController#scheduleMigration
      */
-    oneway void scheduleMigration(
+    void scheduleMigration(
         in byte[] pendingOpDatasetTlvs, in IOtStatusReceiver receiver);
+
+    /**
+     * Configures the Border Router features.
+     *
+     * @param brConfig the border router's configuration
+     * @param receiver the status receiver
+     *
+     */
+    oneway void configureBorderRouter(
+        in BorderRouterConfigurationParcel brConfig, in IOtStatusReceiver receiver);
 
     // TODO: add Border Router APIs
 }

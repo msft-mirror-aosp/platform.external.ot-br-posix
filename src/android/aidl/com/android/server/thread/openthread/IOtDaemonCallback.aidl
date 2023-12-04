@@ -26,50 +26,22 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.android.server.openthread;
+package com.android.server.thread.openthread;
 
-import com.android.server.openthread.Ipv6AddressInfo;
+import com.android.server.thread.openthread.Ipv6AddressInfo;
+import com.android.server.thread.openthread.OtDaemonState;
 
 /** OpenThread daemon callbacks. */
 oneway interface IOtDaemonCallback {
     /**
-     * Called when the Thread interface state has been changed.
+     * Called when any of the sate in {@link OtDaemonState} has been changed or this {@link
+     * IOtDaemonCallback} object is registered with {#link IOtDaemon#registerStateCallback}.
      *
-     * @param isUp indicates whether the interface is up
+     * @param newState the new OpenThread state
+     * @param listenerId the listenerId passed in {#link IOtDaemon#registerStateCallback} or
+     *                   -1 when this callback is invoked proactively by OT daemon
      */
-    void onInterfaceStateChanged(boolean isUp);
-
-    /**
-     * Called when the Thread device role has been changed.
-     *
-     * @param deviceRole the new Thread device role
-     */
-    void onDeviceRoleChanged(int deviceRole);
-
-    /**
-     * Called when the Thread network partition ID has been changed.
-     *
-     * @param partitionId the new Thread network partition ID
-     */
-    void onPartitionIdChanged(long partitionId);
-
-    /**
-     * Called when the Thread network Active Operational Dataset has been changed.
-     *
-     * @param activeOpDatasetTlvs the new Active Operational Dataset encoded as Thread TLV list. An
-     *                            empty array indicates absence/lost of the Active Operational
-     *                            Dataset
-     */
-    void onActiveOperationalDatasetChanged(in byte[] activeOpDatasetTlvs);
-
-    /**
-     * Called when the Thread network Pending Operational Dataset has been changed.
-     *
-     * @param pendingOpDatasetTlvs the new Pending Operational Dataset encoded as Thread TLV list.
-     *                             An empty array indicates absence/lost of the Pending Operational
-     *                             Dataset
-     */
-    void onPendingOperationalDatasetChanged(in byte[] pendingOpDatasetTlvs);
+    void onStateChanged(in OtDaemonState newState, long listenerId);
 
     /**
      * Called when Thread interface address has been changed.
@@ -80,4 +52,14 @@ oneway interface IOtDaemonCallback {
      *                Otherwise, this address is being removed
      */
     void onAddressChanged(in Ipv6AddressInfo addressInfo, boolean isAdded);
+
+    /**
+     * Called when multicast forwarding listening address has been changed.
+     *
+     * @param address the IPv6 address in bytes which has been updated. This is a multicast
+     *                address registered by multicast listeners
+     * @param isAdded {@code true} if this multicast address is being added;
+     *                Otherwise, this multicast address is being removed
+     */
+    void onMulticastForwardingAddressChanged(in byte[] ipv6Address, boolean isAdded);
 }

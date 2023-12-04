@@ -26,10 +26,15 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.android.server.openthread;
+package com.android.server.thread.openthread;
 
-/** Receives the status of an OpenThread operation which may fail with an {@code otError} code. */
-oneway interface IOtStatusReceiver {
-    void onSuccess();
-    void onError(int errorCode, String errorMessage);
+/**
+ * The Thread Border Router configuration.
+ *
+ */
+parcelable BorderRouterConfigurationParcel {
+    boolean isBorderRoutingEnabled; // Whether the border routing feature is enabled.
+    String  infraInterfaceName; // The name of infra network interface.
+    // An ICMPv6 socket on infra network interface. This is required by the border routing feature.
+    ParcelFileDescriptor infraInterfaceIcmp6Socket;
 }
