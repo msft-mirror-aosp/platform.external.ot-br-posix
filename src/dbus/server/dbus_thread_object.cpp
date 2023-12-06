@@ -1412,7 +1412,10 @@ otError DBusThreadObject::GetTelemetryDataHandler(DBusMessageIter &aIter)
     threadnetwork::TelemetryData telemetryData;
     auto                         threadHelper = mNcp->GetThreadHelper();
 
-    VerifyOrExit(threadHelper->RetrieveTelemetryData(mPublisher, telemetryData) == OT_ERROR_NONE);
+    if (threadHelper->RetrieveTelemetryData(mPublisher, telemetryData) != OT_ERROR_NONE)
+    {
+        otbrLogWarning("Some metrics were not populated in RetrieveTelemetryData");
+    }
 
     {
         const std::string    telemetryDataBytes = telemetryData.SerializeAsString();
@@ -1831,7 +1834,7 @@ otError DBusThreadObject::GetNat64Cidr(DBusMessageIter &aIter)
     otIp4Cidr cidr;
     char      cidrString[OT_IP4_CIDR_STRING_SIZE];
 
-    otNat64GetCidr(mNcp->GetThreadHelper()->GetInstance(), &cidr);
+    SuccessOrExit(error = otNat64GetCidr(mNcp->GetThreadHelper()->GetInstance(), &cidr));
     otIp4CidrToString(&cidr, cidrString, sizeof(cidrString));
 
     VerifyOrExit(DBusMessageEncodeToVariant(&aIter, std::string(cidrString)) == OTBR_ERROR_NONE,
@@ -1848,7 +1851,7 @@ otError DBusThreadObject::SetNat64Cidr(DBusMessageIter &aIter)
     otIp4Cidr   cidr;
 
     VerifyOrExit(DBusMessageExtractFromVariant(&aIter, cidrString) == OTBR_ERROR_NONE, error = OT_ERROR_INVALID_ARGS);
-    otIp4CidrFromString(cidrString.c_str(), &cidr);
+    SuccessOrExit(error = otIp4CidrFromString(cidrString.c_str(), &cidr));
     SuccessOrExit(error = otNat64SetIp4Cidr(mNcp->GetThreadHelper()->GetInstance(), &cidr));
 
 exit:
