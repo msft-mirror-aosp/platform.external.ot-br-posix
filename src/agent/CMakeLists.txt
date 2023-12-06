@@ -44,6 +44,7 @@ target_link_libraries(otbr-agent PRIVATE
     openthread-cli-ftd
     openthread-ftd
     openthread-spinel-rcp
+    openthread-radio-spinel
     openthread-hdlc
     otbr-sdp-proxy
     otbr-ncp
@@ -68,9 +69,9 @@ set(OTBR_AGENT_USER "root" CACHE STRING "set the username running otbr-agent ser
 set(OTBR_AGENT_GROUP "root" CACHE STRING "set the group using otbr-agent client")
 
 if(OTBR_MDNS STREQUAL "mDNSResponder")
-    set(EXEC_START_PRE "ExecStartPre=service mdns start\n")
+    set(EXEC_START_PRE "ExecStartPre=/usr/sbin/service mdns start\n")
 elseif(OTBR_MDNS STREQUAL "avahi")
-    set(EXEC_START_PRE "ExecStartPre=service avahi-daemon start\n")
+    set(EXEC_START_PRE "ExecStartPre=/usr/sbin/service avahi-daemon start\n")
 else()
     message(WARNING "OTBR_MDNS=\"${OTBR_MDNS}\" is not supported")
 endif()

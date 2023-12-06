@@ -26,46 +26,15 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
+package com.android.server.thread.openthread;
+
 /**
- * @file
- * Provides Android implementation of the openthread/include/platform/infra_if.h APIs.
+ * The Thread Border Router configuration.
+ *
  */
-
-#define OTBR_LOG_TAG "INFRAIF"
-
-#include <vector>
-
-#include <net/if.h>
-
-#include <openthread/error.h>
-#include <openthread/platform/infra_if.h>
-
-#include "android/otdaemon_server.hpp"
-
-using otbr::Android::OtDaemonServer;
-
-bool otPlatInfraIfHasAddress(uint32_t aInfraIfIndex, const otIp6Address *aAddress)
-{
-    (void)aInfraIfIndex;
-    (void)aAddress;
-
-    // Returns false so that the Routing Manager won't learn the RA header from
-    // the received RA messages. This is desired because the Thread system service
-    // will simply discard the header of egress RA messages.
-    return false;
-}
-
-otError otPlatInfraIfSendIcmp6Nd(uint32_t            aInfraIfIndex,
-                                 const otIp6Address *aDestAddress,
-                                 const uint8_t      *aBuffer,
-                                 uint16_t            aBufferLength)
-{
-    (void)aInfraIfIndex;
-    (void)aDestAddress;
-    (void)aBuffer;
-    (void)aBufferLength;
-
-    otbrLogWarning("Sending ICMPv6 RA messages is not implemented");
-
-    return OT_ERROR_NOT_IMPLEMENTED;
+parcelable BorderRouterConfigurationParcel {
+    boolean isBorderRoutingEnabled; // Whether the border routing feature is enabled.
+    String  infraInterfaceName; // The name of infra network interface.
+    // An ICMPv6 socket on infra network interface. This is required by the border routing feature.
+    ParcelFileDescriptor infraInterfaceIcmp6Socket;
 }
