@@ -30,6 +30,7 @@ package com.android.server.thread.openthread;
 
 import android.os.ParcelFileDescriptor;
 
+import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.IOtDaemonCallback;
@@ -108,6 +109,16 @@ oneway interface IOtDaemon {
      */
     void scheduleMigration(
         in byte[] pendingOpDatasetTlvs, in IOtStatusReceiver receiver);
+
+    /**
+     * Configures the Border Router features.
+     *
+     * @param brConfig the border router's configuration
+     * @param receiver the status receiver
+     *
+     */
+    oneway void configureBorderRouter(
+        in BorderRouterConfigurationParcel brConfig, in IOtStatusReceiver receiver);
 
     // TODO: add Border Router APIs
 }

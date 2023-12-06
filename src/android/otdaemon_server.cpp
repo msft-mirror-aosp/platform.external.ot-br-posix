@@ -96,9 +96,13 @@ static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo
 
 OtDaemonServer::OtDaemonServer(otbr::Ncp::ControllerOpenThread &aNcp)
     : mNcp(aNcp)
+    , mBorderRouterConfiguration()
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
+    mBorderRouterConfiguration.infraInterfaceName        = "";
+    mBorderRouterConfiguration.infraInterfaceIcmp6Socket = ScopedFileDescriptor();
+    mBorderRouterConfiguration.isBorderRoutingEnabled    = false;
 }
 
 void OtDaemonServer::Init(void)
@@ -111,6 +115,8 @@ void OtDaemonServer::Init(void)
     mNcp.AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
     otIp6SetAddressCallback(GetOtInstance(), OtDaemonServer::AddressCallback, this);
     otIp6SetReceiveCallback(GetOtInstance(), OtDaemonServer::ReceiveCallback, this);
+    otBackboneRouterSetMulticastListenerCallback(GetOtInstance(), OtDaemonServer::HandleBackboneMulticastListenerEvent,
+                                                 this);
 }
 
 void OtDaemonServer::BinderDeathCallback(void *aBinderServer)
@@ -243,6 +249,43 @@ exit:
     }
 }
 
+void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                   *aBinderServer,
+                                                          otBackboneRouterMulticastListenerEvent aEvent,
+                                                          const otIp6Address                    *aAddress)
+{
+    OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
+
+    bool                 isAdded;
+    std::vector<uint8_t> addressBytes(aAddress->mFields.m8, BYTE_ARR_END(aAddress->mFields.m8));
+    char                 addressString[OT_IP6_ADDRESS_STRING_SIZE];
+
+    otIp6AddressToString(aAddress, addressString, sizeof(addressString));
+
+    switch (aEvent)
+    {
+    case OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ADDED:
+        isAdded = true;
+        break;
+    case OT_BACKBONE_ROUTER_MULTICAST_LISTENER_REMOVED:
+        isAdded = false;
+        break;
+    default:
+        otbrLogErr("Got BackboneMulticastListenerEvent with unsupported event: %d", aEvent);
+        assert(false);
+    }
+
+    otbrLogDebug("Multicast forwarding address changed, %s is %s", addressString, isAdded ? "added" : "removed");
+
+    if (thisServer->mCallback != nullptr)
+    {
+        thisServer->mCallback->onMulticastForwardingAddressChanged(addressBytes, isAdded);
+    }
+    else
+    {
+        otbrLogWarning("OT daemon callback is not set");
+    }
+}
+
 otInstance *OtDaemonServer::GetOtInstance()
 {
     return mNcp.GetInstance();
@@ -342,6 +385,23 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
         else
         {
             mState.pendingDatasetTlvs.clear();
+        }
+        haveUpdates = true;
+    }
+
+    if (aFlags & OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE)
+    {
+        otBackboneRouterState state = otBackboneRouterGetState(GetOtInstance());
+
+        switch (state)
+        {
+        case OT_BACKBONE_ROUTER_STATE_DISABLED:
+        case OT_BACKBONE_ROUTER_STATE_SECONDARY:
+            mState.multicastForwardingEnabled = false;
+            break;
+        case OT_BACKBONE_ROUTER_STATE_PRIMARY:
+            mState.multicastForwardingEnabled = true;
+            break;
         }
         haveUpdates = true;
     }
@@ -513,6 +573,52 @@ void OtDaemonServer::SendMgmtPendingSetCallback(otError aResult, void *aBinderSe
         PropagateResult(aResult, "Failed to register Pending Dataset to leader", thisServer->mMigrationReceiver);
         thisServer->mMigrationReceiver = nullptr;
     }
+}
+
+Status OtDaemonServer::configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
+                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    int         icmp6SocketFd = aBorderRouterConfiguration.infraInterfaceIcmp6Socket.dup().release();
+    std::string message;
+    otError     error = OT_ERROR_NONE;
+
+    otbrLogInfo("Configuring Border Router: %s", aBorderRouterConfiguration.toString().c_str());
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+
+    if (mBorderRouterConfiguration != aBorderRouterConfiguration)
+    {
+        if (aBorderRouterConfiguration.isBorderRoutingEnabled)
+        {
+            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
+                          message = "failed to disable border routing");
+            otSysSetInfraNetif(aBorderRouterConfiguration.infraInterfaceName.c_str(), icmp6SocketFd);
+            icmp6SocketFd = -1;
+            SuccessOrExit(error = otBorderRoutingInit(
+                              GetOtInstance(), if_nametoindex(aBorderRouterConfiguration.infraInterfaceName.c_str()),
+                              false /* aInfraIfIsRunning */),
+                          message = "failed to initialize border routing");
+            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
+                          message = "failed to enable border routing");
+        }
+        else
+        {
+            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
+                          message = "failed to disable border routing");
+        }
+    }
+
+    mBorderRouterConfiguration.isBorderRoutingEnabled = aBorderRouterConfiguration.isBorderRoutingEnabled;
+    mBorderRouterConfiguration.infraInterfaceName     = aBorderRouterConfiguration.infraInterfaceName;
+
+exit:
+    if (error != OT_ERROR_NONE)
+    {
+        close(icmp6SocketFd);
+    }
+    PropagateResult(error, message, aReceiver);
+
+    return Status::ok();
 }
 
 binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumArgs)

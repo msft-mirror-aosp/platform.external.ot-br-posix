@@ -48,4 +48,6 @@ parcelable OtDaemonState {
     // Active Oprational Dataset encoded as Thread TLVs. Empty array means the dataset doesn't
     // exist
     byte[] pendingDatasetTlvs;
+
+    boolean multicastForwardingEnabled;
 }
