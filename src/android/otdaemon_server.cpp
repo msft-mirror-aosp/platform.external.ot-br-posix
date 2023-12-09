@@ -249,7 +249,7 @@ exit:
     }
 }
 
-void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                   *aBinderServer,
+void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
                                                           otBackboneRouterMulticastListenerEvent aEvent,
                                                           const otIp6Address                    *aAddress)
 {
@@ -590,13 +590,12 @@ Status OtDaemonServer::configureBorderRouter(const BorderRouterConfigurationParc
     {
         if (aBorderRouterConfiguration.isBorderRoutingEnabled)
         {
+            int infraIfIndex = if_nametoindex(aBorderRouterConfiguration.infraInterfaceName.c_str());
             SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
                           message = "failed to disable border routing");
             otSysSetInfraNetif(aBorderRouterConfiguration.infraInterfaceName.c_str(), icmp6SocketFd);
             icmp6SocketFd = -1;
-            SuccessOrExit(error = otBorderRoutingInit(
-                              GetOtInstance(), if_nametoindex(aBorderRouterConfiguration.infraInterfaceName.c_str()),
-                              false /* aInfraIfIsRunning */),
+            SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
                           message = "failed to initialize border routing");
             SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
                           message = "failed to enable border routing");
