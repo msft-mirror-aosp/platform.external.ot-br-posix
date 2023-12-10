@@ -106,7 +106,7 @@ private:
     static void ReceiveCallback(otMessage *aMessage, void *aBinderServer);
     void        ReceiveCallback(otMessage *aMessage);
     void        TransmitCallback(void);
-    static void HandleBackboneMulticastListenerEvent(void *aBinderServer,
+    static void HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
                                                      otBackboneRouterMulticastListenerEvent aEvent,
                                                      const otIp6Address                    *aAddress);
 
