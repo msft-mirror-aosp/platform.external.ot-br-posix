@@ -34,6 +34,8 @@
 #ifndef OTBR_SRP_ADVERTISING_PROXY_HPP_
 #define OTBR_SRP_ADVERTISING_PROXY_HPP_
 
+#include "openthread-br/config.h"
+
 #if OTBR_ENABLE_SRP_ADVERTISING_PROXY
 
 #include <stdint.h>
@@ -93,14 +95,16 @@ private:
     };
 
     static void AdvertisingHandler(otSrpServerServiceUpdateId aId,
-                                   const otSrpServerHost *    aHost,
+                                   const otSrpServerHost     *aHost,
                                    uint32_t                   aTimeout,
-                                   void *                     aContext);
+                                   void                      *aContext);
     void        AdvertisingHandler(otSrpServerServiceUpdateId aId, const otSrpServerHost *aHost, uint32_t aTimeout);
 
-    static Mdns::Publisher::TxtList     MakeTxtList(const otSrpServerService *aSrpService);
+    static Mdns::Publisher::TxtData     MakeTxtData(const otSrpServerService *aSrpService);
     static Mdns::Publisher::SubTypeList MakeSubTypeList(const otSrpServerService *aSrpService);
     void                                OnMdnsPublishResult(otSrpServerServiceUpdateId aUpdateId, otbrError aError);
+
+    std::vector<Ip6Address> GetEligibleAddresses(const otIp6Address *aHostAddresses, uint8_t aHostAddressNum);
 
     /**
      * This method publishes a specified host and its services.
@@ -127,9 +131,6 @@ private:
 
     // A vector that tracks outstanding updates.
     std::vector<OutstandingUpdate> mOutstandingUpdates;
-
-    // Task runner for running tasks in the context of the main thread.
-    TaskRunner mTaskRunner;
 };
 
 } // namespace otbr

@@ -34,6 +34,8 @@
 #ifndef BACKBONE_ROUTER_BACKBONE_AGENT_HPP_
 #define BACKBONE_ROUTER_BACKBONE_AGENT_HPP_
 
+#include "openthread-br/config.h"
+
 #if OTBR_ENABLE_BACKBONE_ROUTER
 
 #include <openthread/backbone_router_ftd.h>
@@ -86,15 +88,15 @@ private:
     bool        IsPrimary(void) const { return mBackboneRouterState == OT_BACKBONE_ROUTER_STATE_PRIMARY; }
     void        HandleThreadStateChanged(otChangedFlags aFlags);
     void        HandleBackboneRouterState(void);
-    static void HandleBackboneRouterDomainPrefixEvent(void *                            aContext,
+    static void HandleBackboneRouterDomainPrefixEvent(void                             *aContext,
                                                       otBackboneRouterDomainPrefixEvent aEvent,
-                                                      const otIp6Prefix *               aDomainPrefix);
+                                                      const otIp6Prefix                *aDomainPrefix);
     void        HandleBackboneRouterDomainPrefixEvent(otBackboneRouterDomainPrefixEvent aEvent,
-                                                      const otIp6Prefix *               aDomainPrefix);
+                                                      const otIp6Prefix                *aDomainPrefix);
 #if OTBR_ENABLE_DUA_ROUTING
-    static void HandleBackboneRouterNdProxyEvent(void *                       aContext,
+    static void HandleBackboneRouterNdProxyEvent(void                        *aContext,
                                                  otBackboneRouterNdProxyEvent aEvent,
-                                                 const otIp6Address *         aAddress);
+                                                 const otIp6Address          *aAddress);
     void        HandleBackboneRouterNdProxyEvent(otBackboneRouterNdProxyEvent aEvent, const otIp6Address *aAddress);
 #endif
 
