@@ -29,8 +29,10 @@
 add_executable(otbr-test-dbus-client
     test_dbus_client.cpp
 )
+
 target_link_libraries(otbr-test-dbus-client PRIVATE
     otbr-dbus-client
+    otbr-proto
 )
 
 add_executable(otbr-test-dbus-server
@@ -51,6 +53,6 @@ add_test(
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/test-client
 )
 set_tests_properties(dbus-client PROPERTIES
-    ENVIRONMENT CMAKE_BINARY_DIR=${CMAKE_BINARY_DIR}
+    ENVIRONMENT "CMAKE_BINARY_DIR=${CMAKE_BINARY_DIR};CMAKE_CURRENT_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR};PROJECT_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
 )
 set_tests_properties(dbus-client PROPERTIES TIMEOUT 1000)

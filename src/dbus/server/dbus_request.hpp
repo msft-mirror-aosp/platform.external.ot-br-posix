@@ -31,6 +31,11 @@
  * This file includes definitions for a d-bus request.
  */
 
+#ifndef DBUS_SERVER_DBUS_REQUEST_HPP_
+#define DBUS_SERVER_DBUS_REQUEST_HPP_
+
+#include "openthread-br/config.h"
+
 #ifndef OTBR_LOG_TAG
 #define OTBR_LOG_TAG "DBUS"
 #endif
@@ -213,8 +218,10 @@ private:
     }
 
     DBusConnection *mConnection;
-    DBusMessage *   mMessage;
+    DBusMessage    *mMessage;
 };
 
 } // namespace DBus
 } // namespace otbr
+
+#endif // DBUS_SERVER_DBUS_REQUEST_HPP_
