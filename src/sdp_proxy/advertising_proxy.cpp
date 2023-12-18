@@ -125,15 +125,15 @@ void AdvertisingProxy::Stop()
 }
 
 void AdvertisingProxy::AdvertisingHandler(otSrpServerServiceUpdateId aId,
-                                          const otSrpServerHost *    aHost,
+                                          const otSrpServerHost     *aHost,
                                           uint32_t                   aTimeout,
-                                          void *                     aContext)
+                                          void                      *aContext)
 {
     static_cast<AdvertisingProxy *>(aContext)->AdvertisingHandler(aId, aHost, aTimeout);
 }
 
 void AdvertisingProxy::AdvertisingHandler(otSrpServerServiceUpdateId aId,
-                                          const otSrpServerHost *    aHost,
+                                          const otSrpServerHost     *aHost,
                                           uint32_t                   aTimeout)
 {
     OTBR_UNUSED_VARIABLE(aTimeout);
@@ -180,6 +180,31 @@ void AdvertisingProxy::OnMdnsPublishResult(otSrpServerServiceUpdateId aUpdateId,
     }
 }
 
+std::vector<Ip6Address> AdvertisingProxy::GetEligibleAddresses(const otIp6Address *aHostAddresses,
+                                                               uint8_t             aHostAddressNum)
+{
+    std::vector<Ip6Address> addresses;
+    const otIp6Address     *meshLocalEid = otThreadGetMeshLocalEid(GetInstance());
+
+    addresses.reserve(aHostAddressNum);
+    for (size_t i = 0; i < aHostAddressNum; ++i)
+    {
+        Ip6Address address(aHostAddresses[i].mFields.m8);
+
+        if (otIp6PrefixMatch(meshLocalEid, &aHostAddresses[i]) >= OT_IP6_PREFIX_BITSIZE)
+        {
+            continue;
+        }
+        if (address.IsLinkLocal())
+        {
+            continue;
+        }
+        addresses.push_back(address);
+    }
+
+    return addresses;
+}
+
 void AdvertisingProxy::PublishAllHostsAndServices(void)
 {
     const otSrpServerHost *host = nullptr;
@@ -201,10 +226,10 @@ otbrError AdvertisingProxy::PublishHostAndItsServices(const otSrpServerHost *aHo
     otbrError                  error = OTBR_ERROR_NONE;
     std::string                hostName;
     std::string                hostDomain;
-    const otIp6Address *       hostAddress;
+    const otIp6Address        *hostAddresses;
     uint8_t                    hostAddressNum;
     bool                       hostDeleted;
-    const otSrpServerService * service;
+    const otSrpServerService  *service;
     otSrpServerServiceUpdateId updateId     = 0;
     bool                       hasUpdate    = false;
     std::string                fullHostName = otSrpServerHostGetFullName(aHost);
@@ -212,8 +237,8 @@ otbrError AdvertisingProxy::PublishHostAndItsServices(const otSrpServerHost *aHo
     otbrLogInfo("Advertise SRP service updates: host=%s", fullHostName.c_str());
 
     SuccessOrExit(error = SplitFullHostName(fullHostName, hostName, hostDomain));
-    hostAddress = otSrpServerHostGetAddresses(aHost, &hostAddressNum);
-    hostDeleted = otSrpServerHostIsDeleted(aHost);
+    hostAddresses = otSrpServerHostGetAddresses(aHost, &hostAddressNum);
+    hostDeleted   = otSrpServerHostIsDeleted(aHost);
 
     if (aUpdate)
     {
@@ -222,18 +247,16 @@ otbrError AdvertisingProxy::PublishHostAndItsServices(const otSrpServerHost *aHo
         aUpdate->mCallbackCount++;
         aUpdate->mHostName = hostName;
         service            = nullptr;
-        while ((service = otSrpServerHostFindNextService(aHost, service, OT_SRP_SERVER_FLAGS_BASE_TYPE_SERVICE_ONLY,
-                                                         /* aServiceName */ nullptr, /* aInstanceName */ nullptr)))
+        while ((service = otSrpServerHostGetNextService(aHost, service)) != nullptr)
         {
             aUpdate->mCallbackCount++;
         }
     }
 
     service = nullptr;
-    while ((service = otSrpServerHostFindNextService(aHost, service, OT_SRP_SERVER_FLAGS_BASE_TYPE_SERVICE_ONLY,
-                                                     /* aServiceName */ nullptr, /* aInstanceName */ nullptr)))
+    while ((service = otSrpServerHostGetNextService(aHost, service)) != nullptr)
     {
-        std::string fullServiceName = otSrpServerServiceGetFullName(service);
+        std::string fullServiceName = otSrpServerServiceGetInstanceName(service);
         std::string serviceName;
         std::string serviceType;
         std::string serviceDomain;
@@ -242,12 +265,12 @@ otbrError AdvertisingProxy::PublishHostAndItsServices(const otSrpServerHost *aHo
 
         if (!hostDeleted && !otSrpServerServiceIsDeleted(service))
         {
-            Mdns::Publisher::TxtList     txtList     = MakeTxtList(service);
+            Mdns::Publisher::TxtData     txtData     = MakeTxtData(service);
             Mdns::Publisher::SubTypeList subTypeList = MakeSubTypeList(service);
 
             otbrLogDebug("Publish SRP service '%s'", fullServiceName.c_str());
             mPublisher.PublishService(
-                hostName, serviceName, serviceType, subTypeList, otSrpServerServiceGetPort(service), txtList,
+                hostName, serviceName, serviceType, subTypeList, otSrpServerServiceGetPort(service), txtData,
                 [this, hasUpdate, updateId, fullServiceName](otbrError aError) {
                     otbrLogResult(aError, "Handle publish SRP service '%s'", fullServiceName.c_str());
                     if (hasUpdate)
@@ -274,13 +297,14 @@ otbrError AdvertisingProxy::PublishHostAndItsServices(const otSrpServerHost *aHo
 
     if (!hostDeleted)
     {
-        std::vector<uint8_t> firstHostAddress{std::begin(hostAddress[0].mFields.m8),
-                                              std::end(hostAddress[0].mFields.m8)};
+        std::vector<Ip6Address> addresses;
 
         // TODO: select a preferred address or advertise all addresses from SRP client.
         otbrLogDebug("Publish SRP host '%s'", fullHostName.c_str());
+
+        addresses = GetEligibleAddresses(hostAddresses, hostAddressNum);
         mPublisher.PublishHost(
-            hostName, firstHostAddress,
+            hostName, addresses,
             Mdns::Publisher::ResultCallback([this, hasUpdate, updateId, fullHostName](otbrError aError) {
                 otbrLogResult(aError, "Handle publish SRP host '%s'", fullHostName.c_str());
                 if (hasUpdate)
@@ -314,49 +338,31 @@ exit:
     return error;
 }
 
-Mdns::Publisher::TxtList AdvertisingProxy::MakeTxtList(const otSrpServerService *aSrpService)
+Mdns::Publisher::TxtData AdvertisingProxy::MakeTxtData(const otSrpServerService *aSrpService)
 {
-    const uint8_t *          txtData;
-    uint16_t                 txtDataLength = 0;
-    otDnsTxtEntryIterator    iterator;
-    otDnsTxtEntry            txtEntry;
-    Mdns::Publisher::TxtList txtList;
+    const uint8_t *data;
+    uint16_t       length = 0;
 
-    txtData = otSrpServerServiceGetTxtData(aSrpService, &txtDataLength);
+    data = otSrpServerServiceGetTxtData(aSrpService, &length);
 
-    otDnsInitTxtEntryIterator(&iterator, txtData, txtDataLength);
-
-    while (otDnsGetNextTxtEntry(&iterator, &txtEntry) == OT_ERROR_NONE)
-    {
-        txtList.emplace_back(txtEntry.mKey, txtEntry.mValue, txtEntry.mValueLength);
-    }
-
-    return txtList;
+    return Mdns::Publisher::TxtData(data, data + length);
 }
 
 Mdns::Publisher::SubTypeList AdvertisingProxy::MakeSubTypeList(const otSrpServerService *aSrpService)
 {
-    const otSrpServerHost *      host         = otSrpServerServiceGetHost(aSrpService);
-    const char *                 instanceName = otSrpServerServiceGetInstanceName(aSrpService);
-    const otSrpServerService *   subService   = nullptr;
     Mdns::Publisher::SubTypeList subTypeList;
 
-    while ((subService = otSrpServerHostFindNextService(
-                host, subService, (OT_SRP_SERVER_SERVICE_FLAG_SUB_TYPE | OT_SRP_SERVER_SERVICE_FLAG_ACTIVE),
-                /* aServiceName */ nullptr, instanceName)) != nullptr)
+    for (uint16_t index = 0;; index++)
     {
-        char subLabel[OT_DNS_MAX_LABEL_SIZE];
+        const char *subTypeName = otSrpServerServiceGetSubTypeServiceNameAt(aSrpService, index);
+        char        subLabel[OT_DNS_MAX_LABEL_SIZE];
 
-        if (otSrpServerServiceGetServiceSubTypeLabel(subService, subLabel, sizeof(subLabel)) == OT_ERROR_NONE)
-        {
-            subTypeList.emplace_back(subLabel);
-        }
-        else
-        {
-            otbrLogWarning("Failed to retrieve subtype of SRP service: %s", otSrpServerServiceGetFullName(aSrpService));
-        }
+        VerifyOrExit(subTypeName != nullptr);
+        SuccessOrExit(otSrpServerParseSubTypeServiceName(subTypeName, subLabel, sizeof(subLabel)));
+        subTypeList.emplace_back(subLabel);
     }
 
+exit:
     return subTypeList;
 }
 

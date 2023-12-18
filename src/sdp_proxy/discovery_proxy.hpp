@@ -34,6 +34,8 @@
 #ifndef OTBR_AGENT_DISCOVERY_PROXY_HPP_
 #define OTBR_AGENT_DISCOVERY_PROXY_HPP_
 
+#include "openthread-br/config.h"
+
 #if OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
 
 #include <set>
@@ -91,13 +93,13 @@ private:
     void               OnDiscoveryProxyUnsubscribe(const char *aSubscription);
     int                GetServiceSubscriptionCount(const DnsNameInfo &aNameInfo) const;
     static std::string TranslateDomain(const std::string &aName, const std::string &aTargetDomain);
-    void               OnServiceDiscovered(const std::string &                            aSubscription,
+    void               OnServiceDiscovered(const std::string                             &aSubscription,
                                            const Mdns::Publisher::DiscoveredInstanceInfo &aInstanceInfo);
     void OnHostDiscovered(const std::string &aHostName, const Mdns::Publisher::DiscoveredHostInfo &aHostInfo);
     static uint32_t CapTtl(uint32_t aTtl);
 
     Ncp::ControllerOpenThread &mNcp;
-    Mdns::Publisher &          mMdnsPublisher;
+    Mdns::Publisher           &mMdnsPublisher;
     uint64_t                   mSubscriberId = 0;
 };
 
