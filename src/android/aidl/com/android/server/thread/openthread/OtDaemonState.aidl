@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2017, The OpenThread Authors.
+ *    Copyright (c) 2023, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,39 +26,28 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <CppUTest/TestHarness.h>
+package com.android.server.thread.openthread;
 
-#include "utils/pskc.hpp"
+/**
+ * Contains all OpenThread daemon states which the system_server and/or client apps care about.
+ */
+parcelable OtDaemonState {
+    boolean isInterfaceUp;
 
-TEST_GROUP(Pskc)
-{
-    otbr::Psk::Pskc mPSKc;
-};
+    // Valid values are DEVICE_ROLE_* defined in {@link ThreadNetworkController}.
+    // Those are also OT_DEVICE_ROLE_* defined in external/openthread/include/openthread/thread.h
+    // TODO: add unit tests to make sure those are equal to each other
+    int deviceRole;
 
-TEST(Pskc, Test123456_0001020304050607_OpenThread)
-{
-    uint8_t extpanid[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
-    uint8_t expected[] = {
-        0xb7, 0x83, 0x81, 0x27, 0x89, 0x91, 0x1e, 0xb4, 0xea, 0x76, 0x59, 0x6c, 0x9c, 0xed, 0x2a, 0x69,
-    };
-    const uint8_t *pskc = nullptr;
+    long partitionId;
 
-    pskc = mPSKc.ComputePskc(extpanid, "OpenThread", "123456");
-    MEMCMP_EQUAL(expected, pskc, sizeof(expected));
-}
+    // Active Oprational Dataset encoded as Thread TLVs. Empty array means the dataset doesn't
+    // exist
+    byte[] activeDatasetTlvs;
 
-TEST(Pskc, Test_TruncatedNetworkNamePskc_OpenThread)
-{
-    uint8_t        extpanid[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
-    const uint8_t *pskc       = nullptr;
-    uint8_t        expected[OT_PSKC_LENGTH];
+    // Active Oprational Dataset encoded as Thread TLVs. Empty array means the dataset doesn't
+    // exist
+    byte[] pendingDatasetTlvs;
 
-    // First run with shorter network name (max)
-    pskc = mPSKc.ComputePskc(extpanid, "OpenThread123456", "123456");
-    memcpy(expected, pskc, OT_PSKC_LENGTH);
-
-    // Second run with longer network name that gets truncated
-    pskc = mPSKc.ComputePskc(extpanid, "OpenThread123456NetworkNameThatExceedsBuffer", "123456");
-
-    MEMCMP_EQUAL(expected, pskc, OT_PSKC_LENGTH);
+    boolean multicastForwardingEnabled;
 }
