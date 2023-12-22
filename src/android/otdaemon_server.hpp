@@ -39,6 +39,7 @@
 
 #include "agent/vendor.hpp"
 #include "common/mainloop.hpp"
+#include "common/time.hpp"
 #include "ncp/ncp_openthread.hpp"
 
 namespace otbr {
@@ -109,6 +110,7 @@ private:
     static void HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
                                                      otBackboneRouterMulticastListenerEvent aEvent,
                                                      const otIp6Address                    *aAddress);
+    void        PushTelemetryIfConditionMatch();
 
     otbr::Ncp::ControllerOpenThread   &mNcp;
     TaskRunner                         mTaskRunner;
@@ -120,6 +122,8 @@ private:
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
     BorderRouterConfigurationParcel    mBorderRouterConfiguration;
+    static constexpr Seconds           kTelemetryCheckInterval           = Seconds(30);           // 30 seconds
+    static constexpr Seconds           kTelemetryUploadIntervalThreshold = Seconds(60 * 60 * 12); // 12 hours
 };
 
 } // namespace Android
