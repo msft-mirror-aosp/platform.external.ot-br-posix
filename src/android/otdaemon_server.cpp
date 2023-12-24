@@ -249,7 +249,7 @@ exit:
     }
 }
 
-void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
+void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                   *aBinderServer,
                                                           otBackboneRouterMulticastListenerEvent aEvent,
                                                           const otIp6Address                    *aAddress)
 {
