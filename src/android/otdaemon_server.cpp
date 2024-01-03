@@ -38,10 +38,12 @@
 #include <android/binder_process.h>
 #include <openthread/border_router.h>
 #include <openthread/ip6.h>
+#include <openthread/link.h>
 #include <openthread/openthread-system.h>
 #include <openthread/platform/infra_if.h>
 
 #include "agent/vendor.hpp"
+#include "android/otdaemon_telemetry.hpp"
 #include "common/code_utils.hpp"
 
 #define BYTE_ARR_END(arr) ((arr) + sizeof(arr))
@@ -117,6 +119,8 @@ void OtDaemonServer::Init(void)
     otIp6SetReceiveCallback(GetOtInstance(), OtDaemonServer::ReceiveCallback, this);
     otBackboneRouterSetMulticastListenerCallback(GetOtInstance(), OtDaemonServer::HandleBackboneMulticastListenerEvent,
                                                  this);
+
+    mTaskRunner.Post(kTelemetryCheckInterval, [this]() { PushTelemetryIfConditionMatch(); });
 }
 
 void OtDaemonServer::BinderDeathCallback(void *aBinderServer)
@@ -249,7 +253,7 @@ exit:
     }
 }
 
-void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                   *aBinderServer,
+void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
                                                           otBackboneRouterMulticastListenerEvent aEvent,
                                                           const otIp6Address                    *aAddress)
 {
@@ -575,6 +579,27 @@ void OtDaemonServer::SendMgmtPendingSetCallback(otError aResult, void *aBinderSe
     }
 }
 
+Status OtDaemonServer::setCountryCode(const std::string                        &aCountryCode,
+                                      const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    static constexpr int kCountryCodeLength = 2;
+    otError              error              = OT_ERROR_NONE;
+    std::string          message;
+    uint16_t             countryCode;
+
+    VerifyOrExit((aCountryCode.length() == kCountryCodeLength) && isalpha(aCountryCode[0]) && isalpha(aCountryCode[1]),
+                 error = OT_ERROR_INVALID_ARGS, message = "The country code is invalid");
+
+    otbrLogInfo("Set country code: %c%c", aCountryCode[0], aCountryCode[1]);
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+    countryCode = (static_cast<uint16_t>(aCountryCode[0]) << 8) | aCountryCode[1];
+    SuccessOrExit(error = otLinkSetRegion(GetOtInstance(), countryCode), message = "Failed to set the country code");
+
+exit:
+    PropagateResult(error, message, aReceiver);
+    return Status::ok();
+}
+
 Status OtDaemonServer::configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
                                              const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
@@ -590,13 +615,12 @@ Status OtDaemonServer::configureBorderRouter(const BorderRouterConfigurationParc
     {
         if (aBorderRouterConfiguration.isBorderRoutingEnabled)
         {
+            int infraIfIndex = if_nametoindex(aBorderRouterConfiguration.infraInterfaceName.c_str());
             SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
                           message = "failed to disable border routing");
             otSysSetInfraNetif(aBorderRouterConfiguration.infraInterfaceName.c_str(), icmp6SocketFd);
             icmp6SocketFd = -1;
-            SuccessOrExit(error = otBorderRoutingInit(
-                              GetOtInstance(), if_nametoindex(aBorderRouterConfiguration.infraInterfaceName.c_str()),
-                              false /* aInfraIfIsRunning */),
+            SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
                           message = "failed to initialize border routing");
             SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
                           message = "failed to enable border routing");
@@ -630,6 +654,19 @@ binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumA
     fsync(aFd);
 
     return STATUS_OK;
+}
+
+void OtDaemonServer::PushTelemetryIfConditionMatch()
+{
+    VerifyOrExit(GetOtInstance() != nullptr);
+
+    // TODO: Push telemetry per kTelemetryUploadIntervalThreshold instead of on startup.
+    // TODO: Save unpushed telemetries in local cache to avoid data loss.
+    RetrieveAndPushAtoms(GetOtInstance());
+    mTaskRunner.Post(kTelemetryUploadIntervalThreshold, [this]() { PushTelemetryIfConditionMatch(); });
+
+exit:
+    return;
 }
 } // namespace Android
 } // namespace otbr
