@@ -111,6 +111,14 @@ oneway interface IOtDaemon {
         in byte[] pendingOpDatasetTlvs, in IOtStatusReceiver receiver);
 
     /**
+     * Sets the country code.
+     *
+     * @param countryCode 2 byte country code (as defined in ISO 3166) to set.
+     * @param receiver the receiver to receive result of this operation
+     */
+    oneway void setCountryCode(in String countryCode, in IOtStatusReceiver receiver);
+
+    /**
      * Configures the Border Router features.
      *
      * @param brConfig the border router's configuration
