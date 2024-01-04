@@ -25,37 +25,16 @@
  *  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  *  POSSIBILITY OF SUCH DAMAGE.
  */
-syntax = "proto2";
-option optimize_for = LITE_RUNTIME;
 
-package threadnetwork;
+syntax = "proto2";
+
+package android.os.statsd.threadnetwork;
+
+option java_package = "com.android.os.threadnetwork";
+option java_multiple_files = true;
 
 // Thread Telemetry data definition.
-// The field range for your data definition is determined as:
-// ---------------------------------------------------------------------------
-// | Field Range  | Logging From
-// | [1 - 500)    | Primary fields logged from OTBR-agent/OpenThread.
-// | [500-600)    | OTBR vendor fields logged from OTBR-agent/OpenThread.
-// | Other        | Reserved for now.
-// ---------------------------------------------------------------------------
-// Usage:
-// Delete field: do not directly delete field. Deprecate it instead.
-message TelemetryData {
-  message Duration {
-    // Signed seconds of the span of time. Must be from -315,576,000,000
-    // to +315,576,000,000 inclusive. Note: these bounds are computed from:
-    // 60 sec/min * 60 min/hr * 24 hr/day * 365.25 days/year * 10000 years
-    optional int64 seconds = 1;
-
-    // Signed fractions of a second at nanosecond resolution of the span
-    // of time. Durations less than one second are represented with a 0
-    // `seconds` field and a positive or negative `nanos` field. For durations
-    // of one second or more, a non-zero value for the `nanos` field must be
-    // of the same sign as the `seconds` field. Must be from -999,999,999
-    // to +999,999,999 inclusive.
-    optional int32 nanos = 2;
-  }
-
+message ThreadnetworkTelemetryDataReported {
   message WpanStats {
     optional int32 phy_rx = 1;
     optional int32 phy_tx = 2;
@@ -100,45 +79,18 @@ message TelemetryData {
     optional uint32 rloc16 = 1;
     optional uint32 router_id = 2;
     optional uint32 leader_router_id = 3;
-    // Deprecate bytes ext_address.
-    reserved 4;
-    optional bytes leader_address = 5;
-    optional uint32 leader_weight = 6;
-    optional uint32 leader_local_weight = 7;
-    optional bytes network_data = 8;
-    optional uint32 network_data_version = 9;
-    optional bytes stable_network_data = 10;
-    optional uint32 stable_network_data_version = 11;
-    optional uint32 preferred_router_id = 12;
-    optional uint32 partition_id = 13;
-    optional uint32 child_table_size = 14;
-    optional uint32 neighbor_table_size = 15;
-    optional int32 instant_rssi = 16;
-    optional uint64 extended_pan_id = 17;
-  }
-
-  message TopoEntry {
-    // deprecate bytes ext_address.
-    reserved 1;
-    optional uint32 rloc16 = 2;
-    // link quality with data range: 0~3.
-    optional uint32 link_quality_in = 3;
-    // the most recent RSSI measurement (8 bit).
-    optional int32 average_rssi = 4;
-    optional Duration age = 5;
-    optional bool rx_on_when_idle = 6;
-    optional bool full_function = 7;
-    optional bool secure_data_request = 8;
-    optional bool full_network_data = 9;
-    optional int32 last_rssi = 10;
-    optional uint32 link_frame_counter = 11;
-    optional uint32 mle_frame_counter = 12;
-    optional bool is_child = 13;
-    optional Duration timeout = 14;
-    optional uint32 network_data_version = 15;
-    optional float mac_frame_error_rate = 16;
-    optional float ip_message_error_rate = 17;
-    optional int32 version = 18;
+    optional uint32 leader_rloc16 = 4; // replaced optional bytes leader_address = 5;
+    optional uint32 leader_weight = 5;
+    optional uint32 leader_local_weight = 6;
+    optional uint32 preferred_router_id = 7;
+    optional uint32 partition_id = 8;
+    optional uint32 child_table_size = 9;
+    optional uint32 neighbor_table_size = 10;
+    optional int32 instant_rssi = 11;
+    optional bool has_extended_pan_id = 12;
+    optional bool is_active_br = 13;
+    optional bool is_active_srp_server = 14;
+    optional uint32 sum_on_link_prefix_changes = 15;
   }
 
   enum NodeType {
@@ -188,48 +140,47 @@ message TelemetryData {
   }
 
   message BorderRoutingCounters {
-    reserved 1 to 8;
     // The number of Router Advertisement packets received by otbr-agent on the
     // infra link
-    optional int64 ra_rx = 9;
+    optional int64 ra_rx = 1;
 
     // The number of Router Advertisement packets successfully transmitted by
     // otbr-agent on the infra link.
-    optional int64 ra_tx_success = 10;
+    optional int64 ra_tx_success = 2;
 
     // The number of Router Advertisement packets failed to transmit by
     // otbr-agent on the infra link.
-    optional int64 ra_tx_failure = 11;
+    optional int64 ra_tx_failure = 3;
 
     // The number of Router Solicitation packets received by otbr-agent on the
     // infra link
-    optional int64 rs_rx = 12;
+    optional int64 rs_rx = 4;
 
     // The number of Router Solicitation packets successfully transmitted by
     // otbr-agent on the infra link.
-    optional int64 rs_tx_success = 13;
+    optional int64 rs_tx_success = 5;
 
     // The number of Router Solicitation packets failed to transmit by
     // otbr-agent on the infra link.
-    optional int64 rs_tx_failure = 14;
+    optional int64 rs_tx_failure = 6;
 
     // The counters for inbound unicast packets
-    optional PacketsAndBytes inbound_unicast = 15;
+    optional PacketsAndBytes inbound_unicast = 7;
 
     // The counters for inbound multicast packets
-    optional PacketsAndBytes inbound_multicast = 16;
+    optional PacketsAndBytes inbound_multicast = 8;
 
     // The counters for outbound unicast packets
-    optional PacketsAndBytes outbound_unicast = 17;
+    optional PacketsAndBytes outbound_unicast = 9;
 
     // The counters for outbound multicast packets
-    optional PacketsAndBytes outbound_multicast = 18;
+    optional PacketsAndBytes outbound_multicast = 10;
 
     // The inbound and outbound NAT64 traffic through the border router
-    optional Nat64ProtocolCounters nat64_protocol_counters = 19;
+    optional Nat64ProtocolCounters nat64_protocol_counters = 11;
 
     // Error counters for NAT64 translator on the border router
-    optional Nat64ErrorCounters nat64_error_counters = 20;
+    optional Nat64ErrorCounters nat64_error_counters = 12;
   }
 
   message SrpServerRegistrationInfo {
@@ -404,12 +355,6 @@ message TelemetryData {
     optional Nat64State translator_state = 2;
   }
 
-  message Nat64Mapping {
-    optional uint64 mapping_id = 1;
-    optional bytes hashed_ipv6_address = 2;
-    optional Nat64ProtocolCounters counters = 3;
-  }
-
   message WpanBorderRouter {
     // Border routing counters
     optional BorderRoutingCounters border_routing_counters = 1;
@@ -423,14 +368,8 @@ message TelemetryData {
     // Information about the mDNS publisher
     optional MdnsInfo mdns = 4;
 
-    // TODO(b/285457467): remove this reserved proto field.
-    reserved 5;
-
     // Information about the state of components of NAT64
-    optional BorderRoutingNat64State nat64_state = 6;
-
-    // Information about the mappings of NAT64 translator
-    repeated Nat64Mapping nat64_mappings = 7;
+    optional BorderRoutingNat64State nat64_state = 5;
   }
 
   message RcpStabilityStatistics {
@@ -459,8 +398,6 @@ message TelemetryData {
   }
 
   message CoexMetrics {
-    // Use uint32 instead of int64 to save space for payload, and align with the
-    // raw data size.
     optional uint32 count_tx_request = 1;
     optional uint32 count_tx_grant_immediate = 2;
     optional uint32 count_tx_grant_wait = 3;
@@ -478,22 +415,56 @@ message TelemetryData {
     optional uint32 rx_average_request_to_grant_time_us = 15;
   }
 
-  message LinkMetricsEntry {
-    optional int32 link_margin = 1;
-    optional int32 rssi = 2;
-  }
-
-  message LowPowerMetrics {
-    repeated LinkMetricsEntry link_metrics_entries = 1;
-  }
-
   optional WpanStats wpan_stats = 1;
   optional WpanTopoFull wpan_topo_full = 2;
-  repeated TopoEntry topo_entries = 3;
-  optional WpanBorderRouter wpan_border_router = 4;
-  optional WpanRcp wpan_rcp = 5;
-  // Deprecate CoexMetrics with int64 as its fields types to save storage.
-  reserved 6;
-  optional CoexMetrics coex_metrics = 7;
-  optional LowPowerMetrics low_power_metrics = 8;
+  optional WpanBorderRouter wpan_border_router = 3;
+  optional WpanRcp wpan_rcp = 4;
+  optional CoexMetrics coex_metrics = 5;
+}
+
+message ThreadnetworkTopoEntryRepeated {
+  message TopoEntry {
+    // 0~15: uint16_t rloc_16
+    // 16~31: uint16_t version Thread version of the neighbor
+    optional uint32 combo_telemetry1 = 1;
+    // 0~7: uint8_t link_quality_in
+    // 8~15: int8_t average_rssi
+    // 16~23: int8_t last_rssi
+    // 24~31: uint8_t network_data_version
+    optional uint32 combo_telemetry2 = 2;
+    optional uint32 age_sec = 3;
+    // Each bit on the flag represents a bool flag
+    // 0: rx_on_when_idle
+    // 1: full_function
+    // 2: secure_data_request
+    // 3: full_network_data
+    // 4: is_child
+    optional uint32 topo_entry_flags = 4;
+    optional uint32 link_frame_counter = 5;
+    optional uint32 mle_frame_counter = 6;
+    optional uint32 timeout_sec = 7;
+    // 0~15: uint16_t frame_error_rate. Frame error rate (0xffff->100%). Requires error tracking feature.
+    // 16~31: uint16_t message_error_rate. (IPv6) msg error rate (0xffff->100%). Requires error tracking feature.
+    optional uint32 combo_telemetry3 = 8;
+  }
+
+  message TopoEntryRepeated {
+    repeated TopoEntry topo_entries = 1;
+  }
+
+  optional TopoEntryRepeated topo_entry_repeated = 1;
+}
+
+message ThreadnetworkDeviceInfoReported {
+  // OpenThread host build version.
+  optional string ot_host_version = 1;
+
+  // OpenThread RCP build version.
+  optional string ot_rcp_version = 2;
+
+  // Thread protocol version.
+  optional int32 thread_version = 3;
+
+  // Thread Daemon version.
+  optional string thread_daemon_version = 4;
 }
