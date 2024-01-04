@@ -52,29 +52,41 @@ void Publisher::PublishService(const std::string &aHostName,
                                const std::string &aType,
                                const SubTypeList &aSubTypeList,
                                uint16_t           aPort,
-                               const TxtList &    aTxtList,
-                               ResultCallback &&  aCallback)
+                               const TxtData     &aTxtData,
+                               ResultCallback   &&aCallback)
 {
+    otbrError error;
+
     mServiceRegistrationBeginTime[std::make_pair(aName, aType)] = Clock::now();
 
-    PublishServiceImpl(aHostName, aName, aType, aSubTypeList, aPort, aTxtList, std::move(aCallback));
+    error = PublishServiceImpl(aHostName, aName, aType, aSubTypeList, aPort, aTxtData, std::move(aCallback));
+    if (error != OTBR_ERROR_NONE)
+    {
+        UpdateMdnsResponseCounters(mTelemetryInfo.mServiceRegistrations, error);
+    }
 }
 
-void Publisher::PublishHost(const std::string &aName, const std::vector<uint8_t> &aAddress, ResultCallback &&aCallback)
+void Publisher::PublishHost(const std::string &aName, const AddressList &aAddresses, ResultCallback &&aCallback)
 {
+    otbrError error;
+
     mHostRegistrationBeginTime[aName] = Clock::now();
 
-    PublishHostImpl(aName, aAddress, std::move(aCallback));
+    error = PublishHostImpl(aName, aAddresses, std::move(aCallback));
+    if (error != OTBR_ERROR_NONE)
+    {
+        UpdateMdnsResponseCounters(mTelemetryInfo.mHostRegistrations, error);
+    }
 }
 
-void Publisher::OnServiceResolveFailed(const std::string &aType, const std::string &aInstanceName, int32_t aErrorCode)
+void Publisher::OnServiceResolveFailed(std::string aType, std::string aInstanceName, int32_t aErrorCode)
 {
     UpdateMdnsResponseCounters(mTelemetryInfo.mServiceResolutions, DnsErrorToOtbrError(aErrorCode));
     UpdateServiceInstanceResolutionEmaLatency(aInstanceName, aType, DnsErrorToOtbrError(aErrorCode));
     OnServiceResolveFailedImpl(aType, aInstanceName, aErrorCode);
 }
 
-void Publisher::OnHostResolveFailed(const std::string &aHostName, int32_t aErrorCode)
+void Publisher::OnHostResolveFailed(std::string aHostName, int32_t aErrorCode)
 {
     UpdateMdnsResponseCounters(mTelemetryInfo.mHostResolutions, DnsErrorToOtbrError(aErrorCode));
     UpdateHostResolutionEmaLatency(aHostName, DnsErrorToOtbrError(aErrorCode));
@@ -85,18 +97,32 @@ otbrError Publisher::EncodeTxtData(const TxtList &aTxtList, std::vector<uint8_t>
 {
     otbrError error = OTBR_ERROR_NONE;
 
-    for (const auto &txtEntry : aTxtList)
+    aTxtData.clear();
+
+    for (const TxtEntry &txtEntry : aTxtList)
     {
-        const auto & name        = txtEntry.mName;
-        const auto & value       = txtEntry.mValue;
-        const size_t entryLength = name.length() + 1 + value.size();
+        size_t entryLength = txtEntry.mKey.length();
+
+        if (!txtEntry.mIsBooleanAttribute)
+        {
+            entryLength += txtEntry.mValue.size() + sizeof(uint8_t); // for `=` char.
+        }
 
         VerifyOrExit(entryLength <= kMaxTextEntrySize, error = OTBR_ERROR_INVALID_ARGS);
 
         aTxtData.push_back(static_cast<uint8_t>(entryLength));
-        aTxtData.insert(aTxtData.end(), name.begin(), name.end());
-        aTxtData.push_back('=');
-        aTxtData.insert(aTxtData.end(), value.begin(), value.end());
+        aTxtData.insert(aTxtData.end(), txtEntry.mKey.begin(), txtEntry.mKey.end());
+
+        if (!txtEntry.mIsBooleanAttribute)
+        {
+            aTxtData.push_back('=');
+            aTxtData.insert(aTxtData.end(), txtEntry.mValue.begin(), txtEntry.mValue.end());
+        }
+    }
+
+    if (aTxtData.empty())
+    {
+        aTxtData.push_back(0);
     }
 
 exit:
@@ -107,30 +133,39 @@ otbrError Publisher::DecodeTxtData(Publisher::TxtList &aTxtList, const uint8_t *
 {
     otbrError error = OTBR_ERROR_NONE;
 
+    aTxtList.clear();
+
     for (uint16_t r = 0; r < aTxtLength;)
     {
         uint16_t entrySize = aTxtData[r];
         uint16_t keyStart  = r + 1;
         uint16_t entryEnd  = keyStart + entrySize;
         uint16_t keyEnd    = keyStart;
-        uint16_t valStart;
+
+        VerifyOrExit(entryEnd <= aTxtLength, error = OTBR_ERROR_PARSE);
 
         while (keyEnd < entryEnd && aTxtData[keyEnd] != '=')
         {
             keyEnd++;
         }
 
-        valStart = keyEnd;
-        if (valStart < entryEnd && aTxtData[valStart] == '=')
+        if (keyEnd == entryEnd)
         {
-            valStart++;
+            if (keyEnd > keyStart)
+            {
+                // No `=`, treat as a boolean attribute.
+                aTxtList.emplace_back(reinterpret_cast<const char *>(&aTxtData[keyStart]), keyEnd - keyStart);
+            }
+        }
+        else
+        {
+            uint16_t valStart = keyEnd + 1; // To skip over `=`
+
+            aTxtList.emplace_back(reinterpret_cast<const char *>(&aTxtData[keyStart]), keyEnd - keyStart,
+                                  &aTxtData[valStart], entryEnd - valStart);
         }
 
-        aTxtList.emplace_back(reinterpret_cast<const char *>(&aTxtData[keyStart]), keyEnd - keyStart,
-                              &aTxtData[valStart], entryEnd - valStart);
-
         r += entrySize + 1;
-        VerifyOrExit(r <= aTxtLength, error = OTBR_ERROR_PARSE);
     }
 
 exit:
@@ -139,30 +174,25 @@ exit:
 
 void Publisher::RemoveSubscriptionCallbacks(uint64_t aSubscriberId)
 {
-    size_t erased;
-
-    OTBR_UNUSED_VARIABLE(erased);
-
-    assert(aSubscriberId > 0);
-
-    erased = mDiscoveredCallbacks.erase(aSubscriberId);
-
-    assert(erased == 1);
+    mDiscoverCallbacks.remove_if(
+        [aSubscriberId](const DiscoverCallback &aCallback) { return (aCallback.mId == aSubscriberId); });
 }
 
 uint64_t Publisher::AddSubscriptionCallbacks(Publisher::DiscoveredServiceInstanceCallback aInstanceCallback,
                                              Publisher::DiscoveredHostCallback            aHostCallback)
 {
-    uint64_t subscriberId = mNextSubscriberId++;
+    uint64_t id = mNextSubscriberId++;
 
-    assert(subscriberId > 0);
+    assert(id > 0);
+    mDiscoverCallbacks.emplace_back(id, aInstanceCallback, aHostCallback);
 
-    mDiscoveredCallbacks.emplace(subscriberId, std::make_pair(std::move(aInstanceCallback), std::move(aHostCallback)));
-    return subscriberId;
+    return id;
 }
 
-void Publisher::OnServiceResolved(const std::string &aType, const DiscoveredInstanceInfo &aInstanceInfo)
+void Publisher::OnServiceResolved(std::string aType, DiscoveredInstanceInfo aInstanceInfo)
 {
+    bool checkToInvoke = false;
+
     otbrLogInfo("Service %s is resolved successfully: %s %s host %s addresses %zu", aType.c_str(),
                 aInstanceInfo.mRemoved ? "remove" : "add", aInstanceInfo.mName.c_str(), aInstanceInfo.mHostName.c_str(),
                 aInstanceInfo.mAddresses.size());
@@ -179,16 +209,39 @@ void Publisher::OnServiceResolved(const std::string &aType, const DiscoveredInst
     UpdateMdnsResponseCounters(mTelemetryInfo.mServiceResolutions, OTBR_ERROR_NONE);
     UpdateServiceInstanceResolutionEmaLatency(aInstanceInfo.mName, aType, OTBR_ERROR_NONE);
 
-    for (const auto &subCallback : mDiscoveredCallbacks)
+    // The `mDiscoverCallbacks` list can get updated as the callbacks
+    // are invoked. We first mark `mShouldInvoke` on all non-null
+    // service callbacks. We clear it before invoking the callback
+    // and restart the iteration over the `mDiscoverCallbacks` list
+    // to find the next one to signal, since the list may have changed.
+
+    for (DiscoverCallback &callback : mDiscoverCallbacks)
     {
-        if (subCallback.second.first != nullptr)
+        if (callback.mServiceCallback != nullptr)
         {
-            subCallback.second.first(aType, aInstanceInfo);
+            callback.mShouldInvoke = true;
+            checkToInvoke          = true;
+        }
+    }
+
+    while (checkToInvoke)
+    {
+        checkToInvoke = false;
+
+        for (DiscoverCallback &callback : mDiscoverCallbacks)
+        {
+            if (callback.mShouldInvoke)
+            {
+                callback.mShouldInvoke = false;
+                checkToInvoke          = true;
+                callback.mServiceCallback(aType, aInstanceInfo);
+                break;
+            }
         }
     }
 }
 
-void Publisher::OnServiceRemoved(uint32_t aNetifIndex, const std::string &aType, const std::string &aInstanceName)
+void Publisher::OnServiceRemoved(uint32_t aNetifIndex, std::string aType, std::string aInstanceName)
 {
     DiscoveredInstanceInfo instanceInfo;
 
@@ -201,8 +254,10 @@ void Publisher::OnServiceRemoved(uint32_t aNetifIndex, const std::string &aType,
     OnServiceResolved(aType, instanceInfo);
 }
 
-void Publisher::OnHostResolved(const std::string &aHostName, const Publisher::DiscoveredHostInfo &aHostInfo)
+void Publisher::OnHostResolved(std::string aHostName, Publisher::DiscoveredHostInfo aHostInfo)
 {
+    bool checkToInvoke = false;
+
     otbrLogInfo("Host %s is resolved successfully: host %s addresses %zu ttl %u", aHostName.c_str(),
                 aHostInfo.mHostName.c_str(), aHostInfo.mAddresses.size(), aHostInfo.mTtl);
 
@@ -214,11 +269,34 @@ void Publisher::OnHostResolved(const std::string &aHostName, const Publisher::Di
     UpdateMdnsResponseCounters(mTelemetryInfo.mHostResolutions, OTBR_ERROR_NONE);
     UpdateHostResolutionEmaLatency(aHostName, OTBR_ERROR_NONE);
 
-    for (const auto &subCallback : mDiscoveredCallbacks)
+    // The `mDiscoverCallbacks` list can get updated as the callbacks
+    // are invoked. We first mark `mShouldInvoke` on all non-null
+    // host callbacks. We clear it before invoking the callback
+    // and restart the iteration over the `mDiscoverCallbacks` list
+    // to find the next one to signal, since the list may have changed.
+
+    for (DiscoverCallback &callback : mDiscoverCallbacks)
     {
-        if (subCallback.second.second != nullptr)
+        if (callback.mHostCallback != nullptr)
         {
-            subCallback.second.second(aHostName, aHostInfo);
+            callback.mShouldInvoke = true;
+            checkToInvoke          = true;
+        }
+    }
+
+    while (checkToInvoke)
+    {
+        checkToInvoke = false;
+
+        for (DiscoverCallback &callback : mDiscoverCallbacks)
+        {
+            if (callback.mShouldInvoke)
+            {
+                callback.mShouldInvoke = false;
+                checkToInvoke          = true;
+                callback.mHostCallback(aHostName, aHostInfo);
+                break;
+            }
         }
     }
 }
@@ -229,11 +307,10 @@ Publisher::SubTypeList Publisher::SortSubTypeList(SubTypeList aSubTypeList)
     return aSubTypeList;
 }
 
-Publisher::TxtList Publisher::SortTxtList(TxtList aTxtList)
+Publisher::AddressList Publisher::SortAddressList(AddressList aAddressList)
 {
-    std::sort(aTxtList.begin(), aTxtList.end(),
-              [](const TxtEntry &aLhs, const TxtEntry &aRhs) { return aLhs.mName < aRhs.mName; });
-    return aTxtList;
+    std::sort(aAddressList.begin(), aAddressList.end());
+    return aAddressList;
 }
 
 std::string Publisher::MakeFullServiceName(const std::string &aName, const std::string &aType)
@@ -282,14 +359,14 @@ Publisher::ResultCallback Publisher::HandleDuplicateServiceRegistration(const st
                                                                         const std::string &aType,
                                                                         const SubTypeList &aSubTypeList,
                                                                         uint16_t           aPort,
-                                                                        const TxtList &    aTxtList,
-                                                                        ResultCallback &&  aCallback)
+                                                                        const TxtData     &aTxtData,
+                                                                        ResultCallback   &&aCallback)
 {
     ServiceRegistration *serviceReg = FindServiceRegistration(aName, aType);
 
     VerifyOrExit(serviceReg != nullptr);
 
-    if (serviceReg->IsOutdated(aHostName, aName, aType, aSubTypeList, aPort, aTxtList))
+    if (serviceReg->IsOutdated(aHostName, aName, aType, aSubTypeList, aPort, aTxtData))
     {
         otbrLogInfo("Removing existing service %s.%s: outdated", aName.c_str(), aType.c_str());
         RemoveServiceRegistration(aName, aType, OTBR_ERROR_ABORTED);
@@ -318,15 +395,15 @@ exit:
     return std::move(aCallback);
 }
 
-Publisher::ResultCallback Publisher::HandleDuplicateHostRegistration(const std::string &         aName,
-                                                                     const std::vector<uint8_t> &aAddress,
-                                                                     ResultCallback &&           aCallback)
+Publisher::ResultCallback Publisher::HandleDuplicateHostRegistration(const std::string &aName,
+                                                                     const AddressList &aAddresses,
+                                                                     ResultCallback   &&aCallback)
 {
     HostRegistration *hostReg = FindHostRegistration(aName);
 
     VerifyOrExit(hostReg != nullptr);
 
-    if (hostReg->IsOutdated(aName, aAddress))
+    if (hostReg->IsOutdated(aName, aAddresses))
     {
         otbrLogInfo("Removing existing host %s: outdated", aName.c_str());
         RemoveHostRegistration(hostReg->mName, OTBR_ERROR_ABORTED);
@@ -374,6 +451,7 @@ void Publisher::RemoveHostRegistration(const std::string &aName, otbrError aErro
     hostReg = std::move(it->second);
     mHostRegistrations.erase(it);
     hostReg->Complete(aError);
+    otbrLogInfo("Removed host %s", aName.c_str());
 
 exit:
     return;
@@ -396,10 +474,10 @@ bool Publisher::ServiceRegistration::IsOutdated(const std::string &aHostName,
                                                 const std::string &aType,
                                                 const SubTypeList &aSubTypeList,
                                                 uint16_t           aPort,
-                                                const TxtList &    aTxtList) const
+                                                const TxtData     &aTxtData) const
 {
     return !(mHostName == aHostName && mName == aName && mType == aType && mSubTypeList == aSubTypeList &&
-             mPort == aPort && mTxtList == aTxtList);
+             mPort == aPort && mTxtData == aTxtData);
 }
 
 void Publisher::ServiceRegistration::Complete(otbrError aError)
@@ -417,9 +495,9 @@ void Publisher::ServiceRegistration::OnComplete(otbrError aError)
     }
 }
 
-bool Publisher::HostRegistration::IsOutdated(const std::string &aName, const std::vector<uint8_t> &aAddress) const
+bool Publisher::HostRegistration::IsOutdated(const std::string &aName, const AddressList &aAddresses) const
 {
-    return !(mName == aName && mAddress == aAddress);
+    return !(mName == aName && mAddresses == aAddresses);
 }
 
 void Publisher::HostRegistration::Complete(otbrError aError)
@@ -455,6 +533,12 @@ void Publisher::UpdateMdnsResponseCounters(otbr::MdnsResponseCounters &aCounters
         break;
     case OTBR_ERROR_NOT_IMPLEMENTED:
         ++aCounters.mNotImplemented;
+        break;
+    case OTBR_ERROR_ABORTED:
+        ++aCounters.mAborted;
+        break;
+    case OTBR_ERROR_INVALID_STATE:
+        ++aCounters.mInvalidState;
         break;
     case OTBR_ERROR_MDNS:
     default:
@@ -536,5 +620,4 @@ void Publisher::UpdateHostResolutionEmaLatency(const std::string &aHostName, otb
 }
 
 } // namespace Mdns
-
 } // namespace otbr

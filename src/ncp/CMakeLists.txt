@@ -33,4 +33,6 @@ add_library(otbr-ncp
 
 target_link_libraries(otbr-ncp PRIVATE
     otbr-common
+    $<$<BOOL:${OTBR_FEATURE_FLAGS}>:otbr-proto>
+    $<$<BOOL:${OTBR_TELEMETRY_DATA_API}>:otbr-proto>
 )

@@ -34,6 +34,8 @@
 #ifndef OTBR_THREAD_HELPER_HPP_
 #define OTBR_THREAD_HELPER_HPP_
 
+#include "openthread-br/config.h"
+
 #include <chrono>
 #include <functional>
 #include <map>
@@ -47,6 +49,10 @@
 #include <openthread/joiner.h>
 #include <openthread/netdata.h>
 #include <openthread/thread.h>
+#include "mdns/mdns.hpp"
+#if OTBR_ENABLE_TELEMETRY_DATA_API
+#include "proto/thread_telemetry.pb.h"
+#endif
 
 namespace otbr {
 namespace Ncp {
@@ -137,7 +143,7 @@ public:
      * @param[in] aHandler      The attach result handler.
      *
      */
-    void Attach(const std::string &         aNetworkName,
+    void Attach(const std::string          &aNetworkName,
                 uint16_t                    aPanId,
                 uint64_t                    aExtPanId,
                 const std::vector<uint8_t> &aNetworkKey,
@@ -248,6 +254,24 @@ public:
     void OnUpdateMeshCopTxt(std::map<std::string, std::vector<uint8_t>> aUpdate);
 #endif
 
+    void DetachGracefully(ResultHandler aHandler);
+
+#if OTBR_ENABLE_TELEMETRY_DATA_API
+    /**
+     * This method populates the telemetry data with best effort. The best effort means, for a given
+     * telemetry, if its retrieval has error, it is left unpopulated and the process continues to
+     * retrieve the remaining telemetries instead of the immediately return. The error code
+     * OT_ERRROR_FAILED will be returned if there is one or more error(s) happened in the process.
+     *
+     * @param[in] aPublisher     The Mdns::Publisher to provide MDNS telemetry if it is not `nullptr`.
+     * @param[in] telemetryData  The telemetry data to be populated.
+     *
+     * @retval OTBR_ERROR_NONE  There is no error happened in the process.
+     * @retval OT_ERRROR_FAILED There is one or more error(s) happened in the process.
+     */
+    otError RetrieveTelemetryData(Mdns::Publisher *aPublisher, threadnetwork::TelemetryData &telemetryData);
+#endif // OTBR_ENABLE_TELEMETRY_DATA_API
+
     /**
      * This method logs OpenThread action result.
      *
@@ -270,10 +294,13 @@ private:
     static void MgmtSetResponseHandler(otError aResult, void *aContext);
     void        MgmtSetResponseHandler(otError aResult);
 
+    static void DetachGracefullyCallback(void *aContext);
+    void        DetachGracefullyCallback(void);
+
     void    RandomFill(void *aBuf, size_t size);
     uint8_t RandomChannelFromChannelMask(uint32_t aChannelMask);
 
-    void ActiveDatasetChangedCallback();
+    void ActiveDatasetChangedCallback(void);
 
     otInstance *mInstance;
 
@@ -289,9 +316,13 @@ private:
 
     std::map<uint16_t, size_t> mUnsecurePortRefCounter;
 
+    bool mWaitingMgmtSetResponse =
+        false; // During waiting for mgmt set response, calls to AttachHandler by StateChangedCallback will be ignored
     int64_t       mAttachDelayMs = 0;
     AttachHandler mAttachHandler;
     ResultHandler mJoinerHandler;
+
+    ResultHandler mDetachGracefullyHandler = nullptr;
 
     otOperationalDatasetTlvs mAttachPendingDatasetTlvs = {};
 
@@ -299,6 +330,11 @@ private:
 
 #if OTBR_ENABLE_DBUS_SERVER
     UpdateMeshCopTxtHandler mUpdateMeshCopTxtHandler;
+#endif
+
+#if OTBR_ENABLE_TELEMETRY_DATA_API & OTBR_ENABLE_NAT64
+    static const uint8_t kNat64SourceAddressHashSaltLength = 16;
+    uint8_t              mNat64Ipv6AddressSalt[kNat64SourceAddressHashSaltLength];
 #endif
 };
 

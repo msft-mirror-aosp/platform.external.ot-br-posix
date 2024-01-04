@@ -39,9 +39,11 @@ More information about Thread can be found at [threadgroup.org](http://threadgro
 
 ## Getting started
 
-The quickest way to get started with OTBR is to try the Docker version. Run OTBR in a Docker container on any Linux-based system or a Raspberry Pi 3B, using either a physical or emulated NCP. See the [Docker Support guide on openthread.io](https://openthread.io/guides/border-router/docker) for more info.
+The quickest way to set up a Thread 1.3 compliant Border Router is to follow this codelab: [Thread Border Router - Bidirectional IPv6 Connectivity and DNS-Based Service Discovery](https://openthread.io/codelabs/openthread-border-router).
 
-OTBR also runs directly on supported platforms like the Raspberry Pi 3B. If you're interested in building and configuring OTBR directly, or to learn more about the OTBR architecture, then see the rest of our end-user documentation at [openthread.io](https://openthread.io/guides/border_router).
+To run OTBR in a Docker container on any Linux-based system or a Raspberry Pi with either a physical or emulated NCP, please see the [Docker Support guide on openthread.io](https://openthread.io/guides/border-router/docker) for more info.
+
+OTBR also runs directly on supported platforms like the Raspberry Pi. If you're interested in building and configuring OTBR directly, or to learn more about the OTBR architecture, then see the rest of our end-user documentation at [openthread.io](https://openthread.io/guides/border-router).
 
 > Note: For users in China, end-user documentation is available at [openthread.google.cn](https://openthread.google.cn/guides/border-router).
 
@@ -54,10 +56,6 @@ We would love for you to contribute to OpenThread Border Router and help make it
 Contributors are required to abide by our [Code of Conduct](https://github.com/openthread/ot-br-posix/blob/main/CODE_OF_CONDUCT.md) and [Coding Conventions and Style Guide](https://github.com/openthread/ot-br-posix/blob/main/STYLE_GUIDE.md).
 
 We follow the philosophy of [Scripts to Rule Them All](https://github.com/github/scripts-to-rule-them-all).
-
-# Versioning
-
-OpenThread Border Router follows the [Semantic Versioning guidelines](http://semver.org/) for release cycle transparency and to maintain backwards compatibility. OpenThread Border Router's versioning is independent of the Thread protocol specification version but will clearly indicate which version of the specification it currently supports.
 
 # License
 

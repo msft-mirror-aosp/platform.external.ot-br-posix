@@ -73,8 +73,40 @@ genrule {
     ],
 }
 
-cc_binary {
-    name: "otbr-agent",
+// The config shared by all ot-daemon dependency libraries
+cc_defaults {
+    name: "ot-daemon-debuggable-cc-defaults",
+    cflags: [
+        // Optimize for size
+        "-Os",
+
+        // Disable exception since OT never uses exceptions
+        "-fno-exceptions",
+        "-fno-asynchronous-unwind-tables",
+        "-fno-unwind-tables",
+    ],
+    product_variables: {
+        debuggable: {
+            cflags: [
+                // Optimize for debugging
+                "-Og",
+
+                // Enable daemon CLI for debugging
+                "-DOPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE=1",
+            ]
+        }
+    },
+
+    // Enable security checks
+    sanitize: {
+      misc_undefined: ["bounds"],
+      cfi: true,
+      scs: true,
+   },
+}
+
+cc_defaults {
+    name: "ot-daemon-defaults",
     generated_headers: ["otbr_version_header"],
 
     include_dirs: [
@@ -82,6 +114,7 @@ cc_binary {
         "external/openthread/include",
         "external/openthread/src",
         "external/openthread/src/posix/platform/include",
+        "external/openthread/third_party/mbedtls/repo/include",
     ],
 
     local_include_dirs: [
@@ -92,9 +125,17 @@ cc_binary {
     cflags: [
         "-Wall",
         "-Wextra",
+
+        // The HAL client implementation requires features which are
+        // available on only 31+, but it's guaranteed that ot-daemon
+        // will never run on Android U- devices.
+        "-Wno-unguarded-availability",
+
         "-DOTBR_CONFIG_ANDROID_PROPERTY_ENABLE=1",
         "-DOTBR_CONFIG_ANDROID_VERSION_HEADER_ENABLE=1",
         "-DOTBR_CONFIG_FILE=\"src/android/otbr-config-android.h\"",
+        "-DOTBR_ENABLE_VENDOR_SERVER=1", // for OtDaemonServer
+        "-DOTBR_ENABLE_BORDER_ROUTING=1",
         "-DOTBR_ENABLE_MDNS_MDNSSD=1",
         "-DOTBR_ENABLE_SRP_ADVERTISING_PROXY=1",
         "-DOTBR_ENABLE_DNSSD_DISCOVERY_PROXY=1",
@@ -103,39 +144,120 @@ cc_binary {
 
     srcs: [
         "src/agent/application.cpp",
-        "src/agent/main.cpp",
+        "src/android/otdaemon_server.cpp",
+        "src/android/otdaemon_telemetry.cpp",
         "src/border_agent/border_agent.cpp",
         "src/ncp/ncp_openthread.cpp",
         "src/sdp_proxy/advertising_proxy.cpp",
         "src/sdp_proxy/discovery_proxy.cpp",
-        "src/utils/thread_helper.cpp",
+        "src/common/code_utils.cpp",
         "src/common/dns_utils.cpp",
         "src/common/logging.cpp",
-        "src/common/task_runner.cpp",
-        "src/common/types.cpp",
         "src/common/mainloop.cpp",
         "src/common/mainloop_manager.cpp",
+        "src/common/task_runner.cpp",
+        "src/common/types.cpp",
         "src/mdns/mdns.cpp",
         "src/mdns/mdns_mdnssd.cpp",
+        "src/utils/crc16.cpp",
         "src/utils/dns_utils.cpp",
         "src/utils/hex.cpp",
         "src/utils/infra_link_selector.cpp",
+        "src/utils/pskc.cpp",
         "src/utils/socket_utils.cpp",
+        "src/utils/steering_data.cpp",
         "src/utils/string_utils.cpp",
+        "src/utils/system_utils.cpp",
+        "src/utils/thread_helper.cpp",
     ],
 
     shared_libs: [
         "libbase",
         "libutils",
         "libcutils",
-        "libmdnssd",
+        "libbinder_ndk",
+        "android.hardware.threadnetwork-V1-ndk",
+        "liblog",
+        "libstatssocket",
     ],
 
     static_libs: [
         "libopenthread-cli",
         "ot-core",
-        "openthread-tcplp",
+        "ot-daemon-aidl-ndk",
+        "libstatslog_threadnetwork",
+        "threadnetwork-atom-cc-proto-lite",
+        "libprotobuf-cpp-lite",
     ],
 
     host_ldlibs: ["-lutil"],
+    min_sdk_version: "30",
+    apex_available: [ "com.android.tethering" ],
+}
+
+cc_binary {
+    name: "ot-daemon",
+    defaults: [
+        "ot-daemon-defaults",
+        "ot-daemon-debuggable-cc-defaults",
+    ],
+    srcs: [
+        "src/agent/main.cpp",
+    ],
+}
+
+cc_fuzz {
+    name: "ot_daemon_service_fuzzer",
+    defaults:[
+        "ot-daemon-defaults",
+        "service_fuzzer_defaults"
+    ],
+    srcs: [
+        "src/android/otdaemon_fuzzer.cpp",
+    ],
+    shared_libs: [
+        "liblog",
+    ],
+    fuzz_config: {
+        cc: [
+            "wgtdkp@google.com",
+        ],
+    },
+}
+
+cc_library_static {
+    name: "libstatslog_threadnetwork",
+    generated_sources: ["statslog_threadnetwork.cpp"],
+    generated_headers: ["statslog_threadnetwork.h"],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    export_generated_headers: ["statslog_threadnetwork.h"],
+    shared_libs: [
+        "libcutils",
+        "liblog",
+        "libstatssocket",
+        "libutils",
+    ],
+    min_sdk_version: "30",
+    apex_available: [ "com.android.tethering" ],
+}
+
+genrule {
+    name: "statslog_threadnetwork.h",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --header $(genDir)/statslog_threadnetwork.h --module threadnetwork --namespace threadnetwork",
+    out: [
+        "statslog_threadnetwork.h",
+    ],
+}
+
+genrule {
+    name: "statslog_threadnetwork.cpp",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --cpp $(genDir)/statslog_threadnetwork.cpp --module threadnetwork --namespace threadnetwork --importHeader statslog_threadnetwork.h",
+    out: [
+        "statslog_threadnetwork.cpp",
+    ],
 }
