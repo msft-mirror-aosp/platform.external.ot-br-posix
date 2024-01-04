@@ -30,6 +30,7 @@ package com.android.server.thread.openthread;
 
 import android.os.ParcelFileDescriptor;
 
+import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.IOtDaemonCallback;
@@ -38,12 +39,30 @@ import com.android.server.thread.openthread.IOtDaemonCallback;
  * The OpenThread daemon service which provides access to the core Thread stack for
  * system_server.
  */
-interface IOtDaemon {
+oneway interface IOtDaemon {
     /**
      * The Thread tunnel interface name. This interface MUST be created before
      * starting this {@link IOtDaemon} service.
      */
     const String TUN_IF_NAME = "thread-wpan";
+
+    // The error code below MUST be consistent with openthread/include/openthread/error.h
+    // TODO: add a unit test to make sure that values are always match
+    enum ErrorCode {
+        // TODO: Add this error code to OpenThread and make sure `otDatasetSetActiveTlvs()` returns
+        // this error code when an unsupported channel is provided
+        OT_ERROR_UNSUPPORTED_CHANNEL = -1,
+
+        OT_ERROR_NO_BUFS = 3,
+        OT_ERROR_BUSY = 5,
+        OT_ERROR_PARSE = 6,
+        OT_ERROR_ABORT = 11,
+        OT_ERROR_INVALID_STATE = 13,
+        OT_ERROR_DETACHED = 16,
+        OT_ERROR_RESPONSE_TIMEOUT = 28,
+        OT_ERROR_REASSEMBLY_TIMEOUT = 30,
+        OT_ERROR_REJECTED = 37,
+    }
 
     /**
      * Initializes this service with Thread tunnel interface FD and stack callback.
@@ -52,24 +71,23 @@ interface IOtDaemon {
      *              packets to/from Thread PAN
      * @param callback the cllback for receiving all Thread stack events
      */
-    // Okay to be blocking API, this doesn't call into OT stack
-    void initialize(in ParcelFileDescriptor tunFd, in IOtDaemonCallback callback);
+    void initialize(in ParcelFileDescriptor tunFd);
 
-    /** Returns the Extended MAC Address of this Thread device. */
-    // Okay to be blocking, this is already cached in memory
-    byte[] getExtendedMacAddress();
-
-    /** Returns the Thread version that this Thread device is running. */
-    // Okay to be blocking, this is in-memory-only value
-    int getThreadVersion();
+    /**
+     * Registers a callback to receive OpenThread daemon state changes.
+     *
+     * @param callback invoked immediately after this method or any time a state is changed
+     * @param listenerId specifies the the ID which will be sent back in callbacks of {@link
+     *                   IOtDaemonCallback}
+     */
+    void registerStateCallback(in IOtDaemonCallback callback, long listenerId);
 
     /**
      * Joins this device to the network specified by {@code activeOpDatasetTlvs}.
      *
      * @sa android.net.thread.ThreadNetworkController#join
      */
-    oneway void join(
-        boolean doForm, in byte[] activeOpDatasetTlvs, in IOtStatusReceiver receiver);
+    void join(in byte[] activeOpDatasetTlvs, in IOtStatusReceiver receiver);
 
     /**
      * Leaves from the current network.
@@ -83,14 +101,32 @@ interface IOtDaemon {
      *
      * @sa android.net.thread.ThreadNetworkController#leave
      */
-    oneway void leave(in IOtStatusReceiver receiver);
+    void leave(in IOtStatusReceiver receiver);
 
     /** Migrates to the new network specified by {@code pendingOpDatasetTlvs}.
      *
      * @sa android.net.thread.ThreadNetworkController#scheduleMigration
      */
-    oneway void scheduleMigration(
+    void scheduleMigration(
         in byte[] pendingOpDatasetTlvs, in IOtStatusReceiver receiver);
+
+    /**
+     * Sets the country code.
+     *
+     * @param countryCode 2 byte country code (as defined in ISO 3166) to set.
+     * @param receiver the receiver to receive result of this operation
+     */
+    oneway void setCountryCode(in String countryCode, in IOtStatusReceiver receiver);
+
+    /**
+     * Configures the Border Router features.
+     *
+     * @param brConfig the border router's configuration
+     * @param receiver the status receiver
+     *
+     */
+    oneway void configureBorderRouter(
+        in BorderRouterConfigurationParcel brConfig, in IOtStatusReceiver receiver);
 
     // TODO: add Border Router APIs
 }
