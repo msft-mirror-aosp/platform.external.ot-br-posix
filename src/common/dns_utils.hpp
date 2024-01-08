@@ -34,6 +34,8 @@
 #ifndef OTBR_COMMON_DNS_UTILS_HPP_
 #define OTBR_COMMON_DNS_UTILS_HPP_
 
+#include "openthread-br/config.h"
+
 #include "common/types.hpp"
 
 /**
@@ -112,9 +114,9 @@ otbrError SplitFullServiceName(const std::string &aFullName, std::string &aType,
  *
  */
 otbrError SplitFullServiceInstanceName(const std::string &aFullName,
-                                       std::string &      aInstanceName,
-                                       std::string &      aType,
-                                       std::string &      aDomain);
+                                       std::string       &aInstanceName,
+                                       std::string       &aType,
+                                       std::string       &aDomain);
 
 /**
  * This function splits a full host name into components.

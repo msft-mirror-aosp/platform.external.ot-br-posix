@@ -140,45 +140,45 @@ char *OpenThreadClient::Execute(const char *aFormat, ...)
 {
     va_list args;
     int     ret;
-    char *  rval = nullptr;
+    char   *rval = nullptr;
     ssize_t count;
     size_t  rxLength = 0;
 
     DiscardRead();
 
     va_start(args, aFormat);
-    ret = vsnprintf(&mBuffer[1], sizeof(mBuffer) - 1, aFormat, args);
+    ret = vsnprintf(&mBuffer[1], sizeof(mBuffer) - 2, aFormat, args);
     va_end(args);
 
     if (ret < 0)
     {
         otbrLogErr("Failed to generate command: %s", strerror(errno));
+        ExitNow();
     }
-
-    mBuffer[0] = '\n';
-    ret++;
-
-    if (ret == sizeof(mBuffer))
+    if (static_cast<size_t>(ret) >= sizeof(mBuffer) - 2)
     {
         otbrLogErr("Command exceeds maximum limit: %d", kBufferSize);
+        ExitNow();
     }
 
-    mBuffer[ret] = '\n';
-    ret++;
+    mBuffer[0]       = '\n';
+    mBuffer[ret + 1] = '\n';
+    ret += 2;
 
     count = write(mSocket, mBuffer, ret);
 
-    if (count < ret)
+    if (count != ret)
     {
         mBuffer[ret] = '\0';
         otbrLogErr("Failed to send command: %s", mBuffer);
+        ExitNow();
     }
 
     for (int i = 0; i < mTimeout; ++i)
     {
         fd_set  readFdSet;
         timeval timeout = {0, 1000};
-        char *  done;
+        char   *done;
 
         FD_ZERO(&readFdSet);
         FD_SET(mSocket, &readFdSet);
@@ -195,7 +195,7 @@ char *OpenThreadClient::Execute(const char *aFormat, ...)
         rxLength += count;
 
         mBuffer[rxLength] = '\0';
-        done              = strstr(mBuffer, "Done\r\n");
+        done              = strstr(mBuffer, "Done\r\n> ");
 
         if (done != nullptr)
         {
@@ -218,8 +218,8 @@ char *OpenThreadClient::Read(const char *aResponse, int aTimeout)
 {
     ssize_t count    = 0;
     size_t  rxLength = 0;
-    char *  found;
-    char *  rval = nullptr;
+    char   *found;
+    char   *rval = nullptr;
 
     for (int i = 0; i < aTimeout; ++i)
     {
@@ -253,7 +253,7 @@ int OpenThreadClient::Scan(WpanNetworkInfo *aNetworks, int aLength)
     for (result = strtok(result, "\r\n"); result != nullptr && rval < aLength; result = strtok(nullptr, "\r\n"))
     {
         static const char kCliPrompt[] = "> ";
-        char *            cliPrompt;
+        char             *cliPrompt;
         int               matched;
         int               lqi;
 

@@ -34,6 +34,8 @@
 #ifndef OTBR_AGENT_APPLICATION_HPP_
 #define OTBR_AGENT_APPLICATION_HPP_
 
+#include "openthread-br/config.h"
+
 #include <atomic>
 #include <signal.h>
 #include <stdint.h>
@@ -62,6 +64,14 @@
 
 namespace otbr {
 
+#if OTBR_ENABLE_VENDOR_SERVER
+namespace vendor {
+
+class VendorServer;
+
+}
+#endif
+
 /**
  * @addtogroup border-router-agent
  *
@@ -85,12 +95,16 @@ public:
      * @param[in] aBackboneInterfaceName Name of the backbone network interface.
      * @param[in] aRadioUrls             The radio URLs (can be IEEE802.15.4 or TREL radio).
      * @param[in] aEnableAutoAttach      Whether or not to automatically attach to the saved network.
+     * @param[in] aRestListenAddress     Network address to listen on.
+     * @param[in] aRestListenPort        Network port to listen on.
      *
      */
-    explicit Application(const std::string &              aInterfaceName,
+    explicit Application(const std::string               &aInterfaceName,
                          const std::vector<const char *> &aBackboneInterfaceNames,
                          const std::vector<const char *> &aRadioUrls,
-                         bool                             aEnableAutoAttach);
+                         bool                             aEnableAutoAttach,
+                         const std::string               &aRestListenAddress,
+                         int                              aRestListenPort);
 
     /**
      * This method initializes the Application instance.
@@ -113,6 +127,73 @@ public:
      */
     otbrError Run(void);
 
+    /**
+     * Get the OpenThread controller object the application is using.
+     *
+     * @returns The OpenThread controller object.
+     */
+    Ncp::ControllerOpenThread &GetNcp(void) { return mNcp; }
+
+#if OTBR_ENABLE_BORDER_AGENT
+    /**
+     * Get the border agent the application is using.
+     *
+     * @returns The border agent.
+     */
+    BorderAgent &GetBorderAgent(void)
+    {
+        return mBorderAgent;
+    }
+#endif
+
+#if OTBR_ENABLE_BACKBONE_ROUTER
+    /**
+     * Get the backbone agent the application is using.
+     *
+     * @returns The backbone agent.
+     */
+    BackboneRouter::BackboneAgent &GetBackboneAgent(void)
+    {
+        return mBackboneAgent;
+    }
+#endif
+
+#if OTBR_ENABLE_OPENWRT
+    /**
+     * Get the UBus agent the application is using.
+     *
+     * @returns The UBus agent.
+     */
+    ubus::UBusAgent &GetUBusAgent(void)
+    {
+        return mUbusAgent;
+    }
+#endif
+
+#if OTBR_ENABLE_REST_SERVER
+    /**
+     * Get the rest web server the application is using.
+     *
+     * @returns The rest web server.
+     */
+    rest::RestWebServer &GetRestWebServer(void)
+    {
+        return mRestWebServer;
+    }
+#endif
+
+#if OTBR_ENABLE_DBUS_SERVER
+    /**
+     * Get the DBus agent the application is using.
+     *
+     * @returns The DBus agent.
+     */
+    DBus::DBusAgent &GetDBusAgent(void)
+    {
+        return mDBusAgent;
+    }
+#endif
+
 private:
     // Default poll timeout.
     static const struct timeval kPollTimeout;
@@ -123,7 +204,7 @@ private:
 #if __linux__
     otbr::Utils::InfraLinkSelector mInfraLinkSelector;
 #endif
-    const char *              mBackboneInterfaceName;
+    const char               *mBackboneInterfaceName;
     Ncp::ControllerOpenThread mNcp;
 #if OTBR_ENABLE_BORDER_AGENT
     BorderAgent mBorderAgent;
@@ -141,7 +222,7 @@ private:
     DBus::DBusAgent mDBusAgent;
 #endif
 #if OTBR_ENABLE_VENDOR_SERVER
-    vendor::VendorServer mVendorServer;
+    std::shared_ptr<vendor::VendorServer> mVendorServer;
 #endif
 
     static std::atomic_bool sShouldTerminate;

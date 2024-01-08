@@ -29,6 +29,7 @@
 #include <map>
 #include <string.h>
 
+#include "common/api_strings.hpp"
 #include "common/code_utils.hpp"
 #include "dbus/client/client_error.hpp"
 #include "dbus/client/thread_api_dbus.hpp"
@@ -113,8 +114,8 @@ exit:
 }
 
 DBusHandlerResult ThreadApiDBus::sDBusMessageFilter(DBusConnection *aConnection,
-                                                    DBusMessage *   aMessage,
-                                                    void *          aThreadApiDBus)
+                                                    DBusMessage    *aMessage,
+                                                    void           *aThreadApiDBus)
 {
     ThreadApiDBus *api = static_cast<ThreadApiDBus *>(aThreadApiDBus);
 
@@ -232,13 +233,13 @@ ClientError ThreadApiDBus::PermitUnsecureJoin(uint16_t aPort, uint32_t aSeconds)
     return CallDBusMethodSync(OTBR_DBUS_PERMIT_UNSECURE_JOIN_METHOD, std::tie(aPort, aSeconds));
 }
 
-ClientError ThreadApiDBus::Attach(const std::string &         aNetworkName,
+ClientError ThreadApiDBus::Attach(const std::string          &aNetworkName,
                                   uint16_t                    aPanId,
                                   uint64_t                    aExtPanId,
                                   const std::vector<uint8_t> &aNetworkKey,
                                   const std::vector<uint8_t> &aPSKc,
                                   uint32_t                    aChannelMask,
-                                  const OtResultHandler &     aHandler)
+                                  const OtResultHandler      &aHandler)
 {
     ClientError error = ClientError::ERROR_NONE;
     const auto  args  = std::tie(aNetworkKey, aPanId, aNetworkName, aExtPanId, aPSKc, aChannelMask);
@@ -385,12 +386,12 @@ ClientError ThreadApiDBus::Reset(void)
     return CallDBusMethodSync(OTBR_DBUS_RESET_METHOD);
 }
 
-ClientError ThreadApiDBus::JoinerStart(const std::string &    aPskd,
-                                       const std::string &    aProvisioningUrl,
-                                       const std::string &    aVendorName,
-                                       const std::string &    aVendorModel,
-                                       const std::string &    aVendorSwVersion,
-                                       const std::string &    aVendorData,
+ClientError ThreadApiDBus::JoinerStart(const std::string     &aPskd,
+                                       const std::string     &aProvisioningUrl,
+                                       const std::string     &aVendorName,
+                                       const std::string     &aVendorModel,
+                                       const std::string     &aVendorSwVersion,
+                                       const std::string     &aVendorData,
                                        const OtResultHandler &aHandler)
 {
     ClientError error = ClientError::ERROR_NONE;
@@ -457,19 +458,24 @@ ClientError ThreadApiDBus::RemoveExternalRoute(const Ip6Prefix &aPrefix)
     return CallDBusMethodSync(OTBR_DBUS_REMOVE_EXTERNAL_ROUTE_METHOD, std::tie(aPrefix));
 }
 
+ClientError ThreadApiDBus::SetNat64Enabled(bool aEnabled)
+{
+    return CallDBusMethodSync(OTBR_DBUS_SET_NAT64_ENABLED_METHOD, std::tie(aEnabled));
+}
+
 ClientError ThreadApiDBus::SetMeshLocalPrefix(const std::array<uint8_t, OTBR_IP6_PREFIX_SIZE> &aPrefix)
 {
     return SetProperty(OTBR_DBUS_PROPERTY_MESH_LOCAL_PREFIX, aPrefix);
 }
 
-ClientError ThreadApiDBus::SetLegacyUlaPrefix(const std::array<uint8_t, OTBR_IP6_PREFIX_SIZE> &aPrefix)
-{
-    return SetProperty(OTBR_DBUS_PROPERTY_LEGACY_ULA_PREFIX, aPrefix);
-}
-
 ClientError ThreadApiDBus::SetActiveDatasetTlvs(const std::vector<uint8_t> &aDataset)
 {
     return SetProperty(OTBR_DBUS_PROPERTY_ACTIVE_DATASET_TLVS, aDataset);
+}
+
+ClientError ThreadApiDBus::SetFeatureFlagListData(const std::vector<uint8_t> &aFeatureFlagListData)
+{
+    return SetProperty(OTBR_DBUS_PROPERTY_FEATURE_FLAG_LIST_DATA, aFeatureFlagListData);
 }
 
 ClientError ThreadApiDBus::SetLinkMode(const LinkModeConfig &aConfig)
@@ -541,6 +547,11 @@ ClientError ThreadApiDBus::GetIp6Counters(IpCounters &aCounters)
 ClientError ThreadApiDBus::GetSupportedChannelMask(uint32_t &aChannelMask)
 {
     return GetProperty(OTBR_DBUS_PROPERTY_SUPPORTED_CHANNEL_MASK, aChannelMask);
+}
+
+ClientError ThreadApiDBus::GetPreferredChannelMask(uint32_t &aChannelMask)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_PREFERRED_CHANNEL_MASK, aChannelMask);
 }
 
 ClientError ThreadApiDBus::GetRloc16(uint16_t &aRloc16)
@@ -628,6 +639,16 @@ ClientError ThreadApiDBus::GetActiveDatasetTlvs(std::vector<uint8_t> &aDataset)
     return GetProperty(OTBR_DBUS_PROPERTY_ACTIVE_DATASET_TLVS, aDataset);
 }
 
+ClientError ThreadApiDBus::GetPendingDatasetTlvs(std::vector<uint8_t> &aDataset)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_PENDING_DATASET_TLVS, aDataset);
+}
+
+ClientError ThreadApiDBus::GetFeatureFlagListData(std::vector<uint8_t> &aFeatureFlagListData)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_FEATURE_FLAG_LIST_DATA, aFeatureFlagListData);
+}
+
 ClientError ThreadApiDBus::GetRadioRegion(std::string &aRadioRegion)
 {
     return GetProperty(OTBR_DBUS_PROPERTY_RADIO_REGION, aRadioRegion);
@@ -643,12 +664,42 @@ ClientError ThreadApiDBus::GetMdnsTelemetryInfo(MdnsTelemetryInfo &aMdnsTelemetr
     return GetProperty(OTBR_DBUS_PROPERTY_MDNS_TELEMETRY_INFO, aMdnsTelemetryInfo);
 }
 
+ClientError ThreadApiDBus::GetNat64State(Nat64ComponentState &aState)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_NAT64_STATE, aState);
+}
+
+ClientError ThreadApiDBus::GetNat64Mappings(std::vector<Nat64AddressMapping> &aMappings)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_NAT64_MAPPINGS, aMappings);
+}
+
+ClientError ThreadApiDBus::GetNat64ProtocolCounters(Nat64ProtocolCounters &aCounters)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_NAT64_PROTOCOL_COUNTERS, aCounters);
+}
+
+ClientError ThreadApiDBus::GetNat64ErrorCounters(Nat64ErrorCounters &aCounters)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_NAT64_ERROR_COUNTERS, aCounters);
+}
+
 #if OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
 ClientError ThreadApiDBus::GetDnssdCounters(DnssdCounters &aDnssdCounters)
 {
     return GetProperty(OTBR_DBUS_PROPERTY_DNSSD_COUNTERS, aDnssdCounters);
 }
 #endif
+
+ClientError ThreadApiDBus::GetTelemetryData(std::vector<uint8_t> &aTelemetryData)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_TELEMETRY_DATA, aTelemetryData);
+}
+
+ClientError ThreadApiDBus::GetCapabilities(std::vector<uint8_t> &aCapabilities)
+{
+    return GetProperty(OTBR_DBUS_PROPERTY_CAPABILITIES, aCapabilities);
+}
 
 std::string ThreadApiDBus::GetInterfaceName(void)
 {
@@ -682,7 +733,7 @@ ClientError ThreadApiDBus::CallDBusMethodAsync(const std::string &aMethodName, D
     UniqueDBusMessage message(dbus_message_new_method_call((OTBR_DBUS_SERVER_PREFIX + mInterfaceName).c_str(),
                                                            (OTBR_DBUS_OBJECT_PREFIX + mInterfaceName).c_str(),
                                                            OTBR_DBUS_THREAD_INTERFACE, aMethodName.c_str()));
-    DBusPendingCall * pending = nullptr;
+    DBusPendingCall  *pending = nullptr;
 
     VerifyOrExit(message != nullptr, ret = ClientError::OT_ERROR_FAILED);
     VerifyOrExit(dbus_connection_send_with_reply(mConnection, message.get(), &pending, DBUS_TIMEOUT_USE_DEFAULT) ==
@@ -719,8 +770,8 @@ exit:
 }
 
 template <typename ArgType>
-ClientError ThreadApiDBus::CallDBusMethodAsync(const std::string &           aMethodName,
-                                               const ArgType &               aArgs,
+ClientError ThreadApiDBus::CallDBusMethodAsync(const std::string            &aMethodName,
+                                               const ArgType                &aArgs,
                                                DBusPendingCallNotifyFunction aFunction)
 {
     ClientError ret = ClientError::ERROR_NONE;
@@ -728,7 +779,7 @@ ClientError ThreadApiDBus::CallDBusMethodAsync(const std::string &           aMe
     DBus::UniqueDBusMessage message(dbus_message_new_method_call((OTBR_DBUS_SERVER_PREFIX + mInterfaceName).c_str(),
                                                                  (OTBR_DBUS_OBJECT_PREFIX + mInterfaceName).c_str(),
                                                                  OTBR_DBUS_THREAD_INTERFACE, aMethodName.c_str()));
-    DBusPendingCall *       pending = nullptr;
+    DBusPendingCall        *pending = nullptr;
 
     VerifyOrExit(message != nullptr, ret = ClientError::ERROR_DBUS);
     VerifyOrExit(DBus::TupleToDBusMessage(*message, aArgs) == OTBR_ERROR_NONE, ret = ClientError::ERROR_DBUS);

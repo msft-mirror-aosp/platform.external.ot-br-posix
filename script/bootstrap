@@ -33,7 +33,9 @@
 # shellcheck source=script/_initrc
 . "$(dirname "$0")"/_initrc
 
-NAT64_SERVICE="${NAT64_SERVICE:-tayga}"
+NAT64_SERVICE="${NAT64_SERVICE:-openthread}"
+
+FIREWALL="${FIREWALL:-1}"
 
 install_packages_apt()
 {
@@ -56,22 +58,27 @@ install_packages_apt()
 
     # mDNS
     sudo apt-get install --no-install-recommends -y libavahi-client3 libavahi-common-dev libavahi-client-dev avahi-daemon
-    (MDNS_RESPONDER_SOURCE_NAME=mDNSResponder-1310.80.1 \
+    (MDNS_RESPONDER_SOURCE_NAME=mDNSResponder-1790.80.10 \
+        && MDNS_RESPONDER_PATCH_PATH=$(realpath "$(dirname "$0")"/../third_party/mDNSResponder) \
         && cd /tmp \
-        && wget -4 --no-check-certificate https://opensource.apple.com/tarballs/mDNSResponder/$MDNS_RESPONDER_SOURCE_NAME.tar.gz \
-        && tar xvf $MDNS_RESPONDER_SOURCE_NAME.tar.gz \
-        && cd /tmp/$MDNS_RESPONDER_SOURCE_NAME/Clients \
-        && sed -i '/#include <ctype.h>/a #include <stdarg.h>' dns-sd.c \
-        && sed -i '/#include <ctype.h>/a #include <sys/param.h>' dns-sd.c \
-        && cd /tmp/$MDNS_RESPONDER_SOURCE_NAME/mDNSPosix \
-        && make os=linux && sudo make install os=linux)
+        && wget --no-check-certificate https://github.com/apple-oss-distributions/mDNSResponder/archive/refs/tags/$MDNS_RESPONDER_SOURCE_NAME.tar.gz \
+        && mkdir -p $MDNS_RESPONDER_SOURCE_NAME \
+        && tar xvf $MDNS_RESPONDER_SOURCE_NAME.tar.gz -C $MDNS_RESPONDER_SOURCE_NAME --strip-components=1 \
+        && cd /tmp/"$MDNS_RESPONDER_SOURCE_NAME" \
+        && (
+            for patch in "$MDNS_RESPONDER_PATCH_PATH"/*.patch; do
+                patch -p1 <"$patch"
+            done
+        ) \
+        && cd mDNSPosix \
+        && make os=linux tls=no && sudo make install os=linux tls=no)
 
     # Boost
     sudo apt-get install --no-install-recommends -y libboost-dev libboost-filesystem-dev libboost-system-dev
 
     # nat64
     without NAT64 || {
-        "$NAT64_SERVICE" != "tayga" || sudo apt-get install --no-install-recommends -y tayga
+        [ "$NAT64_SERVICE" != "tayga" ] || sudo apt-get install --no-install-recommends -y tayga
         sudo apt-get install --no-install-recommends -y iptables
     }
 
@@ -99,7 +106,7 @@ install_packages_apt()
     sudo apt-get install --no-install-recommends -y libjsoncpp-dev
 
     # reference device
-    without REFERENCE_DEVICE || sudo apt-get install --no-install-recommends -y radvd dnsutils
+    without REFERENCE_DEVICE || sudo apt-get install --no-install-recommends -y radvd dnsutils avahi-utils
 
     # backbone-router
     without BACKBONE_ROUTER || sudo apt-get install --no-install-recommends -y libnetfilter-queue1 libnetfilter-queue-dev
@@ -109,6 +116,9 @@ install_packages_apt()
 
     # firewall
     sudo apt-get install -y iptables ipset
+
+    # protobuf compiler
+    sudo apt-get install -y libprotobuf-dev protobuf-compiler
 }
 
 install_packages_opkg()
@@ -128,10 +138,11 @@ install_packages_rpm()
     sudo $PM install -y dbus-devel
     sudo $PM install -y avahi avahi-devel
     sudo $PM install -y boost-devel boost-filesystem boost-system
-    "$NAT64_SERVICE" != "tayga" || sudo $PM install -y tayga
+    [ "$NAT64_SERVICE" != "tayga" ] || sudo $PM install -y tayga
     sudo $PM install -y iptables
     sudo $PM install -y jsoncpp-devel
     sudo $PM install -y wget
+    sudo $PM install -y protobuf protobuf-devel
 }
 
 install_packages_brew()
