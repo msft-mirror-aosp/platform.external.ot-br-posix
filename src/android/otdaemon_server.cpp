@@ -624,11 +624,14 @@ Status OtDaemonServer::configureBorderRouter(const BorderRouterConfigurationParc
                           message = "failed to initialize border routing");
             SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
                           message = "failed to enable border routing");
+            // TODO: b/320836258 - Make BBR independently configurable
+            otBackboneRouterSetEnabled(GetOtInstance(), true /* aEnabled */);
         }
         else
         {
             SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
                           message = "failed to disable border routing");
+            otBackboneRouterSetEnabled(GetOtInstance(), false /* aEnabled */);
         }
     }
 
