@@ -31,6 +31,7 @@ package com.android.server.thread.openthread;
 import android.os.ParcelFileDescriptor;
 
 import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
+import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.IOtDaemonCallback;
@@ -152,4 +153,13 @@ oneway interface IOtDaemon {
      */
     oneway void configureBorderRouter(
         in BorderRouterConfigurationParcel brConfig, in IOtStatusReceiver receiver);
+
+    /**
+     * Gets the supported and preferred channel masks.
+     *
+     * @param receiver the receiver to receive result of this operation
+     */
+    void getChannelMasks(in IChannelMasksReceiver receiver);
+
+    // TODO: add Border Router APIs
 }
