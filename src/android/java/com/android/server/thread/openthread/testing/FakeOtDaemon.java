@@ -28,6 +28,9 @@
 
 package com.android.server.thread.openthread.testing;
 
+import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_DISABLED;
+import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_ENABLED;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Handler;
@@ -60,6 +63,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
 
     private final Handler mHandler;
     private final OtDaemonState mState;
+    private int mThreadEnabled = OT_STATE_ENABLED;
 
     @Nullable private DeathRecipient mDeathRecipient;
 
@@ -106,8 +110,26 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     }
 
     @Override
-    public void initialize(ParcelFileDescriptor tunFd) throws RemoteException {
+    public void initialize(ParcelFileDescriptor tunFd, boolean enabled) throws RemoteException {
         mTunFd = tunFd;
+        mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
+    }
+
+    @Override
+    public void setThreadEnabled(boolean enabled, IOtStatusReceiver receiver) {
+        mHandler.post(
+                () -> {
+                    mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
+                    try {
+                        receiver.onSuccess();
+                    } catch (RemoteException e) {
+                        throw new AssertionError(e);
+                    }
+                });
+    }
+
+    public int getEnabledState() {
+        return mThreadEnabled;
     }
 
     /**
