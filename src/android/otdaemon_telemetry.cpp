@@ -649,6 +649,7 @@ void RetrieveAndPushAtoms(otInstance *otInstance)
     ThreadnetworkTopoEntryRepeated     topoEntryRepeated;
     ThreadnetworkDeviceInfoReported    deviceInfoReported;
 
+    otbrLogInfo("Try to push threadnetwork ATOMs.");
     if (RetrieveTelemetryAtom(otInstance, nullptr, telemetryDataReported, topoEntryRepeated, deviceInfoReported) !=
         OTBR_ERROR_NONE)
     {
@@ -666,6 +667,7 @@ void RetrieveAndPushAtoms(otInstance *otInstance)
     {
         otbrLogWarning("Failed to push ThreadnetworkDeviceInfoReported");
     }
+    otbrLogInfo("Pushed threadnetwork ATOMs.");
 }
 } // namespace Android
 } // namespace otbr
