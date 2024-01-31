@@ -62,4 +62,12 @@ oneway interface IOtDaemonCallback {
      *                Otherwise, this multicast address is being removed
      */
     void onMulticastForwardingAddressChanged(in byte[] ipv6Address, boolean isAdded);
+
+    /**
+     * Called when Thread enabled state has changed. Valid values are STATE_* defined in
+     * {@link ThreadNetworkController}.
+     *
+     * @param enabled {@code true} if Thread is enabled, {@code false} if Thread is disabled.
+     */
+    void onThreadEnabledChanged(in int enabled);
 }
