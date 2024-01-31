@@ -90,9 +90,6 @@ cc_defaults {
             cflags: [
                 // Optimize for debugging
                 "-Og",
-
-                // Enable daemon CLI for debugging
-                "-DOPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE=1",
             ]
         }
     },
