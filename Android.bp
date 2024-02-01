@@ -90,9 +90,6 @@ cc_defaults {
             cflags: [
                 // Optimize for debugging
                 "-Og",
-
-                // Enable daemon CLI for debugging
-                "-DOPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE=1",
             ]
         }
     },
@@ -125,6 +122,7 @@ cc_defaults {
     cflags: [
         "-Wall",
         "-Wextra",
+        "-Wno-unused-function",
 
         // The HAL client implementation requires features which are
         // available on only 31+, but it's guaranteed that ot-daemon
