@@ -318,9 +318,18 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
 
 Status OtDaemonServer::initialize(const ScopedFileDescriptor &aTunFd, const bool enabled)
 {
-    otbrLogDebug("OT daemon is initialized by the binder client (tunFd=%d)", aTunFd.get());
-    mTunFd         = aTunFd.dup();
-    mThreadEnabled = enabled ? IOtDaemon::OT_STATE_ENABLED : IOtDaemon::OT_STATE_DISABLED;
+    otbrLogInfo("OT daemon is initialized by system server (tunFd=%d, enabled=%s)",
+            aTunFd.get(), enabled ? "true" : "false");
+    mTunFd = aTunFd.dup();
+
+    if (enabled)
+    {
+        enableThread(nullptr /* aReceiver */);
+    }
+    else
+    {
+        updateThreadEnabledState(enabled, nullptr /* Receiver */);
+    }
 
     return Status::ok();
 }
@@ -328,7 +337,10 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor &aTunFd, const bool
 void OtDaemonServer::updateThreadEnabledState(const int enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     mThreadEnabled = enabled;
-    aReceiver->onSuccess();
+    if (aReceiver != nullptr)
+    {
+        aReceiver->onSuccess();
+    }
 
     if (mCallback != nullptr)
     {
