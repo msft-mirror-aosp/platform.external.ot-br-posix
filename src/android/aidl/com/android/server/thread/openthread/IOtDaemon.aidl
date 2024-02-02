@@ -46,9 +46,17 @@ oneway interface IOtDaemon {
      */
     const String TUN_IF_NAME = "thread-wpan";
 
+    /** Thread radio is disabled. */
+    const int OT_STATE_DISABLED = 0;
+    /** Thread radio is enabled. */
+    const int OT_STATE_ENABLED = 1;
+    /** Thread radio is being disabled. */
+    const int OT_STATE_DISABLING = 2;
+
     // The error code below MUST be consistent with openthread/include/openthread/error.h
     // TODO: add a unit test to make sure that values are always match
     enum ErrorCode {
+        OT_ERROR_THREAD_DISABLED = -2,
         // TODO: Add this error code to OpenThread and make sure `otDatasetSetActiveTlvs()` returns
         // this error code when an unsupported channel is provided
         OT_ERROR_UNSUPPORTED_CHANNEL = -1,
@@ -65,13 +73,26 @@ oneway interface IOtDaemon {
     }
 
     /**
-     * Initializes this service with Thread tunnel interface FD and stack callback.
+     * Initializes this service with Thread tunnel interface FD.
      *
      * @param tunFd the Thread tunnel interface FD which can be used to transmit/receive
      *              packets to/from Thread PAN
-     * @param callback the cllback for receiving all Thread stack events
+     * @param enabled the Thead enabled state from Persistent Settings
      */
-    void initialize(in ParcelFileDescriptor tunFd);
+    void initialize(in ParcelFileDescriptor tunFd, in boolean enabled);
+
+    /**
+     * Enables/disables Thread.
+     *
+     * When disables Thread, it will first detach from the network without erasing the
+     * active dataset, and then disable Thread radios.
+     *
+     * If called with same Thread enabled state as current state, the method succeeds with
+     * no-op.
+     *
+     * @sa android.net.thread.ThreadNetworkController#setThreadEnabled
+     */
+    void setThreadEnabled(in boolean enabled, in IOtStatusReceiver receiver);
 
     /**
      * Registers a callback to receive OpenThread daemon state changes.
@@ -109,6 +130,14 @@ oneway interface IOtDaemon {
      */
     void scheduleMigration(
         in byte[] pendingOpDatasetTlvs, in IOtStatusReceiver receiver);
+
+    /**
+     * Sets the country code.
+     *
+     * @param countryCode 2 byte country code (as defined in ISO 3166) to set.
+     * @param receiver the receiver to receive result of this operation
+     */
+    oneway void setCountryCode(in String countryCode, in IOtStatusReceiver receiver);
 
     /**
      * Configures the Border Router features.
