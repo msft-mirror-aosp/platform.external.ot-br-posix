@@ -28,6 +28,9 @@
 
 package com.android.server.thread.openthread.testing;
 
+import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_DISABLED;
+import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_ENABLED;
+
 import static com.google.common.io.BaseEncoding.base16;
 import static com.google.common.truth.Truth.assertThat;
 
@@ -41,6 +44,7 @@ import android.os.test.TestLooper;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
 
+import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.OtDaemonState;
@@ -81,6 +85,7 @@ public final class FakeOtDaemonTest {
     private FakeOtDaemon mFakeOtDaemon;
     private TestLooper mTestLooper;
     @Mock private ParcelFileDescriptor mMockTunFd;
+    @Mock private INsdPublisher mMockNsdPublisher;
 
     @Before
     public void setUp() {
@@ -92,14 +97,21 @@ public final class FakeOtDaemonTest {
 
     @Test
     public void initialize_succeed_tunFdIsSet() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd);
+        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher);
 
         assertThat(mFakeOtDaemon.getTunFd()).isEqualTo(mMockTunFd);
     }
 
     @Test
+    public void initialize_succeed_NsdPublisherIsSet() throws Exception {
+        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher);
+
+        assertThat(mFakeOtDaemon.getNsdPublisher()).isEqualTo(mMockNsdPublisher);
+    }
+
+    @Test
     public void registerStateCallback_noStateChange_callbackIsInvoked() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd);
+        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher);
         final AtomicReference<OtDaemonState> stateRef = new AtomicReference<>();
         final AtomicLong listenerIdRef = new AtomicLong();
 
@@ -175,5 +187,24 @@ public final class FakeOtDaemonTest {
         assertThat(state.deviceRole).isEqualTo(FakeOtDaemon.OT_DEVICE_ROLE_LEADER);
         assertThat(state.activeDatasetTlvs).isEqualTo(DEFAULT_ACTIVE_DATASET_TLVS);
         assertThat(state.multicastForwardingEnabled).isTrue();
+    }
+
+    @Test
+    public void setThreadEnabled_disableThread_succeed() throws Exception {
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
+
+        final AtomicBoolean succeedRef = new AtomicBoolean(false);
+        mFakeOtDaemon.setThreadEnabled(
+                false,
+                new IOtStatusReceiver.Default() {
+                    @Override
+                    public void onSuccess() {
+                        succeedRef.set(true);
+                    }
+                });
+        mTestLooper.dispatchAll();
+
+        assertThat(succeedRef.get()).isTrue();
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_DISABLED);
     }
 }

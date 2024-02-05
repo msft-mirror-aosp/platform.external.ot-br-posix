@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2023, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,18 +26,13 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <fuzzbinder/libbinder_ndk_driver.h>
-#include <fuzzer/FuzzedDataProvider.h>
+package com.android.server.thread.openthread;
 
-#include "otdaemon_server.hpp"
-
-using android::fuzzService;
-using otbr::Android::OtDaemonServer;
-
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
-{
-    otbr::Application app("", {}, {}, false, "", 0);
-    auto              service = ndk::SharedRefBase::make<OtDaemonServer>(app);
-    fuzzService(service->asBinder().get(), FuzzedDataProvider(data, size));
-    return 0;
+/**
+ * Receives the status of an mDNS operation which may fail with an error code from
+ * {@link NsdManager}.
+ */
+oneway interface INsdStatusReceiver {
+    void onSuccess();
+    void onError(int errorCode);
 }

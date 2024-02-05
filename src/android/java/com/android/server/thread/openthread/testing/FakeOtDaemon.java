@@ -28,6 +28,9 @@
 
 package com.android.server.thread.openthread.testing;
 
+import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_DISABLED;
+import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_ENABLED;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Handler;
@@ -37,6 +40,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 
 import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
+import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemon;
 import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.IOtStatusReceiver;
@@ -60,10 +64,13 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
 
     private final Handler mHandler;
     private final OtDaemonState mState;
+    private int mThreadEnabled = OT_STATE_ENABLED;
 
     @Nullable private DeathRecipient mDeathRecipient;
 
     @Nullable private ParcelFileDescriptor mTunFd;
+
+    @NonNull private INsdPublisher mNsdPublisher;
 
     @Nullable private IOtDaemonCallback mCallback;
 
@@ -106,8 +113,28 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     }
 
     @Override
-    public void initialize(ParcelFileDescriptor tunFd) throws RemoteException {
+    public void initialize(ParcelFileDescriptor tunFd, boolean enabled, INsdPublisher nsdPublisher)
+            throws RemoteException {
         mTunFd = tunFd;
+        mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
+        mNsdPublisher = nsdPublisher;
+    }
+
+    @Override
+    public void setThreadEnabled(boolean enabled, IOtStatusReceiver receiver) {
+        mHandler.post(
+                () -> {
+                    mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
+                    try {
+                        receiver.onSuccess();
+                    } catch (RemoteException e) {
+                        throw new AssertionError(e);
+                    }
+                });
+    }
+
+    public int getEnabledState() {
+        return mThreadEnabled;
     }
 
     /**
@@ -117,6 +144,15 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable
     public ParcelFileDescriptor getTunFd() {
         return mTunFd;
+    }
+
+    /**
+     * Returns the INsdPublisher sent to OT daemon or {@code null} if {@link #initialize} is never
+     * called.
+     */
+    @Nullable
+    public INsdPublisher getNsdPublisher() {
+        return mNsdPublisher;
     }
 
     @Override
