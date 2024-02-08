@@ -34,6 +34,7 @@ import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.IOtDaemonCallback;
+import com.android.server.thread.openthread.INsdPublisher;
 
 /**
  * The OpenThread daemon service which provides access to the core Thread stack for
@@ -78,8 +79,11 @@ oneway interface IOtDaemon {
      * @param tunFd the Thread tunnel interface FD which can be used to transmit/receive
      *              packets to/from Thread PAN
      * @param enabled the Thead enabled state from Persistent Settings
+     * @param nsdPublisher the INsdPublisher which can be used for mDNS advertisement/discovery
+     *                    on AIL by {@link NsdManager}
      */
-    void initialize(in ParcelFileDescriptor tunFd, in boolean enabled);
+    void initialize(in ParcelFileDescriptor tunFd, in boolean enabled,
+                    in INsdPublisher nsdPublisher);
 
     /**
      * Enables/disables Thread.
@@ -148,6 +152,4 @@ oneway interface IOtDaemon {
      */
     oneway void configureBorderRouter(
         in BorderRouterConfigurationParcel brConfig, in IOtStatusReceiver receiver);
-
-    // TODO: add Border Router APIs
 }
