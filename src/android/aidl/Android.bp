@@ -27,6 +27,7 @@
 //
 
 package {
+    default_team: "trendy_team_fwk_thread_network",
     default_applicable_licenses: ["external_ot-br-posix_license"],
 }
 
@@ -61,5 +62,5 @@ aidl_interface {
         "//external/ot-br-posix:__subpackages__",
         "//packages/modules/ThreadNetwork/service:__subpackages__",
         "//system/tools/aidl:__subpackages__",
-    ]
+    ],
 }
