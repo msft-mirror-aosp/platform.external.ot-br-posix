@@ -34,6 +34,8 @@
 #ifndef OTBR_AGENT_TREL_DNSSD_HPP_
 #define OTBR_AGENT_TREL_DNSSD_HPP_
 
+#include "openthread-br/config.h"
+
 #if OTBR_ENABLE_TREL
 
 #include <assert.h>
@@ -118,9 +120,9 @@ private:
 
     struct RegisterInfo
     {
-        uint16_t                               mPort = 0;
-        std::vector<Mdns::Publisher::TxtEntry> mTxtEntries;
-        std::string                            mInstanceName;
+        uint16_t                 mPort = 0;
+        Mdns::Publisher::TxtData mTxtData;
+        std::string              mInstanceName;
 
         bool IsValid(void) const { return mPort > 0; }
         bool IsPublished(void) const { return !mInstanceName.empty(); }
@@ -162,7 +164,7 @@ private:
     void        UnpublishTrelService(void);
     static void HandlePublishTrelServiceError(otbrError aError);
     static void HandleUnpublishTrelServiceError(otbrError aError);
-    void        OnTrelServiceInstanceResolved(const std::string &                            aType,
+    void        OnTrelServiceInstanceResolved(const std::string                             &aType,
                                               const Mdns::Publisher::DiscoveredInstanceInfo &aInstanceInfo);
     void        OnTrelServiceInstanceAdded(const Mdns::Publisher::DiscoveredInstanceInfo &aInstanceInfo);
     void        OnTrelServiceInstanceRemoved(const std::string &aInstanceName);
@@ -172,7 +174,7 @@ private:
     void     RemoveAllPeers(void);
     uint16_t CountDuplicatePeers(const Peer &aPeer);
 
-    Mdns::Publisher &          mPublisher;
+    Mdns::Publisher           &mPublisher;
     Ncp::ControllerOpenThread &mNcp;
     TaskRunner                 mTaskRunner;
     std::string                mTrelNetif;

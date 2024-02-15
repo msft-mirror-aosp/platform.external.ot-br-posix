@@ -34,6 +34,8 @@
 #ifndef OTBR_AGENT_BORDER_AGENT_HPP_
 #define OTBR_AGENT_BORDER_AGENT_HPP_
 
+#include "openthread-br/config.h"
+
 #if !(OTBR_ENABLE_MDNS_AVAHI || OTBR_ENABLE_MDNS_MDNSSD || OTBR_ENABLE_MDNS_MOJO)
 #error "Border Agent feature requires at least one `OTBR_MDNS` implementation"
 #endif
@@ -112,48 +114,6 @@ public:
     Mdns::Publisher &GetPublisher() { return *mPublisher; }
 
 private:
-    enum : uint8_t
-    {
-        kConnectionModeDisabled = 0,
-        kConnectionModePskc     = 1,
-        kConnectionModePskd     = 2,
-        kConnectionModeVendor   = 3,
-        kConnectionModeX509     = 4,
-    };
-
-    enum : uint8_t
-    {
-        kThreadIfStatusNotInitialized = 0,
-        kThreadIfStatusInitialized    = 1,
-        kThreadIfStatusActive         = 2,
-    };
-
-    enum : uint8_t
-    {
-        kAvailabilityInfrequent = 0,
-        kAvailabilityHigh       = 1,
-    };
-
-    struct StateBitmap
-    {
-        uint32_t mConnectionMode : 3;
-        uint32_t mThreadIfStatus : 2;
-        uint32_t mAvailability : 2;
-        uint32_t mBbrIsActive : 1;
-        uint32_t mBbrIsPrimary : 1;
-
-        StateBitmap(void)
-            : mConnectionMode(0)
-            , mThreadIfStatus(0)
-            , mAvailability(0)
-            , mBbrIsActive(0)
-            , mBbrIsPrimary(0)
-        {
-        }
-
-        uint32_t ToUint32(void) const;
-    };
-
     void Start(void);
     void Stop(void);
     void HandleMdnsState(Mdns::Publisher::State aState);
@@ -171,7 +131,7 @@ private:
     std::string GetAlternativeServiceInstanceName() const;
 
     otbr::Ncp::ControllerOpenThread &mNcp;
-    Mdns::Publisher *                mPublisher;
+    Mdns::Publisher                 *mPublisher;
 
 #if OTBR_ENABLE_DBUS_SERVER
     std::map<std::string, std::vector<uint8_t>> mMeshCopTxtUpdate;

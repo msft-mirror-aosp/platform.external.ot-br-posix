@@ -34,6 +34,8 @@
 #ifndef OTBR_DBUS_DBUS_OBJECT_HPP_
 #define OTBR_DBUS_DBUS_OBJECT_HPP_
 
+#include "openthread-br/config.h"
+
 #ifndef OTBR_LOG_TAG
 #define OTBR_LOG_TAG "DBUS"
 #endif
@@ -95,8 +97,8 @@ public:
      * @param[in] aHandler        The method handler.
      *
      */
-    void RegisterMethod(const std::string &      aInterfaceName,
-                        const std::string &      aMethodName,
+    void RegisterMethod(const std::string       &aInterfaceName,
+                        const std::string       &aMethodName,
                         const MethodHandlerType &aHandler);
 
     /**
@@ -107,8 +109,8 @@ public:
      * @param[in] aHandler        The method handler.
      *
      */
-    virtual void RegisterGetPropertyHandler(const std::string &        aInterfaceName,
-                                            const std::string &        aPropertyName,
+    virtual void RegisterGetPropertyHandler(const std::string         &aInterfaceName,
+                                            const std::string         &aPropertyName,
                                             const PropertyHandlerType &aHandler);
 
     /**
@@ -119,8 +121,8 @@ public:
      * @param[in] aHandler        The method handler.
      *
      */
-    virtual void RegisterSetPropertyHandler(const std::string &        aInterfaceName,
-                                            const std::string &        aPropertyName,
+    virtual void RegisterSetPropertyHandler(const std::string         &aInterfaceName,
+                                            const std::string         &aPropertyName,
                                             const PropertyHandlerType &aHandler);
 
     /**
@@ -135,8 +137,8 @@ public:
      *
      */
     template <typename... FieldTypes>
-    otbrError Signal(const std::string &              aInterfaceName,
-                     const std::string &              aSignalName,
+    otbrError Signal(const std::string               &aInterfaceName,
+                     const std::string               &aSignalName,
                      const std::tuple<FieldTypes...> &aArgs)
     {
         UniqueDBusMessage signalMsg = NewSignalMessage(aInterfaceName, aSignalName);
@@ -165,7 +167,7 @@ public:
     template <typename ValueType>
     otbrError SignalPropertyChanged(const std::string &aInterfaceName,
                                     const std::string &aPropertyName,
-                                    const ValueType &  aValue)
+                                    const ValueType   &aValue)
     {
         UniqueDBusMessage signalMsg = NewSignalMessage(DBUS_INTERFACE_PROPERTIES, DBUS_PROPERTIES_CHANGED_SIGNAL);
         DBusMessageIter   iter, subIter, dictEntryIter;
@@ -212,6 +214,12 @@ public:
      */
     virtual ~DBusObject(void);
 
+    /**
+     * Sends all outgoing messages, blocks until the message queue is empty.
+     *
+     */
+    void Flush(void);
+
 private:
     void GetAllPropertiesMethodHandler(DBusRequest &aRequest);
     void GetPropertyMethodHandler(DBusRequest &aRequest);
@@ -225,7 +233,7 @@ private:
     std::unordered_map<std::string, MethodHandlerType>                                    mMethodHandlers;
     std::unordered_map<std::string, std::unordered_map<std::string, PropertyHandlerType>> mGetPropertyHandlers;
     std::unordered_map<std::string, PropertyHandlerType>                                  mSetPropertyHandlers;
-    DBusConnection *                                                                      mConnection;
+    DBusConnection                                                                       *mConnection;
     std::string                                                                           mObjectPath;
 };
 
