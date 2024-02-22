@@ -72,7 +72,6 @@ oneway interface IOtDaemon {
         OT_ERROR_PARSE = 6,
         OT_ERROR_ABORT = 11,
         OT_ERROR_INVALID_STATE = 13,
-        OT_ERROR_DETACHED = 16,
         OT_ERROR_RESPONSE_TIMEOUT = 28,
         OT_ERROR_REASSEMBLY_TIMEOUT = 30,
         OT_ERROR_REJECTED = 37,
