@@ -531,7 +531,8 @@ Status OtDaemonServer::join(const std::vector<uint8_t>               &aActiveOpD
                  message = "Thread is disabling");
 
     VerifyOrExit(mThreadEnabled == IOtDaemon::OT_STATE_ENABLED,
-                 error = (int)IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED, message = "Thread is disabled");
+                 error = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
+                 message = "Thread is disabled");
 
     otbrLogInfo("Start joining...");
 
@@ -654,7 +655,8 @@ Status OtDaemonServer::scheduleMigration(const std::vector<uint8_t>             
                  message = "Thread is disabling");
 
     VerifyOrExit(mThreadEnabled == IOtDaemon::OT_STATE_ENABLED,
-                 error = (int)IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED, message = "Thread is disabled");
+                 error = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
+                 message = "Thread is disabled");
 
     if (GetOtInstance() == nullptr)
     {
@@ -665,7 +667,7 @@ Status OtDaemonServer::scheduleMigration(const std::vector<uint8_t>             
     if (!isAttached())
     {
         message = "Cannot schedule migration when this device is detached";
-        ExitNow(error = OT_ERROR_INVALID_STATE);
+        ExitNow(error = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_FAILED_PRECONDITION));
     }
 
     // TODO: check supported channel mask
