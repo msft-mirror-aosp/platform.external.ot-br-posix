@@ -71,6 +71,8 @@ public:
 
     void UnpublishHost(const std::string &aName, ResultCallback &&aCallback) override;
 
+    void UnpublishKey(const std::string &aName, ResultCallback &&aCallback) override;
+
     void SubscribeService(const std::string &aType, const std::string &aInstanceName) override;
 
     void UnsubscribeService(const std::string &aType, const std::string &aInstanceName) override;
@@ -105,6 +107,8 @@ protected:
                                  ResultCallback   &&aCallback) override;
 
     otbrError PublishHostImpl(const std::string &aName, const AddressList &aAddresses, ResultCallback &&aCallback);
+
+    otbrError PublishKeyImpl(const std::string &aName, const KeyData &aKeyData, ResultCallback &&aCallback) override;
 
     void OnServiceResolveFailedImpl(const std::string &aType, const std::string &aInstanceName, int32_t aErrorCode);
 
