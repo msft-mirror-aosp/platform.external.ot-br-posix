@@ -54,20 +54,24 @@ oneway interface IOtDaemon {
     /** Thread radio is being disabled. */
     const int OT_STATE_DISABLING = 2;
 
-    // The error code below MUST be consistent with openthread/include/openthread/error.h
-    // TODO: add a unit test to make sure that values are always match
     enum ErrorCode {
+        // Converts to ThreadNetworkException#ERROR_FAILED_PRECONDITION
+        OT_ERROR_FAILED_PRECONDITION = -3,
+        // Converts to ThreadNetworkException#ERROR_THREAD_DISABLED
         OT_ERROR_THREAD_DISABLED = -2,
+        // Converts to ThreadNetworkException#ERROR_UNSUPPORTED_CHANNEL
         // TODO: Add this error code to OpenThread and make sure `otDatasetSetActiveTlvs()` returns
         // this error code when an unsupported channel is provided
         OT_ERROR_UNSUPPORTED_CHANNEL = -1,
+
+        // The error code below MUST be consistent with openthread/include/openthread/error.h
+        // TODO: add a unit test to make sure that values are always match
 
         OT_ERROR_NO_BUFS = 3,
         OT_ERROR_BUSY = 5,
         OT_ERROR_PARSE = 6,
         OT_ERROR_ABORT = 11,
         OT_ERROR_INVALID_STATE = 13,
-        OT_ERROR_DETACHED = 16,
         OT_ERROR_RESPONSE_TIMEOUT = 28,
         OT_ERROR_REASSEMBLY_TIMEOUT = 30,
         OT_ERROR_REJECTED = 37,
