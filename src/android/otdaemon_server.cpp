@@ -100,7 +100,7 @@ static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo
 OtDaemonServer::OtDaemonServer(Application &aApplication)
     : mNcp(aApplication.GetNcp())
     , mBorderAgent(aApplication.GetBorderAgent())
-    , mMdnsPublisher(static_cast<MdnsPublisher &>(aApplication.GetBorderAgent().GetPublisher()))
+    , mMdnsPublisher(static_cast<MdnsPublisher &>(aApplication.GetPublisher()))
     , mBorderRouterConfiguration()
 {
     mClientDeathRecipient =
@@ -324,9 +324,9 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor           &aTunFd,
                                   const bool                            enabled,
                                   const std::shared_ptr<INsdPublisher> &aINsdPublisher)
 {
-    otbrLogInfo("OT daemon is initialized by system server (tunFd=%d, enabled=%s)",
-            aTunFd.get(), enabled ? "true" : "false");
-    mTunFd = aTunFd.dup();
+    otbrLogInfo("OT daemon is initialized by system server (tunFd=%d, enabled=%s)", aTunFd.get(),
+                enabled ? "true" : "false");
+    mTunFd         = aTunFd.dup();
     mINsdPublisher = aINsdPublisher;
 
     if (enabled)
