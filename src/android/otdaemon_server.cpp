@@ -727,6 +727,33 @@ exit:
     return Status::ok();
 }
 
+Status OtDaemonServer::getChannelMasks(const std::shared_ptr<IChannelMasksReceiver> &aReceiver)
+{
+    otError  error = OT_ERROR_NONE;
+    uint32_t supportedChannelMask;
+    uint32_t preferredChannelMask;
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE);
+
+    supportedChannelMask = otLinkGetSupportedChannelMask(GetOtInstance());
+    preferredChannelMask = otPlatRadioGetPreferredChannelMask(GetOtInstance());
+
+exit:
+    if (aReceiver != nullptr)
+    {
+        if (error == OT_ERROR_NONE)
+        {
+            aReceiver->onSuccess(supportedChannelMask, preferredChannelMask);
+        }
+        else
+        {
+            aReceiver->onError(error, "OT is not initialized");
+        }
+    }
+
+    return Status::ok();
+}
+
 Status OtDaemonServer::configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
                                              const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
