@@ -40,6 +40,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 
 import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
+import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemon;
 import com.android.server.thread.openthread.IOtDaemonCallback;
@@ -59,12 +60,16 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     static final int OT_DEVICE_ROLE_CHILD = 2;
     static final int OT_DEVICE_ROLE_ROUTER = 3;
     static final int OT_DEVICE_ROLE_LEADER = 4;
+    static final int OT_ERROR_NONE = 0;
 
     private static final long PROACTIVE_LISTENER_ID = -1;
 
     private final Handler mHandler;
     private final OtDaemonState mState;
     private int mThreadEnabled = OT_STATE_ENABLED;
+    private int mChannelMasksReceiverOtError = OT_ERROR_NONE;
+    private int mSupportedChannelMask = 0x07FFF800; // from channel 11 to 26
+    private int mPreferredChannelMask = 0;
 
     @Nullable private DeathRecipient mDeathRecipient;
 
@@ -243,7 +248,32 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Override
     public void setCountryCode(String countryCode, IOtStatusReceiver receiver)
             throws RemoteException {
-        throw new UnsupportedOperationException(
-                "FakeOtDaemon#scheduleMigration is not implemented!");
+        throw new UnsupportedOperationException("FakeOtDaemon#setCountryCode is not implemented!");
+    }
+
+    @Override
+    public void getChannelMasks(IChannelMasksReceiver receiver) throws RemoteException {
+        mHandler.post(
+                () -> {
+                    try {
+                        if (mChannelMasksReceiverOtError == OT_ERROR_NONE) {
+                            receiver.onSuccess(mSupportedChannelMask, mPreferredChannelMask);
+                        } else {
+                            receiver.onError(
+                                    mChannelMasksReceiverOtError, "Get channel masks failed");
+                        }
+                    } catch (RemoteException e) {
+                        throw new AssertionError(e);
+                    }
+                });
+    }
+
+    public void setChannelMasks(int supportedChannelMask, int preferredChannelMask) {
+        mSupportedChannelMask = supportedChannelMask;
+        mPreferredChannelMask = preferredChannelMask;
+    }
+
+    public void setChannelMasksReceiverOtError(int otError) {
+        mChannelMasksReceiverOtError = otError;
     }
 }
