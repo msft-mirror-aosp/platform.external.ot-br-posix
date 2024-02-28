@@ -37,6 +37,7 @@
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
 #include <openthread/border_router.h>
+#include <openthread/icmp6.h>
 #include <openthread/ip6.h>
 #include <openthread/link.h>
 #include <openthread/openthread-system.h>
@@ -54,7 +55,7 @@ namespace vendor {
 
 std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplication)
 {
-    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aApplication.GetNcp());
+    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aApplication);
 }
 
 } // namespace vendor
@@ -96,8 +97,10 @@ static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo
     return addrInfo;
 }
 
-OtDaemonServer::OtDaemonServer(otbr::Ncp::ControllerOpenThread &aNcp)
-    : mNcp(aNcp)
+OtDaemonServer::OtDaemonServer(Application &aApplication)
+    : mNcp(aApplication.GetNcp())
+    , mBorderAgent(aApplication.GetBorderAgent())
+    , mMdnsPublisher(static_cast<MdnsPublisher &>(aApplication.GetPublisher()))
     , mBorderRouterConfiguration()
 {
     mClientDeathRecipient =
@@ -119,6 +122,7 @@ void OtDaemonServer::Init(void)
     otIp6SetReceiveCallback(GetOtInstance(), OtDaemonServer::ReceiveCallback, this);
     otBackboneRouterSetMulticastListenerCallback(GetOtInstance(), OtDaemonServer::HandleBackboneMulticastListenerEvent,
                                                  this);
+    otIcmp6SetEchoMode(GetOtInstance(), OT_ICMP6_ECHO_HANDLER_DISABLED);
 
     mTaskRunner.Post(kTelemetryCheckInterval, [this]() { PushTelemetryIfConditionMatch(); });
 }
@@ -316,11 +320,23 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
     }
 }
 
-Status OtDaemonServer::initialize(const ScopedFileDescriptor &aTunFd, const bool enabled)
+Status OtDaemonServer::initialize(const ScopedFileDescriptor           &aTunFd,
+                                  const bool                            enabled,
+                                  const std::shared_ptr<INsdPublisher> &aINsdPublisher)
 {
-    otbrLogDebug("OT daemon is initialized by the binder client (tunFd=%d)", aTunFd.get());
+    otbrLogInfo("OT daemon is initialized by system server (tunFd=%d, enabled=%s)", aTunFd.get(),
+                enabled ? "true" : "false");
     mTunFd         = aTunFd.dup();
-    mThreadEnabled = enabled ? IOtDaemon::OT_STATE_ENABLED : IOtDaemon::OT_STATE_DISABLED;
+    mINsdPublisher = aINsdPublisher;
+
+    if (enabled)
+    {
+        enableThread(nullptr /* aReceiver */);
+    }
+    else
+    {
+        updateThreadEnabledState(enabled, nullptr /* Receiver */);
+    }
 
     return Status::ok();
 }
@@ -328,7 +344,22 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor &aTunFd, const bool
 void OtDaemonServer::updateThreadEnabledState(const int enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     mThreadEnabled = enabled;
-    aReceiver->onSuccess();
+    if (aReceiver != nullptr)
+    {
+        aReceiver->onSuccess();
+    }
+
+    switch (enabled)
+    {
+    case OT_STATE_ENABLED:
+        mMdnsPublisher.SetINsdPublisher(mINsdPublisher);
+        break;
+    case OT_STATE_DISABLED:
+        mMdnsPublisher.SetINsdPublisher(nullptr);
+        break;
+    default:
+        break;
+    }
 
     if (mCallback != nullptr)
     {
@@ -500,7 +531,8 @@ Status OtDaemonServer::join(const std::vector<uint8_t>               &aActiveOpD
                  message = "Thread is disabling");
 
     VerifyOrExit(mThreadEnabled == IOtDaemon::OT_STATE_ENABLED,
-                 error = (int)IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED, message = "Thread is disabled");
+                 error = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
+                 message = "Thread is disabled");
 
     otbrLogInfo("Start joining...");
 
@@ -623,7 +655,8 @@ Status OtDaemonServer::scheduleMigration(const std::vector<uint8_t>             
                  message = "Thread is disabling");
 
     VerifyOrExit(mThreadEnabled == IOtDaemon::OT_STATE_ENABLED,
-                 error = (int)IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED, message = "Thread is disabled");
+                 error = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
+                 message = "Thread is disabled");
 
     if (GetOtInstance() == nullptr)
     {
@@ -634,7 +667,7 @@ Status OtDaemonServer::scheduleMigration(const std::vector<uint8_t>             
     if (!isAttached())
     {
         message = "Cannot schedule migration when this device is detached";
-        ExitNow(error = OT_ERROR_INVALID_STATE);
+        ExitNow(error = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_FAILED_PRECONDITION));
     }
 
     // TODO: check supported channel mask
@@ -691,6 +724,33 @@ Status OtDaemonServer::setCountryCode(const std::string                        &
 
 exit:
     PropagateResult(error, message, aReceiver);
+    return Status::ok();
+}
+
+Status OtDaemonServer::getChannelMasks(const std::shared_ptr<IChannelMasksReceiver> &aReceiver)
+{
+    otError  error = OT_ERROR_NONE;
+    uint32_t supportedChannelMask;
+    uint32_t preferredChannelMask;
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE);
+
+    supportedChannelMask = otLinkGetSupportedChannelMask(GetOtInstance());
+    preferredChannelMask = otPlatRadioGetPreferredChannelMask(GetOtInstance());
+
+exit:
+    if (aReceiver != nullptr)
+    {
+        if (error == OT_ERROR_NONE)
+        {
+            aReceiver->onSuccess(supportedChannelMask, preferredChannelMask);
+        }
+        else
+        {
+            aReceiver->onError(error, "OT is not initialized");
+        }
+    }
+
     return Status::ok();
 }
 
@@ -765,5 +825,6 @@ void OtDaemonServer::PushTelemetryIfConditionMatch()
 exit:
     return;
 }
+
 } // namespace Android
 } // namespace otbr
