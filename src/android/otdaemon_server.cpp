@@ -151,6 +151,10 @@ void OtDaemonServer::StateCallback(otChangedFlags aFlags)
             mCallback->onStateChanged(mState, -1);
         }
     }
+    if (aFlags & OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE)
+    {
+        mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
+    }
 }
 
 void OtDaemonServer::AddressCallback(const otIp6AddressInfo *aAddressInfo, bool aIsAdded, void *aBinderServer)
@@ -257,41 +261,56 @@ exit:
     }
 }
 
+BackboneRouterState OtDaemonServer::GetBackboneRouterState()
+{
+    BackboneRouterState                       state;
+    otBackboneRouterState                     bbrState = otBackboneRouterGetState(GetOtInstance());
+    otBackboneRouterMulticastListenerInfo     info;
+    otBackboneRouterMulticastListenerIterator iter = OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ITERATOR_INIT;
+    state.listeningAddresses                       = std::vector<std::string>();
+
+    if (mCallback == nullptr)
+    {
+        otbrLogWarning("OT daemon callback is not set");
+        return state;
+    }
+
+    switch (bbrState)
+    {
+    case OT_BACKBONE_ROUTER_STATE_DISABLED:
+    case OT_BACKBONE_ROUTER_STATE_SECONDARY:
+        state.multicastForwardingEnabled = false;
+        break;
+    case OT_BACKBONE_ROUTER_STATE_PRIMARY:
+        state.multicastForwardingEnabled = true;
+        break;
+    }
+    otbrLogInfo("Updating backbone router state (bbr state = %d)", bbrState);
+
+    while (otBackboneRouterMulticastListenerGetNext(GetOtInstance(), &iter, &info) == OT_ERROR_NONE)
+    {
+        char string[OT_IP6_ADDRESS_STRING_SIZE];
+
+        otIp6AddressToString(&info.mAddress, string, sizeof(string));
+        state.listeningAddresses.push_back(string);
+    }
+
+    return state;
+}
+
 void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
                                                           otBackboneRouterMulticastListenerEvent aEvent,
                                                           const otIp6Address                    *aAddress)
 {
     OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
-
-    bool                 isAdded;
-    std::vector<uint8_t> addressBytes(aAddress->mFields.m8, BYTE_ARR_END(aAddress->mFields.m8));
-    char                 addressString[OT_IP6_ADDRESS_STRING_SIZE];
+    char            addressString[OT_IP6_ADDRESS_STRING_SIZE];
 
     otIp6AddressToString(aAddress, addressString, sizeof(addressString));
 
-    switch (aEvent)
-    {
-    case OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ADDED:
-        isAdded = true;
-        break;
-    case OT_BACKBONE_ROUTER_MULTICAST_LISTENER_REMOVED:
-        isAdded = false;
-        break;
-    default:
-        otbrLogErr("Got BackboneMulticastListenerEvent with unsupported event: %d", aEvent);
-        assert(false);
-    }
+    otbrLogDebug("Multicast forwarding address changed, %s is %s", addressString,
+                 (aEvent == OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ADDED) ? "added" : "removed");
 
-    otbrLogDebug("Multicast forwarding address changed, %s is %s", addressString, isAdded ? "added" : "removed");
-
-    if (thisServer->mCallback != nullptr)
-    {
-        thisServer->mCallback->onMulticastForwardingAddressChanged(addressBytes, isAdded);
-    }
-    else
-    {
-        otbrLogWarning("OT daemon callback is not set");
-    }
+    thisServer->mCallback->onBackboneRouterStateChanged(thisServer->GetBackboneRouterState());
 }
 
 otInstance *OtDaemonServer::GetOtInstance()
@@ -439,6 +458,7 @@ Status OtDaemonServer::registerStateCallback(const std::shared_ptr<IOtDaemonCall
     RefreshOtDaemonState(/* aFlags */ 0xffffffff);
     mCallback->onStateChanged(mState, listenerId);
     mCallback->onThreadEnabledChanged(mThreadEnabled);
+    mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
 
 exit:
     return Status::ok();
@@ -490,23 +510,6 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
         else
         {
             mState.pendingDatasetTlvs.clear();
-        }
-        haveUpdates = true;
-    }
-
-    if (aFlags & OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE)
-    {
-        otBackboneRouterState state = otBackboneRouterGetState(GetOtInstance());
-
-        switch (state)
-        {
-        case OT_BACKBONE_ROUTER_STATE_DISABLED:
-        case OT_BACKBONE_ROUTER_STATE_SECONDARY:
-            mState.multicastForwardingEnabled = false;
-            break;
-        case OT_BACKBONE_ROUTER_STATE_PRIMARY:
-            mState.multicastForwardingEnabled = true;
-            break;
         }
         haveUpdates = true;
     }
