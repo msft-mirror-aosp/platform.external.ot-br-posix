@@ -31,9 +31,11 @@ package com.android.server.thread.openthread;
 import android.os.ParcelFileDescriptor;
 
 import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
+import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.IOtDaemonCallback;
+import com.android.server.thread.openthread.INsdPublisher;
 
 /**
  * The OpenThread daemon service which provides access to the core Thread stack for
@@ -53,20 +55,24 @@ oneway interface IOtDaemon {
     /** Thread radio is being disabled. */
     const int OT_STATE_DISABLING = 2;
 
-    // The error code below MUST be consistent with openthread/include/openthread/error.h
-    // TODO: add a unit test to make sure that values are always match
     enum ErrorCode {
+        // Converts to ThreadNetworkException#ERROR_FAILED_PRECONDITION
+        OT_ERROR_FAILED_PRECONDITION = -3,
+        // Converts to ThreadNetworkException#ERROR_THREAD_DISABLED
         OT_ERROR_THREAD_DISABLED = -2,
+        // Converts to ThreadNetworkException#ERROR_UNSUPPORTED_CHANNEL
         // TODO: Add this error code to OpenThread and make sure `otDatasetSetActiveTlvs()` returns
         // this error code when an unsupported channel is provided
         OT_ERROR_UNSUPPORTED_CHANNEL = -1,
+
+        // The error code below MUST be consistent with openthread/include/openthread/error.h
+        // TODO: add a unit test to make sure that values are always match
 
         OT_ERROR_NO_BUFS = 3,
         OT_ERROR_BUSY = 5,
         OT_ERROR_PARSE = 6,
         OT_ERROR_ABORT = 11,
         OT_ERROR_INVALID_STATE = 13,
-        OT_ERROR_DETACHED = 16,
         OT_ERROR_RESPONSE_TIMEOUT = 28,
         OT_ERROR_REASSEMBLY_TIMEOUT = 30,
         OT_ERROR_REJECTED = 37,
@@ -78,8 +84,11 @@ oneway interface IOtDaemon {
      * @param tunFd the Thread tunnel interface FD which can be used to transmit/receive
      *              packets to/from Thread PAN
      * @param enabled the Thead enabled state from Persistent Settings
+     * @param nsdPublisher the INsdPublisher which can be used for mDNS advertisement/discovery
+     *                    on AIL by {@link NsdManager}
      */
-    void initialize(in ParcelFileDescriptor tunFd, in boolean enabled);
+    void initialize(in ParcelFileDescriptor tunFd, in boolean enabled,
+                    in INsdPublisher nsdPublisher);
 
     /**
      * Enables/disables Thread.
@@ -148,6 +157,13 @@ oneway interface IOtDaemon {
      */
     oneway void configureBorderRouter(
         in BorderRouterConfigurationParcel brConfig, in IOtStatusReceiver receiver);
+
+    /**
+     * Gets the supported and preferred channel masks.
+     *
+     * @param receiver the receiver to receive result of this operation
+     */
+    void getChannelMasks(in IChannelMasksReceiver receiver);
 
     // TODO: add Border Router APIs
 }
