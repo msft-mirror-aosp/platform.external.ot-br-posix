@@ -100,7 +100,7 @@ static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo
 OtDaemonServer::OtDaemonServer(Application &aApplication)
     : mNcp(aApplication.GetNcp())
     , mBorderAgent(aApplication.GetBorderAgent())
-    , mMdnsPublisher(static_cast<MdnsPublisher &>(aApplication.GetBorderAgent().GetPublisher()))
+    , mMdnsPublisher(static_cast<MdnsPublisher &>(aApplication.GetPublisher()))
     , mBorderRouterConfiguration()
 {
     mClientDeathRecipient =
@@ -149,6 +149,17 @@ void OtDaemonServer::StateCallback(otChangedFlags aFlags)
         else
         {
             mCallback->onStateChanged(mState, -1);
+        }
+    }
+    if (aFlags & OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE)
+    {
+        if (mCallback == nullptr)
+        {
+            otbrLogWarning("Ignoring OT backbone router state changes: callback is not set");
+        }
+        else
+        {
+            mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
         }
     }
 }
@@ -257,41 +268,62 @@ exit:
     }
 }
 
+BackboneRouterState OtDaemonServer::GetBackboneRouterState()
+{
+    BackboneRouterState                       state;
+    otBackboneRouterState                     bbrState;
+    otBackboneRouterMulticastListenerInfo     info;
+    otBackboneRouterMulticastListenerIterator iter = OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ITERATOR_INIT;
+    state.listeningAddresses                       = std::vector<std::string>();
+
+    VerifyOrExit(GetOtInstance() != nullptr, otbrLogWarning("Can't get bbr state: OT is not initialized"));
+
+    bbrState = otBackboneRouterGetState(GetOtInstance());
+    switch (bbrState)
+    {
+    case OT_BACKBONE_ROUTER_STATE_DISABLED:
+    case OT_BACKBONE_ROUTER_STATE_SECONDARY:
+        state.multicastForwardingEnabled = false;
+        break;
+    case OT_BACKBONE_ROUTER_STATE_PRIMARY:
+        state.multicastForwardingEnabled = true;
+        break;
+    }
+    otbrLogInfo("Updating backbone router state (bbr state = %d)", bbrState);
+
+    while (otBackboneRouterMulticastListenerGetNext(GetOtInstance(), &iter, &info) == OT_ERROR_NONE)
+    {
+        char string[OT_IP6_ADDRESS_STRING_SIZE];
+
+        otIp6AddressToString(&info.mAddress, string, sizeof(string));
+        state.listeningAddresses.push_back(string);
+    }
+
+exit:
+    return state;
+}
+
 void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
                                                           otBackboneRouterMulticastListenerEvent aEvent,
                                                           const otIp6Address                    *aAddress)
 {
     OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
-
-    bool                 isAdded;
-    std::vector<uint8_t> addressBytes(aAddress->mFields.m8, BYTE_ARR_END(aAddress->mFields.m8));
-    char                 addressString[OT_IP6_ADDRESS_STRING_SIZE];
+    char            addressString[OT_IP6_ADDRESS_STRING_SIZE];
 
     otIp6AddressToString(aAddress, addressString, sizeof(addressString));
 
-    switch (aEvent)
-    {
-    case OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ADDED:
-        isAdded = true;
-        break;
-    case OT_BACKBONE_ROUTER_MULTICAST_LISTENER_REMOVED:
-        isAdded = false;
-        break;
-    default:
-        otbrLogErr("Got BackboneMulticastListenerEvent with unsupported event: %d", aEvent);
-        assert(false);
-    }
+    otbrLogDebug("Multicast forwarding address changed, %s is %s", addressString,
+                 (aEvent == OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ADDED) ? "added" : "removed");
 
-    otbrLogDebug("Multicast forwarding address changed, %s is %s", addressString, isAdded ? "added" : "removed");
+    if (thisServer->mCallback == nullptr)
+    {
+        otbrLogWarning("Ignoring OT multicast listener event: callback is not set");
+        ExitNow();
+    }
+    thisServer->mCallback->onBackboneRouterStateChanged(thisServer->GetBackboneRouterState());
 
-    if (thisServer->mCallback != nullptr)
-    {
-        thisServer->mCallback->onMulticastForwardingAddressChanged(addressBytes, isAdded);
-    }
-    else
-    {
-        otbrLogWarning("OT daemon callback is not set");
-    }
+exit:
+    return;
 }
 
 otInstance *OtDaemonServer::GetOtInstance()
@@ -324,9 +356,9 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor           &aTunFd,
                                   const bool                            enabled,
                                   const std::shared_ptr<INsdPublisher> &aINsdPublisher)
 {
-    otbrLogInfo("OT daemon is initialized by system server (tunFd=%d, enabled=%s)",
-            aTunFd.get(), enabled ? "true" : "false");
-    mTunFd = aTunFd.dup();
+    otbrLogInfo("OT daemon is initialized by system server (tunFd=%d, enabled=%s)", aTunFd.get(),
+                enabled ? "true" : "false");
+    mTunFd         = aTunFd.dup();
     mINsdPublisher = aINsdPublisher;
 
     if (enabled)
@@ -439,6 +471,7 @@ Status OtDaemonServer::registerStateCallback(const std::shared_ptr<IOtDaemonCall
     RefreshOtDaemonState(/* aFlags */ 0xffffffff);
     mCallback->onStateChanged(mState, listenerId);
     mCallback->onThreadEnabledChanged(mThreadEnabled);
+    mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
 
 exit:
     return Status::ok();
@@ -494,23 +527,6 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
         haveUpdates = true;
     }
 
-    if (aFlags & OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE)
-    {
-        otBackboneRouterState state = otBackboneRouterGetState(GetOtInstance());
-
-        switch (state)
-        {
-        case OT_BACKBONE_ROUTER_STATE_DISABLED:
-        case OT_BACKBONE_ROUTER_STATE_SECONDARY:
-            mState.multicastForwardingEnabled = false;
-            break;
-        case OT_BACKBONE_ROUTER_STATE_PRIMARY:
-            mState.multicastForwardingEnabled = true;
-            break;
-        }
-        haveUpdates = true;
-    }
-
     if (isAttached() && !mState.activeDatasetTlvs.empty() && mJoinReceiver != nullptr)
     {
         mJoinReceiver->onSuccess();
@@ -531,7 +547,8 @@ Status OtDaemonServer::join(const std::vector<uint8_t>               &aActiveOpD
                  message = "Thread is disabling");
 
     VerifyOrExit(mThreadEnabled == IOtDaemon::OT_STATE_ENABLED,
-                 error = (int)IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED, message = "Thread is disabled");
+                 error   = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
+                 message = "Thread is disabled");
 
     otbrLogInfo("Start joining...");
 
@@ -654,7 +671,8 @@ Status OtDaemonServer::scheduleMigration(const std::vector<uint8_t>             
                  message = "Thread is disabling");
 
     VerifyOrExit(mThreadEnabled == IOtDaemon::OT_STATE_ENABLED,
-                 error = (int)IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED, message = "Thread is disabled");
+                 error   = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
+                 message = "Thread is disabled");
 
     if (GetOtInstance() == nullptr)
     {
@@ -665,7 +683,7 @@ Status OtDaemonServer::scheduleMigration(const std::vector<uint8_t>             
     if (!isAttached())
     {
         message = "Cannot schedule migration when this device is detached";
-        ExitNow(error = OT_ERROR_INVALID_STATE);
+        ExitNow(error = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_FAILED_PRECONDITION));
     }
 
     // TODO: check supported channel mask
@@ -722,6 +740,33 @@ Status OtDaemonServer::setCountryCode(const std::string                        &
 
 exit:
     PropagateResult(error, message, aReceiver);
+    return Status::ok();
+}
+
+Status OtDaemonServer::getChannelMasks(const std::shared_ptr<IChannelMasksReceiver> &aReceiver)
+{
+    otError  error = OT_ERROR_NONE;
+    uint32_t supportedChannelMask;
+    uint32_t preferredChannelMask;
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE);
+
+    supportedChannelMask = otLinkGetSupportedChannelMask(GetOtInstance());
+    preferredChannelMask = otPlatRadioGetPreferredChannelMask(GetOtInstance());
+
+exit:
+    if (aReceiver != nullptr)
+    {
+        if (error == OT_ERROR_NONE)
+        {
+            aReceiver->onSuccess(supportedChannelMask, preferredChannelMask);
+        }
+        else
+        {
+            aReceiver->onError(error, "OT is not initialized");
+        }
+    }
+
     return Status::ok();
 }
 

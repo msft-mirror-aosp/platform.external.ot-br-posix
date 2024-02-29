@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2023, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -29,23 +29,13 @@
 package com.android.server.thread.openthread;
 
 /**
- * Contains all OpenThread daemon states which the system_server and/or client apps care about.
+ * Contains all backbone router states which the system_server and/or client apps care about.
  */
-parcelable OtDaemonState {
-    boolean isInterfaceUp;
+parcelable BackboneRouterState {
+    // true when multicast forwarding should be enabled when BackboneRoute is primary, false
+    // otherwise.
+    boolean multicastForwardingEnabled;
 
-    // Valid values are DEVICE_ROLE_* defined in {@link ThreadNetworkController}.
-    // Those are also OT_DEVICE_ROLE_* defined in external/openthread/include/openthread/thread.h
-    // TODO: add unit tests to make sure those are equal to each other
-    int deviceRole;
-
-    long partitionId;
-
-    // Active Oprational Dataset encoded as Thread TLVs. Empty array means the dataset doesn't
-    // exist
-    byte[] activeDatasetTlvs;
-
-    // Active Oprational Dataset encoded as Thread TLVs. Empty array means the dataset doesn't
-    // exist
-    byte[] pendingDatasetTlvs;
+    // The list of multicast group address subscribed in Thread network
+    List<String> listeningAddresses;
 }
