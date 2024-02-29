@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2023, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,18 +26,16 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <fuzzbinder/libbinder_ndk_driver.h>
-#include <fuzzer/FuzzedDataProvider.h>
+package com.android.server.thread.openthread;
 
-#include "otdaemon_server.hpp"
+/**
+ * Contains all backbone router states which the system_server and/or client apps care about.
+ */
+parcelable BackboneRouterState {
+    // true when multicast forwarding should be enabled when BackboneRoute is primary, false
+    // otherwise.
+    boolean multicastForwardingEnabled;
 
-using android::fuzzService;
-using otbr::Android::OtDaemonServer;
-
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
-{
-    otbr::Application app("", {}, {}, false, "", 0);
-    auto              service = ndk::SharedRefBase::make<OtDaemonServer>(app);
-    fuzzService(service->asBinder().get(), FuzzedDataProvider(data, size));
-    return 0;
+    // The list of multicast group address subscribed in Thread network
+    List<String> listeningAddresses;
 }
