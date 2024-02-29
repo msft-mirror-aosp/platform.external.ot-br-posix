@@ -51,6 +51,7 @@ namespace Android {
 using BinderDeathRecipient = ::ndk::ScopedAIBinder_DeathRecipient;
 using ScopedFileDescriptor = ::ndk::ScopedFileDescriptor;
 using Status               = ::ndk::ScopedAStatus;
+using aidl::com::android::server::thread::openthread::BackboneRouterState;
 using aidl::com::android::server::thread::openthread::BnOtDaemon;
 using aidl::com::android::server::thread::openthread::BorderRouterConfigurationParcel;
 using aidl::com::android::server::thread::openthread::IChannelMasksReceiver;
@@ -112,18 +113,19 @@ private:
     void        DetachGracefullyCallback(void);
     static void SendMgmtPendingSetCallback(otError aResult, void *aBinderServer);
 
-    static void BinderDeathCallback(void *aBinderServer);
-    void        StateCallback(otChangedFlags aFlags);
-    static void AddressCallback(const otIp6AddressInfo *aAddressInfo, bool aIsAdded, void *aBinderServer);
-    static void ReceiveCallback(otMessage *aMessage, void *aBinderServer);
-    void        ReceiveCallback(otMessage *aMessage);
-    void        TransmitCallback(void);
-    static void HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
-                                                     otBackboneRouterMulticastListenerEvent aEvent,
-                                                     const otIp6Address                    *aAddress);
-    void        PushTelemetryIfConditionMatch();
-    void        updateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    void        enableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    static void         BinderDeathCallback(void *aBinderServer);
+    void                StateCallback(otChangedFlags aFlags);
+    static void         AddressCallback(const otIp6AddressInfo *aAddressInfo, bool aIsAdded, void *aBinderServer);
+    static void         ReceiveCallback(otMessage *aMessage, void *aBinderServer);
+    void                ReceiveCallback(otMessage *aMessage);
+    void                TransmitCallback(void);
+    BackboneRouterState GetBackboneRouterState(void);
+    static void         HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
+                                                             otBackboneRouterMulticastListenerEvent aEvent,
+                                                             const otIp6Address                    *aAddress);
+    void                PushTelemetryIfConditionMatch();
+    void updateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void enableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
 
     int                                mThreadEnabled = IOtDaemon::OT_STATE_DISABLED;
     otbr::Ncp::ControllerOpenThread   &mNcp;
