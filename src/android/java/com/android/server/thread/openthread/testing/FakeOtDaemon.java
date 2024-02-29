@@ -39,6 +39,7 @@ import android.os.IBinder.DeathRecipient;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 
+import com.android.server.thread.openthread.BackboneRouterState;
 import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
 import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.INsdPublisher;
@@ -48,6 +49,7 @@ import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.OtDaemonState;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.NoSuchElementException;
 
 /** A fake implementation of the {@link IOtDaemon} AIDL API for testing. */
@@ -66,6 +68,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
 
     private final Handler mHandler;
     private final OtDaemonState mState;
+    private final BackboneRouterState mBbrState;
     private int mThreadEnabled = OT_STATE_ENABLED;
     private int mChannelMasksReceiverOtError = OT_ERROR_NONE;
     private int mSupportedChannelMask = 0x07FFF800; // from channel 11 to 26
@@ -90,7 +93,9 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mState.deviceRole = OT_DEVICE_ROLE_DISABLED;
         mState.activeDatasetTlvs = new byte[0];
         mState.pendingDatasetTlvs = new byte[0];
-        mState.multicastForwardingEnabled = false;
+        mBbrState = new BackboneRouterState();
+        mBbrState.multicastForwardingEnabled = false;
+        mBbrState.listeningAddresses = new ArrayList<>();
     }
 
     @Override
@@ -167,6 +172,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mCallbackListenerId = listenerId;
 
         mHandler.post(() -> onStateChanged(mState, mCallbackListenerId));
+        mHandler.post(() -> onBackboneRouterStateChanged(mBbrState));
     }
 
     @Nullable
@@ -191,9 +197,10 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
                 () -> {
                     mState.deviceRole = OT_DEVICE_ROLE_LEADER;
                     mState.activeDatasetTlvs = activeDataset.clone();
-                    mState.multicastForwardingEnabled = true;
+                    mBbrState.multicastForwardingEnabled = true;
 
                     onStateChanged(mState, PROACTIVE_LISTENER_ID);
+                    onBackboneRouterStateChanged(mBbrState);
                     try {
                         receiver.onSuccess();
                     } catch (RemoteException e) {
@@ -205,16 +212,27 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
 
     private void onStateChanged(OtDaemonState state, long listenerId) {
         try {
-            // Make a copy of mState so that clients won't keep a direct reference to it
+            // Make a copy of state so that clients won't keep a direct reference to it
             OtDaemonState copyState = new OtDaemonState();
             copyState.isInterfaceUp = state.isInterfaceUp;
             copyState.deviceRole = state.deviceRole;
             copyState.partitionId = state.partitionId;
             copyState.activeDatasetTlvs = state.activeDatasetTlvs.clone();
             copyState.pendingDatasetTlvs = state.pendingDatasetTlvs.clone();
-            copyState.multicastForwardingEnabled = state.multicastForwardingEnabled;
 
             mCallback.onStateChanged(copyState, listenerId);
+        } catch (RemoteException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private void onBackboneRouterStateChanged(BackboneRouterState state) {
+        try {
+            // Make a copy of state so that clients won't keep a direct reference to it
+            BackboneRouterState copyState = new BackboneRouterState();
+            copyState.multicastForwardingEnabled = state.multicastForwardingEnabled;
+            copyState.listeningAddresses = new ArrayList<>(state.listeningAddresses);
+            mCallback.onBackboneRouterStateChanged(copyState);
         } catch (RemoteException e) {
             throw new AssertionError(e);
         }
