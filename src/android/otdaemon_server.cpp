@@ -153,7 +153,14 @@ void OtDaemonServer::StateCallback(otChangedFlags aFlags)
     }
     if (aFlags & OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE)
     {
-        mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
+        if (mCallback == nullptr)
+        {
+            otbrLogWarning("Ignoring OT backbone router state changes: callback is not set");
+        }
+        else
+        {
+            mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
+        }
     }
 }
 
@@ -264,17 +271,14 @@ exit:
 BackboneRouterState OtDaemonServer::GetBackboneRouterState()
 {
     BackboneRouterState                       state;
-    otBackboneRouterState                     bbrState = otBackboneRouterGetState(GetOtInstance());
+    otBackboneRouterState                     bbrState;
     otBackboneRouterMulticastListenerInfo     info;
     otBackboneRouterMulticastListenerIterator iter = OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ITERATOR_INIT;
     state.listeningAddresses                       = std::vector<std::string>();
 
-    if (mCallback == nullptr)
-    {
-        otbrLogWarning("OT daemon callback is not set");
-        return state;
-    }
+    VerifyOrExit(GetOtInstance() != nullptr, otbrLogWarning("Can't get bbr state: OT is not initialized"));
 
+    bbrState = otBackboneRouterGetState(GetOtInstance());
     switch (bbrState)
     {
     case OT_BACKBONE_ROUTER_STATE_DISABLED:
@@ -295,6 +299,7 @@ BackboneRouterState OtDaemonServer::GetBackboneRouterState()
         state.listeningAddresses.push_back(string);
     }
 
+exit:
     return state;
 }
 
@@ -310,7 +315,15 @@ void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                  
     otbrLogDebug("Multicast forwarding address changed, %s is %s", addressString,
                  (aEvent == OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ADDED) ? "added" : "removed");
 
+    if (thisServer->mCallback == nullptr)
+    {
+        otbrLogWarning("Ignoring OT multicast listener event: callback is not set");
+        ExitNow();
+    }
     thisServer->mCallback->onBackboneRouterStateChanged(thisServer->GetBackboneRouterState());
+
+exit:
+    return;
 }
 
 otInstance *OtDaemonServer::GetOtInstance()
@@ -534,7 +547,7 @@ Status OtDaemonServer::join(const std::vector<uint8_t>               &aActiveOpD
                  message = "Thread is disabling");
 
     VerifyOrExit(mThreadEnabled == IOtDaemon::OT_STATE_ENABLED,
-                 error = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
+                 error   = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
                  message = "Thread is disabled");
 
     otbrLogInfo("Start joining...");
@@ -658,7 +671,7 @@ Status OtDaemonServer::scheduleMigration(const std::vector<uint8_t>             
                  message = "Thread is disabling");
 
     VerifyOrExit(mThreadEnabled == IOtDaemon::OT_STATE_ENABLED,
-                 error = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
+                 error   = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
                  message = "Thread is disabled");
 
     if (GetOtInstance() == nullptr)
