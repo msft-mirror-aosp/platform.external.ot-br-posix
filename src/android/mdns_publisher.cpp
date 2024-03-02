@@ -176,6 +176,17 @@ otbrError MdnsPublisher::PublishHostImpl(const std::string &aName,
     return OTBR_ERROR_MDNS;
 }
 
+otbrError MdnsPublisher::PublishKeyImpl(const std::string &aName, const KeyData &aKeyData, ResultCallback &&aCallback)
+{
+    OTBR_UNUSED_VARIABLE(aName);
+    OTBR_UNUSED_VARIABLE(aKeyData);
+    OTBR_UNUSED_VARIABLE(aCallback);
+
+    DieForNotImplemented(__func__);
+
+    return OTBR_ERROR_MDNS;
+}
+
 void MdnsPublisher::UnpublishHost(const std::string &aName, ResultCallback &&aCallback)
 {
     OTBR_UNUSED_VARIABLE(aName);
@@ -184,6 +195,14 @@ void MdnsPublisher::UnpublishHost(const std::string &aName, ResultCallback &&aCa
     DieForNotImplemented(__func__);
 
     return;
+}
+
+void MdnsPublisher::UnpublishKey(const std::string &aName, ResultCallback &&aCallback)
+{
+    OTBR_UNUSED_VARIABLE(aName);
+    OTBR_UNUSED_VARIABLE(aCallback);
+
+    DieForNotImplemented(__func__);
 }
 
 void MdnsPublisher::SubscribeService(const std::string &aType, const std::string &aInstanceName)
