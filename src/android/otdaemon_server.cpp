@@ -243,6 +243,7 @@ void OtDaemonServer::TransmitCallback(void)
 
     message = otIp6NewMessage(GetOtInstance(), &settings);
     VerifyOrExit(message != nullptr, error = OT_ERROR_NO_BUFS);
+    otMessageSetOrigin(message, OT_MESSAGE_ORIGIN_HOST_UNTRUSTED);
 
     SuccessOrExit(error = otMessageAppend(message, packet, length));
 
