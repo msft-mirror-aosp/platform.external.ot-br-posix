@@ -26,6 +26,8 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define OTBR_LOG_TAG "MDNS"
+
 #include "android/mdns_publisher.hpp"
 
 namespace otbr {
@@ -149,7 +151,7 @@ void MdnsPublisher::UnpublishService(const std::string &aName, const std::string
         static_cast<NsdServiceRegistration *>(FindServiceRegistration(aName, aType));
 
     VerifyOrExit(IsStarted(), std::move(aCallback)(OTBR_ERROR_MDNS));
-    if (mNsdPublisher != nullptr)
+    if (mNsdPublisher == nullptr)
     {
         otbrLogWarning("No platform mDNS implementation registered!");
         ExitNow(std::move(aCallback)(OTBR_ERROR_MDNS));
@@ -167,13 +169,45 @@ otbrError MdnsPublisher::PublishHostImpl(const std::string &aName,
                                          const AddressList &aAddresses,
                                          ResultCallback   &&aCallback)
 {
-    OTBR_UNUSED_VARIABLE(aName);
-    OTBR_UNUSED_VARIABLE(aAddresses);
-    OTBR_UNUSED_VARIABLE(aCallback);
+    int32_t   listenerId = AllocateListenerId();
+    TxtList   txtList;
+    otbrError error = OTBR_ERROR_NONE;
 
-    DieForNotImplemented(__func__);
+    std::vector<std::string> addressStrings;
 
-    return OTBR_ERROR_MDNS;
+    VerifyOrExit(IsStarted(), error = OTBR_ERROR_MDNS);
+    if (mNsdPublisher == nullptr)
+    {
+        otbrLogWarning("No platform mDNS implementation registered!");
+        ExitNow(error = OTBR_ERROR_MDNS);
+    }
+
+    aCallback = HandleDuplicateHostRegistration(aName, aAddresses, std::move(aCallback));
+    VerifyOrExit(!aCallback.IsNull(), error = OTBR_ERROR_INVALID_STATE);
+
+    AddHostRegistration(
+        MakeUnique<NsdHostRegistration>(aName, aAddresses, /* aCallback= */ nullptr, this, listenerId, mNsdPublisher));
+
+    otbrLogInfo("Publishing host %s listener ID = %d", aName.c_str(), listenerId);
+
+    addressStrings.reserve(aAddresses.size());
+    for (const Ip6Address &address : aAddresses)
+    {
+        addressStrings.push_back(address.ToString());
+    }
+
+    if (aAddresses.size())
+    {
+        mNsdPublisher->registerHost(aName, addressStrings, CreateReceiver(std::move(aCallback)), listenerId);
+    }
+    else
+    {
+        // No addresses to register.
+        std::move(aCallback)(OTBR_ERROR_NONE);
+    }
+
+exit:
+    return error;
 }
 
 otbrError MdnsPublisher::PublishKeyImpl(const std::string &aName, const KeyData &aKeyData, ResultCallback &&aCallback)
@@ -189,11 +223,20 @@ otbrError MdnsPublisher::PublishKeyImpl(const std::string &aName, const KeyData 
 
 void MdnsPublisher::UnpublishHost(const std::string &aName, ResultCallback &&aCallback)
 {
-    OTBR_UNUSED_VARIABLE(aName);
-    OTBR_UNUSED_VARIABLE(aCallback);
+    NsdHostRegistration *hostRegistration = static_cast<NsdHostRegistration *>(FindHostRegistration(aName));
 
-    DieForNotImplemented(__func__);
+    VerifyOrExit(IsStarted(), std::move(aCallback)(OTBR_ERROR_MDNS));
+    if (mNsdPublisher == nullptr)
+    {
+        otbrLogWarning("No platform mDNS implementation registered!");
+        ExitNow(std::move(aCallback)(OTBR_ERROR_MDNS));
+    }
+    VerifyOrExit(hostRegistration != nullptr, std::move(aCallback)(OTBR_ERROR_NONE));
 
+    hostRegistration->mUnregisterReceiver = CreateReceiver(std::move(aCallback));
+    RemoveHostRegistration(aName, OTBR_ERROR_NONE);
+
+exit:
     return;
 }
 
@@ -268,6 +311,23 @@ MdnsPublisher::NsdServiceRegistration::~NsdServiceRegistration(void)
     VerifyOrExit(mPublisher->IsStarted() && mNsdPublisher != nullptr);
 
     otbrLogInfo("Unpublishing service %s.%s listener ID = %d", mName.c_str(), mType.c_str(), mListenerId);
+
+    if (!mUnregisterReceiver)
+    {
+        mUnregisterReceiver = CreateReceiver([](int) {});
+    }
+
+    mNsdPublisher->unregister(mUnregisterReceiver, mListenerId);
+
+exit:
+    return;
+}
+
+MdnsPublisher::NsdHostRegistration::~NsdHostRegistration(void)
+{
+    VerifyOrExit(mPublisher->IsStarted() && mNsdPublisher != nullptr);
+
+    otbrLogInfo("Unpublishing host %s listener ID = %d", mName.c_str(), mListenerId);
 
     if (!mUnregisterReceiver)
     {
