@@ -94,18 +94,33 @@ private:
     Status initialize(const ScopedFileDescriptor           &aTunFd,
                       const bool                            enabled,
                       const std::shared_ptr<INsdPublisher> &aNsdPublisher) override;
+    void   initializeInternal(const bool enabled, const std::shared_ptr<INsdPublisher> &aINsdPublisher);
     Status setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t listenerId) override;
+    void   registerStateCallbackInternal(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t listenerId);
     bool   isAttached(void);
     Status join(const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   joinInternal(const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
+                        const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   leaveInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status scheduleMigration(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
                              const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   scheduleMigrationInternal(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
+                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setCountryCode(const std::string &aCountryCode, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void   setCountryCodeInternal(const std::string &aCountryCode, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
                                  const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   configureBorderRouterInternal(int                                       aIcmp6SocketFd,
+                                         const std::string                        &aInfraInterfaceName,
+                                         bool                                      aIsBorderRoutingEnabled,
+                                         bool                                      aIsBorderRouterConfigChanged,
+                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status getChannelMasks(const std::shared_ptr<IChannelMasksReceiver> &aReceiver) override;
+    void   getChannelMasksInternal(const std::shared_ptr<IChannelMasksReceiver> &aReceiver);
 
     bool        RefreshOtDaemonState(otChangedFlags aFlags);
     void        LeaveGracefully(const LeaveCallback &aReceiver);
