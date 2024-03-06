@@ -56,7 +56,7 @@ public:
     // want to ensure ot-daemon won't do any mDNS operations when Thread is disabled.
     void SetINsdPublisher(std::shared_ptr<INsdPublisher> aINsdPublisher);
 
-    otbrError Start(void) override { return OTBR_ERROR_MDNS; }
+    otbrError Start(void) override { return OTBR_ERROR_NONE; }
 
     void Stop(void) override
     {
@@ -145,6 +145,30 @@ private:
         }
 
         ~NsdServiceRegistration(void) override;
+
+        const int32_t                      mListenerId;
+        std::shared_ptr<NsdStatusReceiver> mUnregisterReceiver;
+
+    private:
+        std::shared_ptr<INsdPublisher> mNsdPublisher;
+    };
+
+    class NsdHostRegistration : public HostRegistration
+    {
+    public:
+        NsdHostRegistration(const std::string             &aName,
+                            const AddressList             &aAddresses,
+                            ResultCallback               &&aCallback,
+                            MdnsPublisher                 *aPublisher,
+                            int32_t                        aListenerId,
+                            std::shared_ptr<INsdPublisher> aINsdPublisher)
+            : HostRegistration(aName, aAddresses, std::move(aCallback), aPublisher)
+            , mListenerId(aListenerId)
+            , mNsdPublisher(aINsdPublisher)
+        {
+        }
+
+        ~NsdHostRegistration(void) override;
 
         const int32_t                      mListenerId;
         std::shared_ptr<NsdStatusReceiver> mUnregisterReceiver;
