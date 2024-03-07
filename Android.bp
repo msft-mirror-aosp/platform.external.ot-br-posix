@@ -140,7 +140,7 @@ cc_defaults {
         // Used for bypassing the macro check. In fact mdnssd is not used because we don't compile
         // the related source files.
         "-DOTBR_ENABLE_MDNS_MDNSSD=1",
-        "-DOTBR_ENABLE_SRP_ADVERTISING_PROXY=0",
+        "-DOTBR_ENABLE_SRP_ADVERTISING_PROXY=1",
         "-DOTBR_ENABLE_DNSSD_DISCOVERY_PROXY=0",
         "-DOTBR_PACKAGE_NAME=\"OTBR_AGENT\"",
     ],
