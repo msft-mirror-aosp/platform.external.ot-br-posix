@@ -34,9 +34,11 @@
 #include <string.h>
 
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
 #include <openthread/border_router.h>
+#include <openthread/cli.h>
 #include <openthread/icmp6.h>
 #include <openthread/ip6.h>
 #include <openthread/link.h>
@@ -818,13 +820,51 @@ exit:
     return Status::ok();
 }
 
+static int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)
+{
+    std::string output;
+
+    android::base::StringAppendV(&output, aFormat, aArguments);
+
+    int length = output.length();
+
+    VerifyOrExit(android::base::WriteStringToFd(output, *(static_cast<int *>(aContext))), length = 0);
+
+exit:
+    return length;
+}
+
+inline void DumpCliCommand(std::string aCommand, int aFd)
+{
+    android::base::WriteStringToFd(aCommand + '\n', aFd);
+    otCliInputLine(aCommand.data());
+}
+
 binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumArgs)
 {
     OT_UNUSED_VARIABLE(aArgs);
     OT_UNUSED_VARIABLE(aNumArgs);
 
-    // TODO: Use ::android::base::WriteStringToFd to dump infomration.
+    otCliInit(GetOtInstance(), OutputCallback, &aFd);
+
+    DumpCliCommand("state", aFd);
+    DumpCliCommand("srp server state", aFd);
+    DumpCliCommand("srp server service", aFd);
+    DumpCliCommand("srp server host", aFd);
+    DumpCliCommand("dataset active", aFd);
+    DumpCliCommand("leaderdata", aFd);
+    DumpCliCommand("eidcache", aFd);
+    DumpCliCommand("counters mac", aFd);
+    DumpCliCommand("counters mle", aFd);
+    DumpCliCommand("counters ip", aFd);
+    DumpCliCommand("router table", aFd);
+    DumpCliCommand("neighbor table", aFd);
+    DumpCliCommand("ipaddr -v", aFd);
+    DumpCliCommand("netdata show", aFd);
+
     fsync(aFd);
+
+    otSysCliInitUsingDaemon(GetOtInstance());
 
     return STATUS_OK;
 }
