@@ -27,6 +27,7 @@
 //
 
 package {
+    default_team: "trendy_team_fwk_thread_network",
     default_applicable_licenses: ["external_ot-br-posix_license"],
 }
 
