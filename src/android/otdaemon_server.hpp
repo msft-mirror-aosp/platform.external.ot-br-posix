@@ -142,7 +142,7 @@ private:
     void updateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     void enableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
 
-    int                                mThreadEnabled = IOtDaemon::OT_STATE_DISABLED;
+    int                                mThreadEnabled = OT_STATE_DISABLED;
     otbr::Ncp::ControllerOpenThread   &mNcp;
     otbr::BorderAgent                 &mBorderAgent;
     MdnsPublisher                     &mMdnsPublisher;
