@@ -91,4 +91,7 @@ oneway interface INsdPublisher {
      *                             identify the registration
      */
     void unregister(in INsdStatusReceiver receiver, int listenerId);
+
+    /** Resets the NsdPublisher, i.e. clear all registrations. */
+    void reset();
 }
