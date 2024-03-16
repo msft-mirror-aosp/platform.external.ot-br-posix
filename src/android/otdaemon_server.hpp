@@ -124,6 +124,7 @@ private:
 
     bool        RefreshOtDaemonState(otChangedFlags aFlags);
     void        LeaveGracefully(const LeaveCallback &aReceiver);
+    void        FinishLeave(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     static void DetachGracefullyCallback(void *aBinderServer);
     void        DetachGracefullyCallback(void);
     static void SendMgmtPendingSetCallback(otError aResult, void *aBinderServer);
@@ -142,7 +143,8 @@ private:
     void updateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     void enableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
 
-    int                                mThreadEnabled = IOtDaemon::OT_STATE_DISABLED;
+    int                                mThreadEnabled = OT_STATE_DISABLED;
+    otbr::Application                 &mApplication;
     otbr::Ncp::ControllerOpenThread   &mNcp;
     otbr::BorderAgent                 &mBorderAgent;
     MdnsPublisher                     &mMdnsPublisher;
