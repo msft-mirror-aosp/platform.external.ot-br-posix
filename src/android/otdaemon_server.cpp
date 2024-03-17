@@ -34,9 +34,11 @@
 #include <string.h>
 
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
 #include <openthread/border_router.h>
+#include <openthread/cli.h>
 #include <openthread/icmp6.h>
 #include <openthread/ip6.h>
 #include <openthread/link.h>
@@ -97,8 +99,25 @@ static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo
     return addrInfo;
 }
 
+static const char *ThreadEnabledStateToString(int enabledState)
+{
+    switch (enabledState)
+    {
+    case IOtDaemon::OT_STATE_ENABLED:
+        return "ENABLED";
+    case IOtDaemon::OT_STATE_DISABLED:
+        return "DISABLED";
+    case IOtDaemon::OT_STATE_DISABLING:
+        return "DISABLING";
+    default:
+        assert(false);
+        return "UNKNOWN";
+    }
+}
+
 OtDaemonServer::OtDaemonServer(Application &aApplication)
-    : mNcp(aApplication.GetNcp())
+    : mApplication(aApplication)
+    , mNcp(aApplication.GetNcp())
     , mBorderAgent(aApplication.GetBorderAgent())
     , mMdnsPublisher(static_cast<MdnsPublisher &>(aApplication.GetPublisher()))
     , mBorderRouterConfiguration()
@@ -243,8 +262,9 @@ void OtDaemonServer::TransmitCallback(void)
 
     message = otIp6NewMessage(GetOtInstance(), &settings);
     VerifyOrExit(message != nullptr, error = OT_ERROR_NO_BUFS);
+    otMessageSetOrigin(message, OT_MESSAGE_ORIGIN_HOST_UNTRUSTED);
 
-    SuccessOrExit(error = otMessageAppend(message, packet, length));
+    SuccessOrExit(error = otMessageAppend(message, packet, static_cast<uint16_t>(length)));
 
     error   = otIp6Send(GetOtInstance(), message);
     message = nullptr;
@@ -378,13 +398,19 @@ void OtDaemonServer::initializeInternal(const bool enabled, const std::shared_pt
     }
     else
     {
-        updateThreadEnabledState(enabled, nullptr /* aReceiver */);
+        updateThreadEnabledState(OT_STATE_DISABLED, nullptr /* aReceiver */);
     }
 }
 
 void OtDaemonServer::updateThreadEnabledState(const int enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    mThreadEnabled = enabled;
+    if (mThreadEnabled != enabled)
+    {
+        otbrLogInfo("Thread enabled state changed: %s -> %s", ThreadEnabledStateToString(mThreadEnabled),
+                    ThreadEnabledStateToString(enabled));
+        mThreadEnabled = enabled;
+    }
+
     if (aReceiver != nullptr)
     {
         aReceiver->onSuccess();
@@ -418,7 +444,7 @@ void OtDaemonServer::enableThread(const std::shared_ptr<IOtStatusReceiver> &aRec
         (void)otIp6SetEnabled(GetOtInstance(), true);
         (void)otThreadSetEnabled(GetOtInstance(), true);
     }
-    updateThreadEnabledState(IOtDaemon::OT_STATE_ENABLED, aReceiver);
+    updateThreadEnabledState(OT_STATE_ENABLED, aReceiver);
 }
 
 Status OtDaemonServer::setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
@@ -435,10 +461,9 @@ void OtDaemonServer::setThreadEnabledInternal(const bool enabled, const std::sha
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
 
-    VerifyOrExit(mThreadEnabled != IOtDaemon::OT_STATE_DISABLING, error = OT_ERROR_BUSY,
-                 message = "Thread is disabling");
+    VerifyOrExit(mThreadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
-    if ((mThreadEnabled == IOtDaemon::OT_STATE_ENABLED) == enabled)
+    if ((mThreadEnabled == OT_STATE_ENABLED) == enabled)
     {
         aReceiver->onSuccess();
         ExitNow();
@@ -450,17 +475,14 @@ void OtDaemonServer::setThreadEnabledInternal(const bool enabled, const std::sha
     }
     else
     {
-        mThreadEnabled = IOtDaemon::OT_STATE_DISABLING;
-        if (mCallback != nullptr)
-        {
-            mCallback->onThreadEnabledChanged(mThreadEnabled);
-        }
+        // `aReceiver` should not be set here because the operation isn't finished yet
+        updateThreadEnabledState(OT_STATE_DISABLING, nullptr /* aReceiver */);
 
         LeaveGracefully([aReceiver, this]() {
             // Ignore errors as those operations should always succeed
             (void)otThreadSetEnabled(GetOtInstance(), false);
             (void)otIp6SetEnabled(GetOtInstance(), false);
-            updateThreadEnabledState(IOtDaemon::OT_STATE_DISABLED, aReceiver);
+            updateThreadEnabledState(OT_STATE_DISABLED, aReceiver);
         });
     }
 
@@ -574,10 +596,9 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
     std::string              message;
     otOperationalDatasetTlvs datasetTlvs;
 
-    VerifyOrExit(mThreadEnabled != IOtDaemon::OT_STATE_DISABLING, error = OT_ERROR_BUSY,
-                 message = "Thread is disabling");
+    VerifyOrExit(mThreadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
-    VerifyOrExit(mThreadEnabled == IOtDaemon::OT_STATE_ENABLED,
+    VerifyOrExit(mThreadEnabled == OT_STATE_ENABLED,
                  error   = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
                  message = "Thread is disabled");
 
@@ -587,12 +608,15 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
 
     if (otThreadGetDeviceRole(GetOtInstance()) != OT_DEVICE_ROLE_DISABLED)
     {
-        LeaveGracefully([aActiveOpDatasetTlvs, aReceiver, this]() { join(aActiveOpDatasetTlvs, aReceiver); });
+        LeaveGracefully([aActiveOpDatasetTlvs, aReceiver, this]() {
+            FinishLeave(nullptr);
+            join(aActiveOpDatasetTlvs, aReceiver);
+        });
         ExitNow();
     }
 
     std::copy(aActiveOpDatasetTlvs.begin(), aActiveOpDatasetTlvs.end(), datasetTlvs.mTlvs);
-    datasetTlvs.mLength = aActiveOpDatasetTlvs.size();
+    datasetTlvs.mLength = static_cast<uint8_t>(aActiveOpDatasetTlvs.size());
     SuccessOrExit(error   = otDatasetSetActiveTlvs(GetOtInstance(), &datasetTlvs),
                   message = "Failed to set Active Operational Dataset");
 
@@ -630,25 +654,32 @@ void OtDaemonServer::leaveInternal(const std::shared_ptr<IOtStatusReceiver> &aRe
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
 
-    VerifyOrExit(mThreadEnabled != IOtDaemon::OT_STATE_DISABLING, error = OT_ERROR_BUSY,
-                 message = "Thread is disabling");
+    VerifyOrExit(mThreadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
-    if (mThreadEnabled == IOtDaemon::OT_STATE_DISABLED)
+    if (mThreadEnabled == OT_STATE_DISABLED)
     {
-        (void)otInstanceErasePersistentInfo(GetOtInstance());
-        aReceiver->onSuccess();
+        FinishLeave(aReceiver);
         ExitNow();
     }
 
-    LeaveGracefully([aReceiver, this]() {
-        (void)otInstanceErasePersistentInfo(GetOtInstance());
-        aReceiver->onSuccess();
-    });
+    LeaveGracefully([aReceiver, this]() { FinishLeave(aReceiver); });
 
 exit:
     if (error != OT_ERROR_NONE)
     {
         PropagateResult(error, message, aReceiver);
+    }
+}
+
+void OtDaemonServer::FinishLeave(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    (void)otInstanceErasePersistentInfo(GetOtInstance());
+    mApplication.Deinit();
+    mApplication.Init();
+    initializeInternal(mThreadEnabled, mINsdPublisher);
+    if (aReceiver != nullptr)
+    {
+        aReceiver->onSuccess();
     }
 }
 
@@ -712,10 +743,9 @@ void OtDaemonServer::scheduleMigrationInternal(const std::vector<uint8_t>       
     std::string          message;
     otOperationalDataset emptyDataset;
 
-    VerifyOrExit(mThreadEnabled != IOtDaemon::OT_STATE_DISABLING, error = OT_ERROR_BUSY,
-                 message = "Thread is disabling");
+    VerifyOrExit(mThreadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
-    VerifyOrExit(mThreadEnabled == IOtDaemon::OT_STATE_ENABLED,
+    VerifyOrExit(mThreadEnabled == OT_STATE_ENABLED,
                  error   = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
                  message = "Thread is disabled");
 
@@ -733,7 +763,7 @@ void OtDaemonServer::scheduleMigrationInternal(const std::vector<uint8_t>       
     // TODO: check supported channel mask
 
     error = otDatasetSendMgmtPendingSet(GetOtInstance(), &emptyDataset, aPendingOpDatasetTlvs.data(),
-                                        aPendingOpDatasetTlvs.size(), SendMgmtPendingSetCallback,
+                                        static_cast<uint8_t>(aPendingOpDatasetTlvs.size()), SendMgmtPendingSetCallback,
                                         /* aBinderServer= */ this);
     if (error != OT_ERROR_NONE)
     {
@@ -787,7 +817,7 @@ void OtDaemonServer::setCountryCodeInternal(const std::string                   
     otbrLogInfo("Set country code: %c%c", aCountryCode[0], aCountryCode[1]);
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
 
-    countryCode = (static_cast<uint16_t>(aCountryCode[0]) << 8) | aCountryCode[1];
+    countryCode = static_cast<uint16_t>((aCountryCode[0] << 8) | aCountryCode[1]);
     SuccessOrExit(error = otLinkSetRegion(GetOtInstance(), countryCode), message = "Failed to set the country code");
 
 exit:
@@ -864,7 +894,7 @@ void OtDaemonServer::configureBorderRouterInternal(int                aIcmp6Sock
     {
         if (aIsBorderRoutingEnabled)
         {
-            int infraIfIndex = if_nametoindex(aInfraInterfaceName.c_str());
+            unsigned int infraIfIndex = if_nametoindex(aInfraInterfaceName.c_str());
             SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
                           message = "failed to disable border routing");
             otSysSetInfraNetif(aInfraInterfaceName.c_str(), icmp6SocketFd);
@@ -895,13 +925,51 @@ exit:
     PropagateResult(error, message, aReceiver);
 }
 
+static int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)
+{
+    std::string output;
+
+    android::base::StringAppendV(&output, aFormat, aArguments);
+
+    int length = output.length();
+
+    VerifyOrExit(android::base::WriteStringToFd(output, *(static_cast<int *>(aContext))), length = 0);
+
+exit:
+    return length;
+}
+
+inline void DumpCliCommand(std::string aCommand, int aFd)
+{
+    android::base::WriteStringToFd(aCommand + '\n', aFd);
+    otCliInputLine(aCommand.data());
+}
+
 binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumArgs)
 {
     OT_UNUSED_VARIABLE(aArgs);
     OT_UNUSED_VARIABLE(aNumArgs);
 
-    // TODO: Use ::android::base::WriteStringToFd to dump infomration.
+    otCliInit(GetOtInstance(), OutputCallback, &aFd);
+
+    DumpCliCommand("state", aFd);
+    DumpCliCommand("srp server state", aFd);
+    DumpCliCommand("srp server service", aFd);
+    DumpCliCommand("srp server host", aFd);
+    DumpCliCommand("dataset active", aFd);
+    DumpCliCommand("leaderdata", aFd);
+    DumpCliCommand("eidcache", aFd);
+    DumpCliCommand("counters mac", aFd);
+    DumpCliCommand("counters mle", aFd);
+    DumpCliCommand("counters ip", aFd);
+    DumpCliCommand("router table", aFd);
+    DumpCliCommand("neighbor table", aFd);
+    DumpCliCommand("ipaddr -v", aFd);
+    DumpCliCommand("netdata show", aFd);
+
     fsync(aFd);
+
+    otSysCliInitUsingDaemon(GetOtInstance());
 
     return STATUS_OK;
 }
