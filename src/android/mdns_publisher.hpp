@@ -63,6 +63,10 @@ public:
         mServiceRegistrations.clear();
         mHostRegistrations.clear();
         mStateCallback(Mdns::Publisher::State::kIdle);
+        if (mNsdPublisher)
+        {
+            mNsdPublisher->reset();
+        }
     }
 
     bool IsStarted(void) const override { return mNsdPublisher != nullptr; }
