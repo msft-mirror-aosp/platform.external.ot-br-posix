@@ -50,6 +50,7 @@ import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.IOtStatusReceiver;
+import com.android.server.thread.openthread.MeshcopTxtAttributes;
 import com.android.server.thread.openthread.OtDaemonState;
 
 import org.junit.Before;
@@ -86,13 +87,17 @@ public final class FakeOtDaemonTest {
                                     + "642D643961300102D9A00410A245479C836D551B9CA557F7"
                                     + "B9D351B40C0402A0FFF8");
 
-    private static int DEFAULT_SUPPORTED_CHANNEL_MASK = 0x07FFF800; // from channel 11 to 26
-    private static int DEFAULT_PREFERRED_CHANNEL_MASK = 0;
+    private static final int DEFAULT_SUPPORTED_CHANNEL_MASK = 0x07FFF800; // from channel 11 to 26
+    private static final int DEFAULT_PREFERRED_CHANNEL_MASK = 0;
+    private static final byte[] TEST_VENDOR_OUI = new byte[] {(byte) 0xAC, (byte) 0xDE, 0x48};
+    private static final String TEST_VENDOR_NAME = "test vendor";
+    private static final String TEST_MODEL_NAME = "test model";
 
     private FakeOtDaemon mFakeOtDaemon;
     private TestLooper mTestLooper;
     @Mock private ParcelFileDescriptor mMockTunFd;
     @Mock private INsdPublisher mMockNsdPublisher;
+    private MeshcopTxtAttributes mOverriddenMeshcopTxts;
 
     @Before
     public void setUp() {
@@ -100,25 +105,44 @@ public final class FakeOtDaemonTest {
 
         mTestLooper = new TestLooper();
         mFakeOtDaemon = new FakeOtDaemon(new Handler(mTestLooper.getLooper()));
+        mOverriddenMeshcopTxts = new MeshcopTxtAttributes();
+        mOverriddenMeshcopTxts.vendorName = TEST_VENDOR_NAME;
+        mOverriddenMeshcopTxts.vendorOui = TEST_VENDOR_OUI;
+        mOverriddenMeshcopTxts.modelName = TEST_MODEL_NAME;
     }
 
     @Test
     public void initialize_succeed_tunFdIsSet() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher);
+        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
 
         assertThat(mFakeOtDaemon.getTunFd()).isEqualTo(mMockTunFd);
     }
 
     @Test
     public void initialize_succeed_NsdPublisherIsSet() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher);
+        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
 
         assertThat(mFakeOtDaemon.getNsdPublisher()).isEqualTo(mMockNsdPublisher);
     }
 
     @Test
+    public void initialize_succeed_vendorAndModelNameAreSet() throws Exception {
+        mOverriddenMeshcopTxts.vendorName = TEST_VENDOR_NAME;
+        mOverriddenMeshcopTxts.vendorOui = TEST_VENDOR_OUI;
+        mOverriddenMeshcopTxts.modelName = TEST_MODEL_NAME;
+
+        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
+
+        MeshcopTxtAttributes meshcopTxts = mFakeOtDaemon.getOverriddenMeshcopTxtAttributes();
+        assertThat(meshcopTxts).isNotNull();
+        assertThat(meshcopTxts.vendorName).isEqualTo(TEST_VENDOR_NAME);
+        assertThat(meshcopTxts.vendorOui).isEqualTo(TEST_VENDOR_OUI);
+        assertThat(meshcopTxts.modelName).isEqualTo(TEST_MODEL_NAME);
+    }
+
+    @Test
     public void registerStateCallback_noStateChange_callbackIsInvoked() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher);
+        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
         final AtomicReference<OtDaemonState> stateRef = new AtomicReference<>();
         final AtomicLong listenerIdRef = new AtomicLong();
         final AtomicReference<BackboneRouterState> bbrStateRef = new AtomicReference<>();
