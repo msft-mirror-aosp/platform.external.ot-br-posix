@@ -46,6 +46,7 @@ import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemon;
 import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.IOtStatusReceiver;
+import com.android.server.thread.openthread.MeshcopTxtAttributes;
 import com.android.server.thread.openthread.OtDaemonState;
 
 import java.time.Duration;
@@ -75,15 +76,11 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     private int mPreferredChannelMask = 0;
 
     @Nullable private DeathRecipient mDeathRecipient;
-
     @Nullable private ParcelFileDescriptor mTunFd;
-
-    @NonNull private INsdPublisher mNsdPublisher;
-
+    @Nullable private INsdPublisher mNsdPublisher;
+    @Nullable private MeshcopTxtAttributes mOverriddenMeshcopTxts;
     @Nullable private IOtDaemonCallback mCallback;
-
     @Nullable private Long mCallbackListenerId;
-
     @Nullable private RemoteException mJoinException;
 
     public FakeOtDaemon(Handler handler) {
@@ -123,11 +120,20 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     }
 
     @Override
-    public void initialize(ParcelFileDescriptor tunFd, boolean enabled, INsdPublisher nsdPublisher)
+    public void initialize(
+            ParcelFileDescriptor tunFd,
+            boolean enabled,
+            INsdPublisher nsdPublisher,
+            MeshcopTxtAttributes overriddenMeshcopTxts)
             throws RemoteException {
         mTunFd = tunFd;
         mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
         mNsdPublisher = nsdPublisher;
+
+        mOverriddenMeshcopTxts = new MeshcopTxtAttributes();
+        mOverriddenMeshcopTxts.vendorOui = overriddenMeshcopTxts.vendorOui.clone();
+        mOverriddenMeshcopTxts.vendorName = overriddenMeshcopTxts.vendorName;
+        mOverriddenMeshcopTxts.modelName = overriddenMeshcopTxts.modelName;
     }
 
     @Override
@@ -163,6 +169,15 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable
     public INsdPublisher getNsdPublisher() {
         return mNsdPublisher;
+    }
+
+    /**
+     * Returns the overridden MeshCoP TXT attributes that is to OT daemon or {@code null} if {@link
+     * #initialize} is never called.
+     */
+    @Nullable
+    public MeshcopTxtAttributes getOverriddenMeshcopTxtAttributes() {
+        return mOverriddenMeshcopTxts;
     }
 
     @Override

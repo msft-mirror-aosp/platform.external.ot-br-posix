@@ -60,6 +60,7 @@ using aidl::com::android::server::thread::openthread::IOtDaemon;
 using aidl::com::android::server::thread::openthread::IOtDaemonCallback;
 using aidl::com::android::server::thread::openthread::IOtStatusReceiver;
 using aidl::com::android::server::thread::openthread::Ipv6AddressInfo;
+using aidl::com::android::server::thread::openthread::MeshcopTxtAttributes;
 using aidl::com::android::server::thread::openthread::OtDaemonState;
 
 class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendor::VendorServer
@@ -93,8 +94,11 @@ private:
 
     Status initialize(const ScopedFileDescriptor           &aTunFd,
                       const bool                            enabled,
-                      const std::shared_ptr<INsdPublisher> &aNsdPublisher) override;
-    void   initializeInternal(const bool enabled, const std::shared_ptr<INsdPublisher> &aINsdPublisher);
+                      const std::shared_ptr<INsdPublisher> &aNsdPublisher,
+                      const MeshcopTxtAttributes           &aMeshcopTxts) override;
+    void   initializeInternal(const bool                            enabled,
+                              const std::shared_ptr<INsdPublisher> &aINsdPublisher,
+                              const MeshcopTxtAttributes           &aMeshcopTxts);
     Status setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t listenerId) override;
@@ -149,6 +153,7 @@ private:
     otbr::BorderAgent                 &mBorderAgent;
     MdnsPublisher                     &mMdnsPublisher;
     std::shared_ptr<INsdPublisher>     mINsdPublisher;
+    MeshcopTxtAttributes               mMeshcopTxts;
     TaskRunner                         mTaskRunner;
     ScopedFileDescriptor               mTunFd;
     OtDaemonState                      mState;
