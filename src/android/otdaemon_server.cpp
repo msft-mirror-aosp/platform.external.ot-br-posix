@@ -409,6 +409,7 @@ void OtDaemonServer::initializeInternal(const bool                            en
     mMdnsPublisher.SetINsdPublisher(aINsdPublisher);
     mBorderAgent.SetMeshCopServiceValues(instanceName, aMeshcopTxts.modelName, aMeshcopTxts.vendorName,
                                          aMeshcopTxts.vendorOui);
+    mBorderAgent.SetEnabled(enabled);
 
     if (enabled)
     {
@@ -594,6 +595,7 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
 
     if (isAttached() && !mState.activeDatasetTlvs.empty() && mJoinReceiver != nullptr)
     {
+        otbrLogInfo("Join succeeded");
         mJoinReceiver->onSuccess();
         mJoinReceiver = nullptr;
     }
