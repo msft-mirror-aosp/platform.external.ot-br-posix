@@ -409,6 +409,7 @@ void OtDaemonServer::initializeInternal(const bool                            en
     mMdnsPublisher.SetINsdPublisher(aINsdPublisher);
     mBorderAgent.SetMeshCopServiceValues(instanceName, aMeshcopTxts.modelName, aMeshcopTxts.vendorName,
                                          aMeshcopTxts.vendorOui);
+    mBorderAgent.SetEnabled(enabled);
 
     if (enabled)
     {
@@ -594,6 +595,7 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
 
     if (isAttached() && !mState.activeDatasetTlvs.empty() && mJoinReceiver != nullptr)
     {
+        otbrLogInfo("Join succeeded");
         mJoinReceiver->onSuccess();
         mJoinReceiver = nullptr;
     }
@@ -694,9 +696,8 @@ exit:
 void OtDaemonServer::FinishLeave(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     (void)otInstanceErasePersistentInfo(GetOtInstance());
-    mApplication.Deinit();
-    mApplication.Init();
-    initializeInternal(mThreadEnabled == OT_STATE_ENABLED, mINsdPublisher, mMeshcopTxts);
+    OT_UNUSED_VARIABLE(mApplication); // Avoid the unused-private-field issue.
+    // TODO: b/323301831 - Re-init the Application class.
     if (aReceiver != nullptr)
     {
         aReceiver->onSuccess();
