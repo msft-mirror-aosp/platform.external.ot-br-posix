@@ -70,7 +70,8 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     private final Handler mHandler;
     private final OtDaemonState mState;
     private final BackboneRouterState mBbrState;
-    private int mThreadEnabled = OT_STATE_ENABLED;
+    private boolean mIsInitialized = false;
+    private int mThreadEnabled = OT_STATE_DISABLED;
     private int mChannelMasksReceiverOtError = OT_ERROR_NONE;
     private int mSupportedChannelMask = 0x07FFF800; // from channel 11 to 26
     private int mPreferredChannelMask = 0;
@@ -126,6 +127,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
             INsdPublisher nsdPublisher,
             MeshcopTxtAttributes overriddenMeshcopTxts)
             throws RemoteException {
+        mIsInitialized = true;
         mTunFd = tunFd;
         mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
         mNsdPublisher = nsdPublisher;
@@ -136,17 +138,9 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mOverriddenMeshcopTxts.modelName = overriddenMeshcopTxts.modelName;
     }
 
-    @Override
-    public void setThreadEnabled(boolean enabled, IOtStatusReceiver receiver) {
-        mHandler.post(
-                () -> {
-                    mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
-                    try {
-                        receiver.onSuccess();
-                    } catch (RemoteException e) {
-                        throw new AssertionError(e);
-                    }
-                });
+    /** Returns {@code true} if {@link initialize} has been called to initialize this object. */
+    public boolean isInitialized() {
+        return mIsInitialized;
     }
 
     public int getEnabledState() {
@@ -178,6 +172,19 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable
     public MeshcopTxtAttributes getOverriddenMeshcopTxtAttributes() {
         return mOverriddenMeshcopTxts;
+    }
+
+    @Override
+    public void setThreadEnabled(boolean enabled, IOtStatusReceiver receiver) {
+        mHandler.post(
+                () -> {
+                    mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
+                    try {
+                        receiver.onSuccess();
+                    } catch (RemoteException e) {
+                        throw new AssertionError(e);
+                    }
+                });
     }
 
     @Override
