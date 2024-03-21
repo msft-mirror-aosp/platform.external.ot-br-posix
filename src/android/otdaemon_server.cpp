@@ -379,10 +379,11 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
     }
 }
 
-Status OtDaemonServer::initialize(const ScopedFileDescriptor           &aTunFd,
-                                  const bool                            enabled,
-                                  const std::shared_ptr<INsdPublisher> &aINsdPublisher,
-                                  const MeshcopTxtAttributes           &aMeshcopTxts)
+Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTunFd,
+                                  const bool                                enabled,
+                                  const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
+                                  const MeshcopTxtAttributes               &aMeshcopTxts,
+                                  const std::shared_ptr<IOtDaemonCallback> &aCallback)
 {
     otbrLogInfo("OT daemon is initialized by system server (tunFd=%d, enabled=%s)", aTunFd.get(),
                 enabled ? "true" : "false");
@@ -394,17 +395,21 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor           &aTunFd,
     mINsdPublisher = aINsdPublisher;
     mMeshcopTxts   = aMeshcopTxts;
 
-    mTaskRunner.Post(
-        [enabled, aINsdPublisher, aMeshcopTxts, this]() { initializeInternal(enabled, mINsdPublisher, mMeshcopTxts); });
+    mTaskRunner.Post([enabled, aINsdPublisher, aMeshcopTxts, aCallback, this]() {
+        initializeInternal(enabled, mINsdPublisher, mMeshcopTxts, aCallback);
+    });
 
     return Status::ok();
 }
 
-void OtDaemonServer::initializeInternal(const bool                            enabled,
-                                        const std::shared_ptr<INsdPublisher> &aINsdPublisher,
-                                        const MeshcopTxtAttributes           &aMeshcopTxts)
+void OtDaemonServer::initializeInternal(const bool                                enabled,
+                                        const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
+                                        const MeshcopTxtAttributes               &aMeshcopTxts,
+                                        const std::shared_ptr<IOtDaemonCallback> &aCallback)
 {
     std::string instanceName = aMeshcopTxts.vendorName + " " + aMeshcopTxts.modelName;
+
+    registerStateCallbackInternal(aCallback, -1 /* listenerId */);
 
     mMdnsPublisher.SetINsdPublisher(aINsdPublisher);
     mBorderAgent.SetMeshCopServiceValues(instanceName, aMeshcopTxts.modelName, aMeshcopTxts.vendorName,
@@ -423,9 +428,11 @@ void OtDaemonServer::initializeInternal(const bool                            en
 
 Status OtDaemonServer::terminate(void)
 {
-    otbrLogWarning("Terminating ot-daemon process...");
-
-    exit(0);
+    mTaskRunner.Post([]() {
+        otbrLogWarning("Terminating ot-daemon process...");
+        exit(0);
+    });
+    return Status::ok();
 }
 
 void OtDaemonServer::updateThreadEnabledState(const int enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)

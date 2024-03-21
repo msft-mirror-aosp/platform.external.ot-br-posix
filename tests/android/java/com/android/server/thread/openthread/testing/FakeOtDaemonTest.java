@@ -37,6 +37,8 @@ import static com.google.common.io.BaseEncoding.base16;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -103,6 +105,7 @@ public final class FakeOtDaemonTest {
     private TestLooper mTestLooper;
     @Mock private ParcelFileDescriptor mMockTunFd;
     @Mock private INsdPublisher mMockNsdPublisher;
+    @Mock private IOtDaemonCallback mMockCallback;
     private MeshcopTxtAttributes mOverriddenMeshcopTxts;
 
     @Before
@@ -118,12 +121,14 @@ public final class FakeOtDaemonTest {
     }
 
     @Test
-    public void initialize_succeed_argumentsAreSet() throws Exception {
+    public void initialize_succeed_argumentsAreSetAndCallbackIsInvoked() throws Exception {
         mOverriddenMeshcopTxts.vendorName = TEST_VENDOR_NAME;
         mOverriddenMeshcopTxts.vendorOui = TEST_VENDOR_OUI;
         mOverriddenMeshcopTxts.modelName = TEST_MODEL_NAME;
 
-        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
+        mFakeOtDaemon.initialize(
+                mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts, mMockCallback);
+        mTestLooper.dispatchAll();
 
         MeshcopTxtAttributes meshcopTxts = mFakeOtDaemon.getOverriddenMeshcopTxtAttributes();
         assertThat(meshcopTxts).isNotNull();
@@ -133,12 +138,16 @@ public final class FakeOtDaemonTest {
         assertThat(mFakeOtDaemon.getTunFd()).isEqualTo(mMockTunFd);
         assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
         assertThat(mFakeOtDaemon.getNsdPublisher()).isEqualTo(mMockNsdPublisher);
+        assertThat(mFakeOtDaemon.getStateCallback()).isEqualTo(mMockCallback);
         assertThat(mFakeOtDaemon.isInitialized()).isTrue();
+        verify(mMockCallback, times(1)).onStateChanged(any(), anyLong());
+        verify(mMockCallback, times(1)).onBackboneRouterStateChanged(any());
     }
 
     @Test
     public void registerStateCallback_noStateChange_callbackIsInvoked() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
+        mFakeOtDaemon.initialize(
+                mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts, mMockCallback);
         final AtomicReference<OtDaemonState> stateRef = new AtomicReference<>();
         final AtomicLong listenerIdRef = new AtomicLong();
         final AtomicReference<BackboneRouterState> bbrStateRef = new AtomicReference<>();
@@ -306,9 +315,11 @@ public final class FakeOtDaemonTest {
     public void terminate_statesAreResetAndDeathCallbackIsInvoked() throws Exception {
         DeathRecipient mockDeathRecipient = mock(DeathRecipient.class);
         mFakeOtDaemon.linkToDeath(mockDeathRecipient, 0);
-        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
+        mFakeOtDaemon.initialize(
+                mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts, mMockCallback);
 
         mFakeOtDaemon.terminate();
+        mTestLooper.dispatchAll();
 
         assertThat(mFakeOtDaemon.isInitialized()).isFalse();
         OtDaemonState state = mFakeOtDaemon.getState();
