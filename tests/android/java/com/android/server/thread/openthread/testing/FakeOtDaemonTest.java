@@ -112,21 +112,7 @@ public final class FakeOtDaemonTest {
     }
 
     @Test
-    public void initialize_succeed_tunFdIsSet() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
-
-        assertThat(mFakeOtDaemon.getTunFd()).isEqualTo(mMockTunFd);
-    }
-
-    @Test
-    public void initialize_succeed_NsdPublisherIsSet() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
-
-        assertThat(mFakeOtDaemon.getNsdPublisher()).isEqualTo(mMockNsdPublisher);
-    }
-
-    @Test
-    public void initialize_succeed_vendorAndModelNameAreSet() throws Exception {
+    public void initialize_succeed_argumentsAreSet() throws Exception {
         mOverriddenMeshcopTxts.vendorName = TEST_VENDOR_NAME;
         mOverriddenMeshcopTxts.vendorOui = TEST_VENDOR_OUI;
         mOverriddenMeshcopTxts.modelName = TEST_MODEL_NAME;
@@ -138,6 +124,10 @@ public final class FakeOtDaemonTest {
         assertThat(meshcopTxts.vendorName).isEqualTo(TEST_VENDOR_NAME);
         assertThat(meshcopTxts.vendorOui).isEqualTo(TEST_VENDOR_OUI);
         assertThat(meshcopTxts.modelName).isEqualTo(TEST_MODEL_NAME);
+        assertThat(mFakeOtDaemon.getTunFd()).isEqualTo(mMockTunFd);
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
+        assertThat(mFakeOtDaemon.getNsdPublisher()).isEqualTo(mMockNsdPublisher);
+        assertThat(mFakeOtDaemon.isInitialized()).isTrue();
     }
 
     @Test
@@ -235,12 +225,12 @@ public final class FakeOtDaemonTest {
     }
 
     @Test
-    public void setThreadEnabled_disableThread_succeed() throws Exception {
-        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
+    public void setThreadEnabled_enableThread_succeed() throws Exception {
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_DISABLED);
 
         final AtomicBoolean succeedRef = new AtomicBoolean(false);
         mFakeOtDaemon.setThreadEnabled(
-                false,
+                true,
                 new IOtStatusReceiver.Default() {
                     @Override
                     public void onSuccess() {
@@ -250,7 +240,7 @@ public final class FakeOtDaemonTest {
         mTestLooper.dispatchAll();
 
         assertThat(succeedRef.get()).isTrue();
-        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_DISABLED);
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
     }
 
     @Test
