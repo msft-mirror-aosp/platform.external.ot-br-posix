@@ -99,6 +99,7 @@ private:
     void   initializeInternal(const bool                            enabled,
                               const std::shared_ptr<INsdPublisher> &aINsdPublisher,
                               const MeshcopTxtAttributes           &aMeshcopTxts);
+    Status terminate(void) override;
     Status setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t listenerId) override;

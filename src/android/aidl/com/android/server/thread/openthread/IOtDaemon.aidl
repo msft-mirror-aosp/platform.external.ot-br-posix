@@ -96,6 +96,9 @@ oneway interface IOtDaemon {
             in INsdPublisher nsdPublisher,
             in MeshcopTxtAttributes meshcopTxts);
 
+    /** Terminates the ot-daemon process. */
+    void terminate();
+
     /**
      * Enables/disables Thread.
      *
