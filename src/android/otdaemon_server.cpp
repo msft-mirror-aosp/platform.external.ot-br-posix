@@ -116,7 +116,8 @@ static const char *ThreadEnabledStateToString(int enabledState)
 }
 
 OtDaemonServer::OtDaemonServer(Application &aApplication)
-    : mNcp(aApplication.GetNcp())
+    : mApplication(aApplication)
+    , mNcp(aApplication.GetNcp())
     , mBorderAgent(aApplication.GetBorderAgent())
     , mMdnsPublisher(static_cast<MdnsPublisher &>(aApplication.GetPublisher()))
     , mBorderRouterConfiguration()
@@ -149,7 +150,14 @@ void OtDaemonServer::BinderDeathCallback(void *aBinderServer)
 {
     OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
 
-    otbrLogCrit("Client is died, removing callbacks...");
+    otbrLogCrit("system_server is dead, removing configs and callbacks...");
+
+    thisServer->mMeshcopTxts   = {};
+    thisServer->mINsdPublisher = nullptr;
+
+    // Note that the INsdPublisher reference is held in MdnsPublisher
+    thisServer->mMdnsPublisher.SetINsdPublisher(nullptr);
+
     thisServer->mCallback = nullptr;
     thisServer->mTunFd.set(-1); // the original FD will be closed automatically
 }
@@ -373,7 +381,8 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
 
 Status OtDaemonServer::initialize(const ScopedFileDescriptor           &aTunFd,
                                   const bool                            enabled,
-                                  const std::shared_ptr<INsdPublisher> &aINsdPublisher)
+                                  const std::shared_ptr<INsdPublisher> &aINsdPublisher,
+                                  const MeshcopTxtAttributes           &aMeshcopTxts)
 {
     otbrLogInfo("OT daemon is initialized by system server (tunFd=%d, enabled=%s)", aTunFd.get(),
                 enabled ? "true" : "false");
@@ -382,14 +391,25 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor           &aTunFd,
     // we can process `aTunFd` directly in front of the task.
     mTunFd = aTunFd.dup();
 
-    mTaskRunner.Post([enabled, aINsdPublisher, this]() { initializeInternal(enabled, aINsdPublisher); });
+    mINsdPublisher = aINsdPublisher;
+    mMeshcopTxts   = aMeshcopTxts;
+
+    mTaskRunner.Post(
+        [enabled, aINsdPublisher, aMeshcopTxts, this]() { initializeInternal(enabled, mINsdPublisher, mMeshcopTxts); });
 
     return Status::ok();
 }
 
-void OtDaemonServer::initializeInternal(const bool enabled, const std::shared_ptr<INsdPublisher> &aINsdPublisher)
+void OtDaemonServer::initializeInternal(const bool                            enabled,
+                                        const std::shared_ptr<INsdPublisher> &aINsdPublisher,
+                                        const MeshcopTxtAttributes           &aMeshcopTxts)
 {
-    mINsdPublisher = aINsdPublisher;
+    std::string instanceName = aMeshcopTxts.vendorName + " " + aMeshcopTxts.modelName;
+
+    mMdnsPublisher.SetINsdPublisher(aINsdPublisher);
+    mBorderAgent.SetMeshCopServiceValues(instanceName, aMeshcopTxts.modelName, aMeshcopTxts.vendorName,
+                                         aMeshcopTxts.vendorOui);
+    mBorderAgent.SetEnabled(enabled);
 
     if (enabled)
     {
@@ -403,27 +423,26 @@ void OtDaemonServer::initializeInternal(const bool enabled, const std::shared_pt
 
 void OtDaemonServer::updateThreadEnabledState(const int enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    if (mThreadEnabled != enabled)
-    {
-        otbrLogInfo("Thread enabled state changed: %s -> %s", ThreadEnabledStateToString(mThreadEnabled),
-                    ThreadEnabledStateToString(enabled));
-        mThreadEnabled = enabled;
-    }
+    VerifyOrExit(enabled != mThreadEnabled);
+
+    otbrLogInfo("Thread enabled state changed: %s -> %s", ThreadEnabledStateToString(mThreadEnabled),
+                ThreadEnabledStateToString(enabled));
+    mThreadEnabled = enabled;
 
     if (aReceiver != nullptr)
     {
         aReceiver->onSuccess();
     }
 
+    // Enables the BorderAgent module only when Thread is enabled because it always
+    // publishes the MeshCoP service even when no Thread network is provisioned.
     switch (enabled)
     {
     case OT_STATE_ENABLED:
-        mMdnsPublisher.SetINsdPublisher(mINsdPublisher);
+        mBorderAgent.SetEnabled(true);
         break;
     case OT_STATE_DISABLED:
-        mMdnsPublisher.SetINsdPublisher(nullptr);
-        break;
-    default:
+        mBorderAgent.SetEnabled(false);
         break;
     }
 
@@ -431,6 +450,9 @@ void OtDaemonServer::updateThreadEnabledState(const int enabled, const std::shar
     {
         mCallback->onThreadEnabledChanged(mThreadEnabled);
     }
+
+exit:
+    return;
 }
 
 void OtDaemonServer::enableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
@@ -573,6 +595,7 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
 
     if (isAttached() && !mState.activeDatasetTlvs.empty() && mJoinReceiver != nullptr)
     {
+        otbrLogInfo("Join succeeded");
         mJoinReceiver->onSuccess();
         mJoinReceiver = nullptr;
     }
@@ -607,7 +630,10 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
 
     if (otThreadGetDeviceRole(GetOtInstance()) != OT_DEVICE_ROLE_DISABLED)
     {
-        LeaveGracefully([aActiveOpDatasetTlvs, aReceiver, this]() { join(aActiveOpDatasetTlvs, aReceiver); });
+        LeaveGracefully([aActiveOpDatasetTlvs, aReceiver, this]() {
+            FinishLeave(nullptr);
+            join(aActiveOpDatasetTlvs, aReceiver);
+        });
         ExitNow();
     }
 
@@ -654,20 +680,27 @@ void OtDaemonServer::leaveInternal(const std::shared_ptr<IOtStatusReceiver> &aRe
 
     if (mThreadEnabled == OT_STATE_DISABLED)
     {
-        (void)otInstanceErasePersistentInfo(GetOtInstance());
-        aReceiver->onSuccess();
+        FinishLeave(aReceiver);
         ExitNow();
     }
 
-    LeaveGracefully([aReceiver, this]() {
-        (void)otInstanceErasePersistentInfo(GetOtInstance());
-        aReceiver->onSuccess();
-    });
+    LeaveGracefully([aReceiver, this]() { FinishLeave(aReceiver); });
 
 exit:
     if (error != OT_ERROR_NONE)
     {
         PropagateResult(error, message, aReceiver);
+    }
+}
+
+void OtDaemonServer::FinishLeave(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    (void)otInstanceErasePersistentInfo(GetOtInstance());
+    OT_UNUSED_VARIABLE(mApplication); // Avoid the unused-private-field issue.
+    // TODO: b/323301831 - Re-init the Application class.
+    if (aReceiver != nullptr)
+    {
+        aReceiver->onSuccess();
     }
 }
 
