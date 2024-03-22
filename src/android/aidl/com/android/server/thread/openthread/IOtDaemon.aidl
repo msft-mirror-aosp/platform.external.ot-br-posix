@@ -82,7 +82,9 @@ oneway interface IOtDaemon {
     }
 
     /**
-     * Initializes this service with Thread tunnel interface FD.
+     * Initializes this service.
+     *
+     * <p>This API MUST be called before all other APIs of this interface.
      *
      * @param tunFd the Thread tunnel interface FD which can be used to transmit/receive
      *              packets to/from Thread PAN
@@ -91,12 +93,14 @@ oneway interface IOtDaemon {
      *                     on AIL by {@link NsdManager}
      * @param meshcopTxts the MeshCoP TXT values set by the system_server to override the default
      *                    ones
+     * @param callback the callback for receiving OtDaemonState changes
      */
     void initialize(
             in ParcelFileDescriptor tunFd,
             in boolean enabled,
             in INsdPublisher nsdPublisher,
-            in MeshcopTxtAttributes meshcopTxts);
+            in MeshcopTxtAttributes meshcopTxts,
+            in IOtDaemonCallback callback);
 
     /** Terminates the ot-daemon process. */
     void terminate();
