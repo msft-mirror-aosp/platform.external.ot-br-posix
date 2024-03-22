@@ -105,6 +105,9 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mThreadEnabled = OT_STATE_DISABLED;
         mNsdPublisher = null;
         mIsInitialized = false;
+
+        mCallback = null;
+        mCallbackListenerId = null;
     }
 
     @Override
@@ -141,7 +144,8 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
             ParcelFileDescriptor tunFd,
             boolean enabled,
             INsdPublisher nsdPublisher,
-            MeshcopTxtAttributes overriddenMeshcopTxts)
+            MeshcopTxtAttributes overriddenMeshcopTxts,
+            IOtDaemonCallback callback)
             throws RemoteException {
         mIsInitialized = true;
         mTunFd = tunFd;
@@ -152,6 +156,8 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mOverriddenMeshcopTxts.vendorOui = overriddenMeshcopTxts.vendorOui.clone();
         mOverriddenMeshcopTxts.vendorName = overriddenMeshcopTxts.vendorName;
         mOverriddenMeshcopTxts.modelName = overriddenMeshcopTxts.modelName;
+
+        registerStateCallback(callback, PROACTIVE_LISTENER_ID);
     }
 
     /** Returns {@code true} if {@link initialize} has been called to initialize this object. */
@@ -161,11 +167,14 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
 
     @Override
     public void terminate() throws RemoteException {
-        resetStates();
-        if (mDeathRecipient != null) {
-            mDeathRecipient.binderDied();
-            mDeathRecipient = null;
-        }
+        mHandler.post(
+                () -> {
+                    resetStates();
+                    if (mDeathRecipient != null) {
+                        mDeathRecipient.binderDied();
+                        mDeathRecipient = null;
+                    }
+                });
     }
 
     public int getEnabledState() {
@@ -205,6 +214,11 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable
     public MeshcopTxtAttributes getOverriddenMeshcopTxtAttributes() {
         return mOverriddenMeshcopTxts;
+    }
+
+    @Nullable
+    public IOtDaemonCallback getCallback() {
+        return mCallback;
     }
 
     @Override
