@@ -51,6 +51,7 @@ namespace Android {
 using BinderDeathRecipient = ::ndk::ScopedAIBinder_DeathRecipient;
 using ScopedFileDescriptor = ::ndk::ScopedFileDescriptor;
 using Status               = ::ndk::ScopedAStatus;
+using aidl::android::net::thread::ChannelMaxPower;
 using aidl::com::android::server::thread::openthread::BackboneRouterState;
 using aidl::com::android::server::thread::openthread::BnOtDaemon;
 using aidl::com::android::server::thread::openthread::BorderRouterConfigurationParcel;
@@ -117,6 +118,10 @@ private:
                                      const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setCountryCode(const std::string &aCountryCode, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     void   setCountryCodeInternal(const std::string &aCountryCode, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status setChannelMaxPowers(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
+                               const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status setChannelMaxPowersInternal(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
+                                       const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
                                  const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   configureBorderRouterInternal(int                                       aIcmp6SocketFd,
