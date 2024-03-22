@@ -31,13 +31,18 @@ package com.android.server.thread.openthread.testing;
 import static com.android.server.thread.openthread.IOtDaemon.ErrorCode.OT_ERROR_INVALID_STATE;
 import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_DISABLED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_ENABLED;
+import static com.android.server.thread.openthread.testing.FakeOtDaemon.OT_DEVICE_ROLE_DISABLED;
 
 import static com.google.common.io.BaseEncoding.base16;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import android.os.Handler;
+import android.os.IBinder.DeathRecipient;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.test.TestLooper;
@@ -59,6 +64,7 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -112,21 +118,7 @@ public final class FakeOtDaemonTest {
     }
 
     @Test
-    public void initialize_succeed_tunFdIsSet() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
-
-        assertThat(mFakeOtDaemon.getTunFd()).isEqualTo(mMockTunFd);
-    }
-
-    @Test
-    public void initialize_succeed_NsdPublisherIsSet() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
-
-        assertThat(mFakeOtDaemon.getNsdPublisher()).isEqualTo(mMockNsdPublisher);
-    }
-
-    @Test
-    public void initialize_succeed_vendorAndModelNameAreSet() throws Exception {
+    public void initialize_succeed_argumentsAreSet() throws Exception {
         mOverriddenMeshcopTxts.vendorName = TEST_VENDOR_NAME;
         mOverriddenMeshcopTxts.vendorOui = TEST_VENDOR_OUI;
         mOverriddenMeshcopTxts.modelName = TEST_MODEL_NAME;
@@ -138,6 +130,10 @@ public final class FakeOtDaemonTest {
         assertThat(meshcopTxts.vendorName).isEqualTo(TEST_VENDOR_NAME);
         assertThat(meshcopTxts.vendorOui).isEqualTo(TEST_VENDOR_OUI);
         assertThat(meshcopTxts.modelName).isEqualTo(TEST_MODEL_NAME);
+        assertThat(mFakeOtDaemon.getTunFd()).isEqualTo(mMockTunFd);
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
+        assertThat(mFakeOtDaemon.getNsdPublisher()).isEqualTo(mMockNsdPublisher);
+        assertThat(mFakeOtDaemon.isInitialized()).isTrue();
     }
 
     @Test
@@ -235,12 +231,12 @@ public final class FakeOtDaemonTest {
     }
 
     @Test
-    public void setThreadEnabled_disableThread_succeed() throws Exception {
-        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
+    public void setThreadEnabled_enableThread_succeed() throws Exception {
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_DISABLED);
 
         final AtomicBoolean succeedRef = new AtomicBoolean(false);
         mFakeOtDaemon.setThreadEnabled(
-                false,
+                true,
                 new IOtStatusReceiver.Default() {
                     @Override
                     public void onSuccess() {
@@ -250,7 +246,7 @@ public final class FakeOtDaemonTest {
         mTestLooper.dispatchAll();
 
         assertThat(succeedRef.get()).isTrue();
-        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_DISABLED);
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
     }
 
     @Test
@@ -304,5 +300,30 @@ public final class FakeOtDaemonTest {
 
         assertThat(succeedRef.get()).isFalse();
         assertThat(errorRef.get()).isEqualTo(OT_ERROR_INVALID_STATE);
+    }
+
+    @Test
+    public void terminate_statesAreResetAndDeathCallbackIsInvoked() throws Exception {
+        DeathRecipient mockDeathRecipient = mock(DeathRecipient.class);
+        mFakeOtDaemon.linkToDeath(mockDeathRecipient, 0);
+        mFakeOtDaemon.initialize(mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts);
+
+        mFakeOtDaemon.terminate();
+
+        assertThat(mFakeOtDaemon.isInitialized()).isFalse();
+        OtDaemonState state = mFakeOtDaemon.getState();
+        assertThat(state.isInterfaceUp).isEqualTo(false);
+        assertThat(state.partitionId).isEqualTo(-1);
+        assertThat(state.deviceRole).isEqualTo(OT_DEVICE_ROLE_DISABLED);
+        assertThat(state.activeDatasetTlvs).isEqualTo(new byte[0]);
+        assertThat(state.pendingDatasetTlvs).isEqualTo(new byte[0]);
+        BackboneRouterState bbrState = mFakeOtDaemon.getBackboneRouterState();
+        assertThat(bbrState.multicastForwardingEnabled).isFalse();
+        assertThat(bbrState.listeningAddresses).isEqualTo(new ArrayList<>());
+        assertThat(mFakeOtDaemon.getDeathRecipient()).isNull();
+        assertThat(mFakeOtDaemon.getTunFd()).isNull();
+        assertThat(mFakeOtDaemon.getNsdPublisher()).isNull();
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_DISABLED);
+        verify(mockDeathRecipient, times(1)).binderDied();
     }
 }
