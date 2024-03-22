@@ -93,13 +93,15 @@ private:
 
     // Implements IOtDaemon.aidl
 
-    Status initialize(const ScopedFileDescriptor           &aTunFd,
-                      const bool                            enabled,
-                      const std::shared_ptr<INsdPublisher> &aNsdPublisher,
-                      const MeshcopTxtAttributes           &aMeshcopTxts) override;
-    void   initializeInternal(const bool                            enabled,
-                              const std::shared_ptr<INsdPublisher> &aINsdPublisher,
-                              const MeshcopTxtAttributes           &aMeshcopTxts);
+    Status initialize(const ScopedFileDescriptor               &aTunFd,
+                      const bool                                enabled,
+                      const std::shared_ptr<INsdPublisher>     &aNsdPublisher,
+                      const MeshcopTxtAttributes               &aMeshcopTxts,
+                      const std::shared_ptr<IOtDaemonCallback> &aCallback) override;
+    void   initializeInternal(const bool                                enabled,
+                              const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
+                              const MeshcopTxtAttributes               &aMeshcopTxts,
+                              const std::shared_ptr<IOtDaemonCallback> &aCallback);
     Status terminate(void) override;
     Status setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
