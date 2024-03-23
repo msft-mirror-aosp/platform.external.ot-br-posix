@@ -44,6 +44,7 @@
 #include <openthread/link.h>
 #include <openthread/openthread-system.h>
 #include <openthread/platform/infra_if.h>
+#include <openthread/platform/radio.h>
 
 #include "agent/vendor.hpp"
 #include "android/otdaemon_telemetry.hpp"
@@ -150,7 +151,14 @@ void OtDaemonServer::BinderDeathCallback(void *aBinderServer)
 {
     OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
 
-    otbrLogCrit("Client is died, removing callbacks...");
+    otbrLogCrit("system_server is dead, removing configs and callbacks...");
+
+    thisServer->mMeshcopTxts   = {};
+    thisServer->mINsdPublisher = nullptr;
+
+    // Note that the INsdPublisher reference is held in MdnsPublisher
+    thisServer->mMdnsPublisher.SetINsdPublisher(nullptr);
+
     thisServer->mCallback = nullptr;
     thisServer->mTunFd.set(-1); // the original FD will be closed automatically
 }
@@ -372,9 +380,11 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
     }
 }
 
-Status OtDaemonServer::initialize(const ScopedFileDescriptor           &aTunFd,
-                                  const bool                            enabled,
-                                  const std::shared_ptr<INsdPublisher> &aINsdPublisher)
+Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTunFd,
+                                  const bool                                enabled,
+                                  const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
+                                  const MeshcopTxtAttributes               &aMeshcopTxts,
+                                  const std::shared_ptr<IOtDaemonCallback> &aCallback)
 {
     otbrLogInfo("OT daemon is initialized by system server (tunFd=%d, enabled=%s)", aTunFd.get(),
                 enabled ? "true" : "false");
@@ -383,14 +393,29 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor           &aTunFd,
     // we can process `aTunFd` directly in front of the task.
     mTunFd = aTunFd.dup();
 
-    mTaskRunner.Post([enabled, aINsdPublisher, this]() { initializeInternal(enabled, aINsdPublisher); });
+    mINsdPublisher = aINsdPublisher;
+    mMeshcopTxts   = aMeshcopTxts;
+
+    mTaskRunner.Post([enabled, aINsdPublisher, aMeshcopTxts, aCallback, this]() {
+        initializeInternal(enabled, mINsdPublisher, mMeshcopTxts, aCallback);
+    });
 
     return Status::ok();
 }
 
-void OtDaemonServer::initializeInternal(const bool enabled, const std::shared_ptr<INsdPublisher> &aINsdPublisher)
+void OtDaemonServer::initializeInternal(const bool                                enabled,
+                                        const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
+                                        const MeshcopTxtAttributes               &aMeshcopTxts,
+                                        const std::shared_ptr<IOtDaemonCallback> &aCallback)
 {
-    mINsdPublisher = aINsdPublisher;
+    std::string instanceName = aMeshcopTxts.vendorName + " " + aMeshcopTxts.modelName;
+
+    registerStateCallbackInternal(aCallback, -1 /* listenerId */);
+
+    mMdnsPublisher.SetINsdPublisher(aINsdPublisher);
+    mBorderAgent.SetMeshCopServiceValues(instanceName, aMeshcopTxts.modelName, aMeshcopTxts.vendorName,
+                                         aMeshcopTxts.vendorOui);
+    mBorderAgent.SetEnabled(enabled);
 
     if (enabled)
     {
@@ -402,29 +427,37 @@ void OtDaemonServer::initializeInternal(const bool enabled, const std::shared_pt
     }
 }
 
+Status OtDaemonServer::terminate(void)
+{
+    mTaskRunner.Post([]() {
+        otbrLogWarning("Terminating ot-daemon process...");
+        exit(0);
+    });
+    return Status::ok();
+}
+
 void OtDaemonServer::updateThreadEnabledState(const int enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    if (mThreadEnabled != enabled)
-    {
-        otbrLogInfo("Thread enabled state changed: %s -> %s", ThreadEnabledStateToString(mThreadEnabled),
-                    ThreadEnabledStateToString(enabled));
-        mThreadEnabled = enabled;
-    }
+    VerifyOrExit(enabled != mThreadEnabled);
+
+    otbrLogInfo("Thread enabled state changed: %s -> %s", ThreadEnabledStateToString(mThreadEnabled),
+                ThreadEnabledStateToString(enabled));
+    mThreadEnabled = enabled;
 
     if (aReceiver != nullptr)
     {
         aReceiver->onSuccess();
     }
 
+    // Enables the BorderAgent module only when Thread is enabled because it always
+    // publishes the MeshCoP service even when no Thread network is provisioned.
     switch (enabled)
     {
     case OT_STATE_ENABLED:
-        mMdnsPublisher.SetINsdPublisher(mINsdPublisher);
+        mBorderAgent.SetEnabled(true);
         break;
     case OT_STATE_DISABLED:
-        mMdnsPublisher.SetINsdPublisher(nullptr);
-        break;
-    default:
+        mBorderAgent.SetEnabled(false);
         break;
     }
 
@@ -432,6 +465,9 @@ void OtDaemonServer::updateThreadEnabledState(const int enabled, const std::shar
     {
         mCallback->onThreadEnabledChanged(mThreadEnabled);
     }
+
+exit:
+    return;
 }
 
 void OtDaemonServer::enableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
@@ -574,6 +610,7 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
 
     if (isAttached() && !mState.activeDatasetTlvs.empty() && mJoinReceiver != nullptr)
     {
+        otbrLogInfo("Join succeeded");
         mJoinReceiver->onSuccess();
         mJoinReceiver = nullptr;
     }
@@ -674,9 +711,8 @@ exit:
 void OtDaemonServer::FinishLeave(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     (void)otInstanceErasePersistentInfo(GetOtInstance());
-    mApplication.Deinit();
-    mApplication.Init();
-    initializeInternal(mThreadEnabled, mINsdPublisher);
+    OT_UNUSED_VARIABLE(mApplication); // Avoid the unused-private-field issue.
+    // TODO: b/323301831 - Re-init the Application class.
     if (aReceiver != nullptr)
     {
         aReceiver->onSuccess();
@@ -854,6 +890,48 @@ exit:
             aReceiver->onError(error, "OT is not initialized");
         }
     }
+}
+
+Status OtDaemonServer::setChannelMaxPowers(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
+                                           const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    mTaskRunner.Post(
+        [aChannelMaxPowers, aReceiver, this]() { setChannelMaxPowersInternal(aChannelMaxPowers, aReceiver); });
+
+    return Status::ok();
+}
+
+Status OtDaemonServer::setChannelMaxPowersInternal(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
+                                                   const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    otError     error = OT_ERROR_NONE;
+    std::string message;
+    uint8_t     channel;
+    int16_t     maxPower;
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+
+    for (ChannelMaxPower channelMaxPower : aChannelMaxPowers)
+    {
+        VerifyOrExit((channelMaxPower.channel >= OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MIN) &&
+                         (channelMaxPower.channel <= OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MAX),
+                     error = OT_ERROR_INVALID_ARGS, message = "The channel is invalid");
+        VerifyOrExit((channelMaxPower.maxPower >= INT16_MIN) && (channelMaxPower.maxPower <= INT16_MAX),
+                     error = OT_ERROR_INVALID_ARGS, message = "The max power is invalid");
+    }
+
+    for (ChannelMaxPower channelMaxPower : aChannelMaxPowers)
+    {
+        channel  = static_cast<uint8_t>(channelMaxPower.channel);
+        maxPower = static_cast<int16_t>(channelMaxPower.maxPower);
+        otbrLogInfo("Set channel max power: channel=%u, maxPower=%d", channel, maxPower);
+        SuccessOrExit(error   = otPlatRadioSetChannelTargetPower(GetOtInstance(), channel, maxPower),
+                      message = "Failed to set channel max power");
+    }
+
+exit:
+    PropagateResult(error, message, aReceiver);
+    return Status::ok();
 }
 
 Status OtDaemonServer::configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
