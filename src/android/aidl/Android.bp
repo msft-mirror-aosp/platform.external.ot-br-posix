@@ -38,6 +38,7 @@ aidl_interface {
     unstable: true,
     srcs: [
         "com/android/**/*.aidl",
+        ":framework-thread-ot-daemon-shared-aidl-sources",
     ],
     backend: {
         java: {
