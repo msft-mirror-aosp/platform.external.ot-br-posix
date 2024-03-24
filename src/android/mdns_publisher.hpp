@@ -31,12 +31,18 @@
 
 #include "mdns/mdns.hpp"
 
+#include <aidl/com/android/server/thread/openthread/BnNsdDiscoverServiceCallback.h>
+#include <aidl/com/android/server/thread/openthread/BnNsdResolveServiceCallback.h>
 #include <aidl/com/android/server/thread/openthread/BnNsdStatusReceiver.h>
 #include <aidl/com/android/server/thread/openthread/DnsTxtAttribute.h>
 #include <aidl/com/android/server/thread/openthread/INsdPublisher.h>
+#include <set>
 
 namespace otbr {
 namespace Android {
+using Status = ::ndk::ScopedAStatus;
+using aidl::com::android::server::thread::openthread::BnNsdDiscoverServiceCallback;
+using aidl::com::android::server::thread::openthread::BnNsdResolveServiceCallback;
 using aidl::com::android::server::thread::openthread::BnNsdStatusReceiver;
 using aidl::com::android::server::thread::openthread::DnsTxtAttribute;
 using aidl::com::android::server::thread::openthread::INsdPublisher;
@@ -45,15 +51,15 @@ class MdnsPublisher : public Mdns::Publisher
 {
 public:
     explicit MdnsPublisher(Publisher::StateCallback aCallback)
+        : mStateCallback(std::move(aCallback))
+        , mNextListenerId(0)
+
     {
-        mNextListenerId = 0;
-        mStateCallback  = std::move(aCallback);
     }
 
     ~MdnsPublisher(void) { Stop(); }
 
-    // In this Publisher implementation, SetINsdPublisher() does the job to start/stop the Publisher. That's because we
-    // want to ensure ot-daemon won't do any mDNS operations when Thread is disabled.
+    /** Sets the INsdPublisher which forwards the mDNS API requests to the NsdManager in system_server. */
     void SetINsdPublisher(std::shared_ptr<INsdPublisher> aINsdPublisher);
 
     otbrError Start(void) override { return OTBR_ERROR_NONE; }
@@ -62,8 +68,7 @@ public:
     {
         mServiceRegistrations.clear();
         mHostRegistrations.clear();
-        mStateCallback(Mdns::Publisher::State::kIdle);
-        if (mNsdPublisher)
+        if (mNsdPublisher != nullptr)
         {
             mNsdPublisher->reset();
         }
@@ -93,12 +98,97 @@ public:
         {
         }
 
-        ::ndk::ScopedAStatus onSuccess(void) override;
+        Status onSuccess(void) override;
 
-        ::ndk::ScopedAStatus onError(int aError) override;
+        Status onError(int aError) override;
 
     private:
         Mdns::Publisher::ResultCallback mCallback;
+    };
+
+    struct ServiceResolver : private ::NonCopyable
+    {
+        explicit ServiceResolver(int aListenerId, std::shared_ptr<INsdPublisher> aNsdPublisher)
+            : mListenerId(aListenerId)
+            , mNsdPublisher(std::move(aNsdPublisher))
+        {
+        }
+
+        ~ServiceResolver(void)
+        {
+            if (mNsdPublisher)
+            {
+                mNsdPublisher->stopServiceResolution(mListenerId);
+            }
+        }
+
+        int                            mListenerId;
+        std::shared_ptr<INsdPublisher> mNsdPublisher;
+    };
+
+    struct ServiceSubscription : private ::NonCopyable
+    {
+        explicit ServiceSubscription(std::string                    aType,
+                                     std::string                    aName,
+                                     MdnsPublisher                 &aPublisher,
+                                     std::shared_ptr<INsdPublisher> aNsdPublisher)
+            : mType(std::move(aType))
+            , mName(std::move(aName))
+            , mPublisher(aPublisher)
+            , mNsdPublisher(std::move(aNsdPublisher))
+            , mBrowseListenerId(-1)
+        {
+        }
+
+        ~ServiceSubscription(void) { Release(); }
+
+        void Release(void);
+        void Browse(void);
+        void Resolve(const std::string &aName, const std::string &aType);
+        void AddServiceResolver(const std::string &aName, ServiceResolver *aResolver);
+        void RemoveServiceResolver(const std::string &aInstanceName);
+
+        std::string                    mType;
+        std::string                    mName;
+        MdnsPublisher                 &mPublisher;
+        std::shared_ptr<INsdPublisher> mNsdPublisher;
+        int32_t                        mBrowseListenerId;
+
+        std::map<std::string, std::set<ServiceResolver *>> mResolvers;
+    };
+
+    class NsdDiscoverServiceCallback : public BnNsdDiscoverServiceCallback
+    {
+    public:
+        explicit NsdDiscoverServiceCallback(ServiceSubscription &aSubscription)
+            : mSubscription(aSubscription)
+        {
+        }
+
+        Status onServiceDiscovered(const std::string &aName, const std::string &aType, bool aIsFound);
+
+    private:
+        ServiceSubscription &mSubscription;
+    };
+
+    class NsdResolveServiceCallback : public BnNsdResolveServiceCallback
+    {
+    public:
+        explicit NsdResolveServiceCallback(ServiceSubscription &aSubscription)
+            : mSubscription(aSubscription)
+        {
+        }
+
+        Status onServiceResolved(const std::string                  &aHostname,
+                                 const std::string                  &aName,
+                                 const std::string                  &aType,
+                                 int                                 aPort,
+                                 const std::vector<std::string>     &aAddresses,
+                                 const std::vector<DnsTxtAttribute> &aTxt,
+                                 int                                 aTtlSeconds);
+
+    private:
+        ServiceSubscription &mSubscription;
     };
 
 protected:
@@ -124,16 +214,16 @@ private:
     class NsdServiceRegistration : public ServiceRegistration
     {
     public:
-        NsdServiceRegistration(const std::string             &aHostName,
-                               const std::string             &aName,
-                               const std::string             &aType,
-                               const SubTypeList             &aSubTypeList,
-                               uint16_t                       aPort,
-                               const TxtData                 &aTxtData,
-                               ResultCallback               &&aCallback,
-                               MdnsPublisher                 *aPublisher,
-                               int32_t                        aListenerId,
-                               std::shared_ptr<INsdPublisher> aINsdPublisher)
+        NsdServiceRegistration(const std::string           &aHostName,
+                               const std::string           &aName,
+                               const std::string           &aType,
+                               const SubTypeList           &aSubTypeList,
+                               uint16_t                     aPort,
+                               const TxtData               &aTxtData,
+                               ResultCallback             &&aCallback,
+                               MdnsPublisher               *aPublisher,
+                               int32_t                      aListenerId,
+                               std::weak_ptr<INsdPublisher> aINsdPublisher)
             : ServiceRegistration(aHostName,
                                   aName,
                                   aType,
@@ -154,18 +244,18 @@ private:
         std::shared_ptr<NsdStatusReceiver> mUnregisterReceiver;
 
     private:
-        std::shared_ptr<INsdPublisher> mNsdPublisher;
+        std::weak_ptr<INsdPublisher> mNsdPublisher;
     };
 
     class NsdHostRegistration : public HostRegistration
     {
     public:
-        NsdHostRegistration(const std::string             &aName,
-                            const AddressList             &aAddresses,
-                            ResultCallback               &&aCallback,
-                            MdnsPublisher                 *aPublisher,
-                            int32_t                        aListenerId,
-                            std::shared_ptr<INsdPublisher> aINsdPublisher)
+        NsdHostRegistration(const std::string           &aName,
+                            const AddressList           &aAddresses,
+                            ResultCallback             &&aCallback,
+                            MdnsPublisher               *aPublisher,
+                            int32_t                      aListenerId,
+                            std::weak_ptr<INsdPublisher> aINsdPublisher)
             : HostRegistration(aName, aAddresses, std::move(aCallback), aPublisher)
             , mListenerId(aListenerId)
             , mNsdPublisher(aINsdPublisher)
@@ -178,14 +268,20 @@ private:
         std::shared_ptr<NsdStatusReceiver> mUnregisterReceiver;
 
     private:
-        std::shared_ptr<INsdPublisher> mNsdPublisher;
+        std::weak_ptr<INsdPublisher> mNsdPublisher;
     };
+
+    typedef std::vector<std::unique_ptr<ServiceSubscription>> ServiceSubscriptionList;
+
+    static constexpr int kMinResolvedTtl = 1;
+    static constexpr int kMaxResolvedTtl = 10;
 
     int32_t AllocateListenerId(void);
 
     StateCallback                  mStateCallback;
     int32_t                        mNextListenerId;
     std::shared_ptr<INsdPublisher> mNsdPublisher = nullptr;
+    ServiceSubscriptionList        mServiceSubscriptions;
 };
 
 } // namespace Android
