@@ -38,6 +38,7 @@ aidl_interface {
     unstable: true,
     srcs: [
         "com/android/**/*.aidl",
+        ":framework-thread-ot-daemon-shared-aidl-sources",
     ],
     backend: {
         java: {
@@ -62,5 +63,5 @@ aidl_interface {
         "//external/ot-br-posix:__subpackages__",
         "//packages/modules/ThreadNetwork/service:__subpackages__",
         "//system/tools/aidl:__subpackages__",
-    ]
+    ],
 }
