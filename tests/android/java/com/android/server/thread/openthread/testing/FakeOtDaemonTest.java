@@ -100,6 +100,7 @@ public final class FakeOtDaemonTest {
     private static final byte[] TEST_VENDOR_OUI = new byte[] {(byte) 0xAC, (byte) 0xDE, 0x48};
     private static final String TEST_VENDOR_NAME = "test vendor";
     private static final String TEST_MODEL_NAME = "test model";
+    private static final String TEST_DEFAULT_COUNTRY_CODE = "WW";
 
     private FakeOtDaemon mFakeOtDaemon;
     private TestLooper mTestLooper;
@@ -127,7 +128,12 @@ public final class FakeOtDaemonTest {
         mOverriddenMeshcopTxts.modelName = TEST_MODEL_NAME;
 
         mFakeOtDaemon.initialize(
-                mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts, mMockCallback);
+                mMockTunFd,
+                true,
+                mMockNsdPublisher,
+                mOverriddenMeshcopTxts,
+                mMockCallback,
+                TEST_DEFAULT_COUNTRY_CODE);
         mTestLooper.dispatchAll();
 
         MeshcopTxtAttributes meshcopTxts = mFakeOtDaemon.getOverriddenMeshcopTxtAttributes();
@@ -139,6 +145,7 @@ public final class FakeOtDaemonTest {
         assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
         assertThat(mFakeOtDaemon.getNsdPublisher()).isEqualTo(mMockNsdPublisher);
         assertThat(mFakeOtDaemon.getStateCallback()).isEqualTo(mMockCallback);
+        assertThat(mFakeOtDaemon.getCountryCode()).isEqualTo(TEST_DEFAULT_COUNTRY_CODE);
         assertThat(mFakeOtDaemon.isInitialized()).isTrue();
         verify(mMockCallback, times(1)).onStateChanged(any(), anyLong());
         verify(mMockCallback, times(1)).onBackboneRouterStateChanged(any());
@@ -147,7 +154,12 @@ public final class FakeOtDaemonTest {
     @Test
     public void registerStateCallback_noStateChange_callbackIsInvoked() throws Exception {
         mFakeOtDaemon.initialize(
-                mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts, mMockCallback);
+                mMockTunFd,
+                true,
+                mMockNsdPublisher,
+                mOverriddenMeshcopTxts,
+                mMockCallback,
+                TEST_DEFAULT_COUNTRY_CODE);
         final AtomicReference<OtDaemonState> stateRef = new AtomicReference<>();
         final AtomicLong listenerIdRef = new AtomicLong();
         final AtomicReference<BackboneRouterState> bbrStateRef = new AtomicReference<>();
@@ -316,7 +328,12 @@ public final class FakeOtDaemonTest {
         DeathRecipient mockDeathRecipient = mock(DeathRecipient.class);
         mFakeOtDaemon.linkToDeath(mockDeathRecipient, 0);
         mFakeOtDaemon.initialize(
-                mMockTunFd, true, mMockNsdPublisher, mOverriddenMeshcopTxts, mMockCallback);
+                mMockTunFd,
+                true,
+                mMockNsdPublisher,
+                mOverriddenMeshcopTxts,
+                mMockCallback,
+                TEST_DEFAULT_COUNTRY_CODE);
 
         mFakeOtDaemon.terminate();
         mTestLooper.dispatchAll();

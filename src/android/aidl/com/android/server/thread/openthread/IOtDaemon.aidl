@@ -94,13 +94,15 @@ oneway interface IOtDaemon {
      * @param meshcopTxts the MeshCoP TXT values set by the system_server to override the default
      *                    ones
      * @param callback the callback for receiving OtDaemonState changes
+     * @param countryCode 2 bytes country code (as defined in ISO 3166) to set
      */
     void initialize(
             in ParcelFileDescriptor tunFd,
             in boolean enabled,
             in INsdPublisher nsdPublisher,
             in MeshcopTxtAttributes meshcopTxts,
-            in IOtDaemonCallback callback);
+            in IOtDaemonCallback callback,
+            in String countryCode);
 
     /** Terminates the ot-daemon process. */
     void terminate();
@@ -158,7 +160,7 @@ oneway interface IOtDaemon {
     /**
      * Sets the country code.
      *
-     * @param countryCode 2 byte country code (as defined in ISO 3166) to set.
+     * @param countryCode 2 bytes country code (as defined in ISO 3166) to set.
      * @param receiver the receiver to receive result of this operation
      */
     oneway void setCountryCode(in String countryCode, in IOtStatusReceiver receiver);
