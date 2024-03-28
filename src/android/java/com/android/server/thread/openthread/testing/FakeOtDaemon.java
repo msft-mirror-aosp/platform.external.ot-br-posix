@@ -84,6 +84,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable private IOtDaemonCallback mCallback;
     @Nullable private Long mCallbackListenerId;
     @Nullable private RemoteException mJoinException;
+    @Nullable private String mCountryCode;
 
     public FakeOtDaemon(Handler handler) {
         mHandler = handler;
@@ -145,12 +146,14 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
             boolean enabled,
             INsdPublisher nsdPublisher,
             MeshcopTxtAttributes overriddenMeshcopTxts,
-            IOtDaemonCallback callback)
+            IOtDaemonCallback callback,
+            String countryCode)
             throws RemoteException {
         mIsInitialized = true;
         mTunFd = tunFd;
         mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
         mNsdPublisher = nsdPublisher;
+        mCountryCode = countryCode;
 
         mOverriddenMeshcopTxts = new MeshcopTxtAttributes();
         mOverriddenMeshcopTxts.vendorOui = overriddenMeshcopTxts.vendorOui.clone();
@@ -247,6 +250,15 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable
     public IOtDaemonCallback getStateCallback() {
         return mCallback;
+    }
+
+    /**
+     * Returns the country code sent to OT daemon or {@code null} if {@link #initialize} is never
+     * called.
+     */
+    @Nullable
+    public String getCountryCode() {
+        return mCountryCode;
     }
 
     @Override
