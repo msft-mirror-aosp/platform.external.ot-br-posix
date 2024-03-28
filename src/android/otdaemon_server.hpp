@@ -171,7 +171,7 @@ private:
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
     BorderRouterConfigurationParcel    mBorderRouterConfiguration;
-    static constexpr Seconds           kTelemetryCheckInterval           = Seconds(30);           // 30 seconds
+    static constexpr Seconds           kTelemetryCheckInterval           = Seconds(600);          // 600 seconds
     static constexpr Seconds           kTelemetryUploadIntervalThreshold = Seconds(60 * 60 * 12); // 12 hours
 };
 
