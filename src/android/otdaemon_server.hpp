@@ -97,11 +97,13 @@ private:
                       const bool                                enabled,
                       const std::shared_ptr<INsdPublisher>     &aNsdPublisher,
                       const MeshcopTxtAttributes               &aMeshcopTxts,
-                      const std::shared_ptr<IOtDaemonCallback> &aCallback) override;
+                      const std::shared_ptr<IOtDaemonCallback> &aCallback,
+                      const std::string                        &aCountryCode) override;
     void   initializeInternal(const bool                                enabled,
                               const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                               const MeshcopTxtAttributes               &aMeshcopTxts,
-                              const std::shared_ptr<IOtDaemonCallback> &aCallback);
+                              const std::shared_ptr<IOtDaemonCallback> &aCallback,
+                              const std::string                        &aCountryCode);
     Status terminate(void) override;
     Status setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
@@ -171,7 +173,7 @@ private:
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
     BorderRouterConfigurationParcel    mBorderRouterConfiguration;
-    static constexpr Seconds           kTelemetryCheckInterval           = Seconds(30);           // 30 seconds
+    static constexpr Seconds           kTelemetryCheckInterval           = Seconds(600);          // 600 seconds
     static constexpr Seconds           kTelemetryUploadIntervalThreshold = Seconds(60 * 60 * 12); // 12 hours
 };
 
