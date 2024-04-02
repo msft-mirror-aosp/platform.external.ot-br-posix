@@ -384,7 +384,8 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
                                   const bool                                enabled,
                                   const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                   const MeshcopTxtAttributes               &aMeshcopTxts,
-                                  const std::shared_ptr<IOtDaemonCallback> &aCallback)
+                                  const std::shared_ptr<IOtDaemonCallback> &aCallback,
+                                  const std::string                        &aCountryCode)
 {
     otbrLogInfo("OT daemon is initialized by system server (tunFd=%d, enabled=%s)", aTunFd.get(),
                 enabled ? "true" : "false");
@@ -396,8 +397,8 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
     mINsdPublisher = aINsdPublisher;
     mMeshcopTxts   = aMeshcopTxts;
 
-    mTaskRunner.Post([enabled, aINsdPublisher, aMeshcopTxts, aCallback, this]() {
-        initializeInternal(enabled, mINsdPublisher, mMeshcopTxts, aCallback);
+    mTaskRunner.Post([enabled, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, this]() {
+        initializeInternal(enabled, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode);
     });
 
     return Status::ok();
@@ -406,10 +407,12 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
 void OtDaemonServer::initializeInternal(const bool                                enabled,
                                         const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                         const MeshcopTxtAttributes               &aMeshcopTxts,
-                                        const std::shared_ptr<IOtDaemonCallback> &aCallback)
+                                        const std::shared_ptr<IOtDaemonCallback> &aCallback,
+                                        const std::string                        &aCountryCode)
 {
     std::string instanceName = aMeshcopTxts.vendorName + " " + aMeshcopTxts.modelName;
 
+    setCountryCodeInternal(aCountryCode, nullptr /* aReceiver */);
     registerStateCallbackInternal(aCallback, -1 /* listenerId */);
 
     mMdnsPublisher.SetINsdPublisher(aINsdPublisher);
