@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2023, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,22 +26,17 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <fuzzbinder/libbinder_ndk_driver.h>
-#include <fuzzer/FuzzedDataProvider.h>
+package com.android.server.thread.openthread;
 
-#include "otdaemon_server.hpp"
+import com.android.server.thread.openthread.DnsTxtAttribute;
 
-using android::fuzzService;
-using otbr::Android::OtDaemonServer;
-
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
-{
-    otbr::Application app("", {}, {}, false, "", 0);
-    auto              service = ndk::SharedRefBase::make<OtDaemonServer>(app);
-    fuzzService(service->asBinder().get(), FuzzedDataProvider(data, size));
-    return 0;
-}
-
-extern "C" void otPlatReset(otInstance *aInstance)
-{
+/** Receives the information of a resolved service instance. */
+oneway interface INsdResolveServiceCallback {
+    void onServiceResolved(in String hostname,
+                           in String name,
+                           in String type,
+                           int port,
+                           in List<String> addresses,
+                           in List<DnsTxtAttribute> txt,
+                           int ttlSeconds);
 }
