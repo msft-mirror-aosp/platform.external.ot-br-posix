@@ -51,6 +51,7 @@ namespace Android {
 using BinderDeathRecipient = ::ndk::ScopedAIBinder_DeathRecipient;
 using ScopedFileDescriptor = ::ndk::ScopedFileDescriptor;
 using Status               = ::ndk::ScopedAStatus;
+using aidl::android::net::thread::ChannelMaxPower;
 using aidl::com::android::server::thread::openthread::BackboneRouterState;
 using aidl::com::android::server::thread::openthread::BnOtDaemon;
 using aidl::com::android::server::thread::openthread::BorderRouterConfigurationParcel;
@@ -92,13 +93,17 @@ private:
 
     // Implements IOtDaemon.aidl
 
-    Status initialize(const ScopedFileDescriptor           &aTunFd,
-                      const bool                            enabled,
-                      const std::shared_ptr<INsdPublisher> &aNsdPublisher,
-                      const MeshcopTxtAttributes           &aMeshcopTxts) override;
-    void   initializeInternal(const bool                            enabled,
-                              const std::shared_ptr<INsdPublisher> &aINsdPublisher,
-                              const MeshcopTxtAttributes           &aMeshcopTxts);
+    Status initialize(const ScopedFileDescriptor               &aTunFd,
+                      const bool                                enabled,
+                      const std::shared_ptr<INsdPublisher>     &aNsdPublisher,
+                      const MeshcopTxtAttributes               &aMeshcopTxts,
+                      const std::shared_ptr<IOtDaemonCallback> &aCallback,
+                      const std::string                        &aCountryCode) override;
+    void   initializeInternal(const bool                                enabled,
+                              const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
+                              const MeshcopTxtAttributes               &aMeshcopTxts,
+                              const std::shared_ptr<IOtDaemonCallback> &aCallback,
+                              const std::string                        &aCountryCode);
     Status terminate(void) override;
     Status setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
@@ -117,6 +122,10 @@ private:
                                      const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setCountryCode(const std::string &aCountryCode, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     void   setCountryCodeInternal(const std::string &aCountryCode, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status setChannelMaxPowers(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
+                               const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status setChannelMaxPowersInternal(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
+                                       const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
                                  const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   configureBorderRouterInternal(int                                       aIcmp6SocketFd,
@@ -164,7 +173,7 @@ private:
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
     BorderRouterConfigurationParcel    mBorderRouterConfiguration;
-    static constexpr Seconds           kTelemetryCheckInterval           = Seconds(30);           // 30 seconds
+    static constexpr Seconds           kTelemetryCheckInterval           = Seconds(600);          // 600 seconds
     static constexpr Seconds           kTelemetryUploadIntervalThreshold = Seconds(60 * 60 * 12); // 12 hours
 };
 

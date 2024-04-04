@@ -33,6 +33,7 @@ import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_ENABLED;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.net.thread.ChannelMaxPower;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.IBinder.DeathRecipient;
@@ -83,6 +84,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable private IOtDaemonCallback mCallback;
     @Nullable private Long mCallbackListenerId;
     @Nullable private RemoteException mJoinException;
+    @Nullable private String mCountryCode;
 
     public FakeOtDaemon(Handler handler) {
         mHandler = handler;
@@ -104,6 +106,9 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mThreadEnabled = OT_STATE_DISABLED;
         mNsdPublisher = null;
         mIsInitialized = false;
+
+        mCallback = null;
+        mCallbackListenerId = null;
     }
 
     @Override
@@ -140,17 +145,22 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
             ParcelFileDescriptor tunFd,
             boolean enabled,
             INsdPublisher nsdPublisher,
-            MeshcopTxtAttributes overriddenMeshcopTxts)
+            MeshcopTxtAttributes overriddenMeshcopTxts,
+            IOtDaemonCallback callback,
+            String countryCode)
             throws RemoteException {
         mIsInitialized = true;
         mTunFd = tunFd;
         mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
         mNsdPublisher = nsdPublisher;
+        mCountryCode = countryCode;
 
         mOverriddenMeshcopTxts = new MeshcopTxtAttributes();
         mOverriddenMeshcopTxts.vendorOui = overriddenMeshcopTxts.vendorOui.clone();
         mOverriddenMeshcopTxts.vendorName = overriddenMeshcopTxts.vendorName;
         mOverriddenMeshcopTxts.modelName = overriddenMeshcopTxts.modelName;
+
+        registerStateCallback(callback, PROACTIVE_LISTENER_ID);
     }
 
     /** Returns {@code true} if {@link initialize} has been called to initialize this object. */
@@ -160,11 +170,14 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
 
     @Override
     public void terminate() throws RemoteException {
-        resetStates();
-        if (mDeathRecipient != null) {
-            mDeathRecipient.binderDied();
-            mDeathRecipient = null;
-        }
+        mHandler.post(
+                () -> {
+                    resetStates();
+                    if (mDeathRecipient != null) {
+                        mDeathRecipient.binderDied();
+                        mDeathRecipient = null;
+                    }
+                });
     }
 
     public int getEnabledState() {
@@ -206,6 +219,11 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         return mOverriddenMeshcopTxts;
     }
 
+    @Nullable
+    public IOtDaemonCallback getCallback() {
+        return mCallback;
+    }
+
     @Override
     public void setThreadEnabled(boolean enabled, IOtStatusReceiver receiver) {
         mHandler.post(
@@ -232,6 +250,15 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable
     public IOtDaemonCallback getStateCallback() {
         return mCallback;
+    }
+
+    /**
+     * Returns the country code sent to OT daemon or {@code null} if {@link #initialize} is never
+     * called.
+     */
+    @Nullable
+    public String getCountryCode() {
+        return mCountryCode;
     }
 
     @Override
@@ -358,5 +385,12 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
 
     public void setChannelMasksReceiverOtError(int otError) {
         mChannelMasksReceiverOtError = otError;
+    }
+
+    @Override
+    public void setChannelMaxPowers(ChannelMaxPower[] channelMaxPowers, IOtStatusReceiver receiver)
+            throws RemoteException {
+        throw new UnsupportedOperationException(
+                "FakeOtDaemon#setChannelTargetPowers is not implemented!");
     }
 }
