@@ -30,6 +30,8 @@ package com.android.server.thread.openthread;
 
 import com.android.server.thread.openthread.DnsTxtAttribute;
 import com.android.server.thread.openthread.INsdStatusReceiver;
+import com.android.server.thread.openthread.INsdDiscoverServiceCallback;
+import com.android.server.thread.openthread.INsdResolveServiceCallback;
 
 /**
  * The service which supports mDNS advertising and discovery by {@link NsdManager}.
@@ -91,4 +93,61 @@ oneway interface INsdPublisher {
      *                             identify the registration
      */
     void unregister(in INsdStatusReceiver receiver, int listenerId);
+
+    /** Resets the NsdPublisher, i.e. clear all registrations. */
+    void reset();
+
+    /**
+     * Discovers mDNS services of a specific type.
+     *
+     * <p>To stop discovering services, the caller must pass in the same listener ID which was used
+     * when starting discoverying the services.
+     *
+     * @param type the service type
+     * @param callback the callback when a service is found/lost
+     * @param listenerId the ID of the NsdManager.DiscoveryListener which is used to identify the
+     *                             service discovery operation
+     */
+    void discoverService(in String type,
+                         in INsdDiscoverServiceCallback callback,
+                         int listenerId);
+
+    /**
+     * Stops discovering services of a specific type.
+     *
+     * <p>To stop discovering services, the caller must pass in the same listener ID which was used
+     * when starting discoverying the services.
+     *
+     * @param listenerId the ID of the NsdManager.DiscoveryListener which is used to identify the
+     *                             service discovery operation
+     */
+    void stopServiceDiscovery(int listenerId);
+
+    /**
+     * Resolves an mDNS service instance.
+     *
+     * <p>To stop resolving a service, the caller must pass in the same listener ID which was used
+     * when starting resolving the service.
+     *
+     * @param name the service instance name
+     * @param type the service type
+     * @param callback the callback when a service is updated
+     * @param listenerId the ID of the NsdManager.ServiceInfoCallback which is used to identify the
+     *                             service resolution operation
+     */
+    void resolveService(in String name,
+                        in String type,
+                        in INsdResolveServiceCallback callback,
+                        int listenerId);
+
+    /**
+     * Stops resolving an mDNS service instance.
+     *
+     * <p>To stop resolving a service, the caller must pass in the same listener ID which was used
+     * when starting resolving the service.
+     *
+     * @param listenerId the ID of the NsdManager.ServiceInfoCallback which is used to identify the
+     *                             service resolution operation
+     */
+    void stopServiceResolution(int listenerId);
 }
