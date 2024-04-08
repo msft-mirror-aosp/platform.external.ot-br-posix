@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2023, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,22 +26,32 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <fuzzbinder/libbinder_ndk_driver.h>
-#include <fuzzer/FuzzedDataProvider.h>
+package com.android.server.thread.openthread;
 
-#include "otdaemon_server.hpp"
+/**
+ *  A collection of MeshCoP TXT entries that are supplied by Android platform.
+ */
+parcelable MeshcopTxtAttributes {
+    /**
+     * Predefined MeshCoP TXT entry named "mn".
+     *
+     * The length must not exceed 24 UTF-8 bytes.
+     */
+    String modelName;
 
-using android::fuzzService;
-using otbr::Android::OtDaemonServer;
+    /**
+     * Predefined MeshCoP TXT entry named "vn".
+     *
+     * The length must not exceed 24 UTF-8 bytes.
+     */
+    String vendorName;
 
-extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
-{
-    otbr::Application app("", {}, {}, false, "", 0);
-    auto              service = ndk::SharedRefBase::make<OtDaemonServer>(app);
-    fuzzService(service->asBinder().get(), FuzzedDataProvider(data, size));
-    return 0;
-}
+    /**
+     * Predefined MeshCoP TXT entry named "vo".
+     *
+     * The length must be 3 bytes.
+     */
+    byte[] vendorOui;
 
-extern "C" void otPlatReset(otInstance *aInstance)
-{
+    // More vendor-specific (v*) TXT entries can be added here
 }
