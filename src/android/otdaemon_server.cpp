@@ -89,17 +89,6 @@ static void PropagateResult(int                                       aError,
     }
 }
 
-static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo)
-{
-    Ipv6AddressInfo addrInfo;
-
-    addrInfo.address.assign(aAddressInfo.mAddress->mFields.m8, BYTE_ARR_END(aAddressInfo.mAddress->mFields.m8));
-    addrInfo.prefixLength = aAddressInfo.mPrefixLength;
-    addrInfo.scope        = aAddressInfo.mScope;
-    addrInfo.isPreferred  = aAddressInfo.mPreferred;
-    return addrInfo;
-}
-
 static const char *ThreadEnabledStateToString(int enabledState)
 {
     switch (enabledState)
@@ -191,13 +180,47 @@ void OtDaemonServer::StateCallback(otChangedFlags aFlags)
     }
 }
 
+Ipv6AddressInfo OtDaemonServer::ConvertToAddressInfo(const otNetifAddress &aAddress)
+{
+    Ipv6AddressInfo addrInfo;
+    otIp6Prefix     addressPrefix{aAddress.mAddress, aAddress.mPrefixLength};
+
+    addrInfo.address.assign(std::begin(aAddress.mAddress.mFields.m8), std::end(aAddress.mAddress.mFields.m8));
+    addrInfo.prefixLength = aAddress.mPrefixLength;
+    addrInfo.isPreferred  = aAddress.mPreferred;
+    addrInfo.isMeshLocal  = aAddress.mMeshLocal;
+    addrInfo.isActiveOmr  = otNetDataContainsOmrPrefix(GetOtInstance(), &addressPrefix);
+    return addrInfo;
+}
+
+Ipv6AddressInfo OtDaemonServer::ConvertToAddressInfo(const otNetifMulticastAddress &aAddress)
+{
+    Ipv6AddressInfo addrInfo;
+
+    addrInfo.address.assign(std::begin(aAddress.mAddress.mFields.m8), std::end(aAddress.mAddress.mFields.m8));
+    return addrInfo;
+}
+
 void OtDaemonServer::AddressCallback(const otIp6AddressInfo *aAddressInfo, bool aIsAdded, void *aBinderServer)
 {
-    OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
+    OT_UNUSED_VARIABLE(aAddressInfo);
+    OT_UNUSED_VARIABLE(aIsAdded);
+    OtDaemonServer                *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
+    std::vector<Ipv6AddressInfo>   addrInfoList;
+    const otNetifAddress          *unicastAddrs   = otIp6GetUnicastAddresses(thisServer->GetOtInstance());
+    const otNetifMulticastAddress *multicastAddrs = otIp6GetMulticastAddresses(thisServer->GetOtInstance());
 
+    for (const otNetifAddress *addr = unicastAddrs; addr != nullptr; addr = addr->mNext)
+    {
+        addrInfoList.push_back(thisServer->ConvertToAddressInfo(*addr));
+    }
+    for (const otNetifMulticastAddress *maddr = multicastAddrs; maddr != nullptr; maddr = maddr->mNext)
+    {
+        addrInfoList.push_back(thisServer->ConvertToAddressInfo(*maddr));
+    }
     if (thisServer->mCallback != nullptr)
     {
-        thisServer->mCallback->onAddressChanged(ConvertToAddressInfo(*aAddressInfo), aIsAdded);
+        thisServer->mCallback->onAddressChanged(addrInfoList);
     }
     else
     {
