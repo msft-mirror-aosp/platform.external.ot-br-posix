@@ -28,12 +28,23 @@
 
 package com.android.server.thread.openthread.testing;
 
+import static com.android.server.thread.openthread.IOtDaemon.ErrorCode.OT_ERROR_INVALID_STATE;
+import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_DISABLED;
+import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_ENABLED;
+import static com.android.server.thread.openthread.testing.FakeOtDaemon.OT_DEVICE_ROLE_DISABLED;
+
 import static com.google.common.io.BaseEncoding.base16;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import android.os.Handler;
+import android.os.IBinder.DeathRecipient;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.test.TestLooper;
@@ -41,8 +52,12 @@ import android.os.test.TestLooper;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
 
+import com.android.server.thread.openthread.BackboneRouterState;
+import com.android.server.thread.openthread.IChannelMasksReceiver;
+import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.IOtStatusReceiver;
+import com.android.server.thread.openthread.MeshcopTxtAttributes;
 import com.android.server.thread.openthread.OtDaemonState;
 
 import org.junit.Before;
@@ -51,7 +66,9 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -78,9 +95,19 @@ public final class FakeOtDaemonTest {
                                     + "642D643961300102D9A00410A245479C836D551B9CA557F7"
                                     + "B9D351B40C0402A0FFF8");
 
+    private static final int DEFAULT_SUPPORTED_CHANNEL_MASK = 0x07FFF800; // from channel 11 to 26
+    private static final int DEFAULT_PREFERRED_CHANNEL_MASK = 0;
+    private static final byte[] TEST_VENDOR_OUI = new byte[] {(byte) 0xAC, (byte) 0xDE, 0x48};
+    private static final String TEST_VENDOR_NAME = "test vendor";
+    private static final String TEST_MODEL_NAME = "test model";
+    private static final String TEST_DEFAULT_COUNTRY_CODE = "WW";
+
     private FakeOtDaemon mFakeOtDaemon;
     private TestLooper mTestLooper;
     @Mock private ParcelFileDescriptor mMockTunFd;
+    @Mock private INsdPublisher mMockNsdPublisher;
+    @Mock private IOtDaemonCallback mMockCallback;
+    private MeshcopTxtAttributes mOverriddenMeshcopTxts;
 
     @Before
     public void setUp() {
@@ -88,20 +115,54 @@ public final class FakeOtDaemonTest {
 
         mTestLooper = new TestLooper();
         mFakeOtDaemon = new FakeOtDaemon(new Handler(mTestLooper.getLooper()));
+        mOverriddenMeshcopTxts = new MeshcopTxtAttributes();
+        mOverriddenMeshcopTxts.vendorName = TEST_VENDOR_NAME;
+        mOverriddenMeshcopTxts.vendorOui = TEST_VENDOR_OUI;
+        mOverriddenMeshcopTxts.modelName = TEST_MODEL_NAME;
     }
 
     @Test
-    public void initialize_succeed_tunFdIsSet() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd);
+    public void initialize_succeed_argumentsAreSetAndCallbackIsInvoked() throws Exception {
+        mOverriddenMeshcopTxts.vendorName = TEST_VENDOR_NAME;
+        mOverriddenMeshcopTxts.vendorOui = TEST_VENDOR_OUI;
+        mOverriddenMeshcopTxts.modelName = TEST_MODEL_NAME;
 
+        mFakeOtDaemon.initialize(
+                mMockTunFd,
+                true,
+                mMockNsdPublisher,
+                mOverriddenMeshcopTxts,
+                mMockCallback,
+                TEST_DEFAULT_COUNTRY_CODE);
+        mTestLooper.dispatchAll();
+
+        MeshcopTxtAttributes meshcopTxts = mFakeOtDaemon.getOverriddenMeshcopTxtAttributes();
+        assertThat(meshcopTxts).isNotNull();
+        assertThat(meshcopTxts.vendorName).isEqualTo(TEST_VENDOR_NAME);
+        assertThat(meshcopTxts.vendorOui).isEqualTo(TEST_VENDOR_OUI);
+        assertThat(meshcopTxts.modelName).isEqualTo(TEST_MODEL_NAME);
         assertThat(mFakeOtDaemon.getTunFd()).isEqualTo(mMockTunFd);
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
+        assertThat(mFakeOtDaemon.getNsdPublisher()).isEqualTo(mMockNsdPublisher);
+        assertThat(mFakeOtDaemon.getStateCallback()).isEqualTo(mMockCallback);
+        assertThat(mFakeOtDaemon.getCountryCode()).isEqualTo(TEST_DEFAULT_COUNTRY_CODE);
+        assertThat(mFakeOtDaemon.isInitialized()).isTrue();
+        verify(mMockCallback, times(1)).onStateChanged(any(), anyLong());
+        verify(mMockCallback, times(1)).onBackboneRouterStateChanged(any());
     }
 
     @Test
     public void registerStateCallback_noStateChange_callbackIsInvoked() throws Exception {
-        mFakeOtDaemon.initialize(mMockTunFd);
+        mFakeOtDaemon.initialize(
+                mMockTunFd,
+                true,
+                mMockNsdPublisher,
+                mOverriddenMeshcopTxts,
+                mMockCallback,
+                TEST_DEFAULT_COUNTRY_CODE);
         final AtomicReference<OtDaemonState> stateRef = new AtomicReference<>();
         final AtomicLong listenerIdRef = new AtomicLong();
+        final AtomicReference<BackboneRouterState> bbrStateRef = new AtomicReference<>();
 
         mFakeOtDaemon.registerStateCallback(
                 new IOtDaemonCallback.Default() {
@@ -109,6 +170,11 @@ public final class FakeOtDaemonTest {
                     public void onStateChanged(OtDaemonState newState, long listenerId) {
                         stateRef.set(newState);
                         listenerIdRef.set(listenerId);
+                    }
+
+                    @Override
+                    public void onBackboneRouterStateChanged(BackboneRouterState bbrState) {
+                        bbrStateRef.set(bbrState);
                     }
                 },
                 7 /* listenerId */);
@@ -120,8 +186,9 @@ public final class FakeOtDaemonTest {
         assertThat(state.deviceRole).isEqualTo(FakeOtDaemon.OT_DEVICE_ROLE_DISABLED);
         assertThat(state.activeDatasetTlvs).isEmpty();
         assertThat(state.pendingDatasetTlvs).isEmpty();
-        assertThat(state.multicastForwardingEnabled).isFalse();
         assertThat(listenerIdRef.get()).isEqualTo(7);
+        BackboneRouterState bbrState = bbrStateRef.get();
+        assertThat(bbrState.multicastForwardingEnabled).isFalse();
     }
 
     @Test
@@ -144,11 +211,17 @@ public final class FakeOtDaemonTest {
     public void join_succeed_statesAreSentBack() throws Exception {
         final AtomicBoolean succeedRef = new AtomicBoolean(false);
         final AtomicReference<OtDaemonState> stateRef = new AtomicReference<>();
+        final AtomicReference<BackboneRouterState> bbrStateRef = new AtomicReference<>();
         mFakeOtDaemon.registerStateCallback(
                 new IOtDaemonCallback.Default() {
                     @Override
                     public void onStateChanged(OtDaemonState newState, long listenerId) {
                         stateRef.set(newState);
+                    }
+
+                    @Override
+                    public void onBackboneRouterStateChanged(BackboneRouterState bbrState) {
+                        bbrStateRef.set(bbrState);
                     }
                 },
                 11 /* listenerId */);
@@ -174,6 +247,111 @@ public final class FakeOtDaemonTest {
         assertThat(state.isInterfaceUp).isTrue();
         assertThat(state.deviceRole).isEqualTo(FakeOtDaemon.OT_DEVICE_ROLE_LEADER);
         assertThat(state.activeDatasetTlvs).isEqualTo(DEFAULT_ACTIVE_DATASET_TLVS);
-        assertThat(state.multicastForwardingEnabled).isTrue();
+        final BackboneRouterState bbrState = bbrStateRef.get();
+        assertThat(bbrState.multicastForwardingEnabled).isTrue();
+    }
+
+    @Test
+    public void setThreadEnabled_enableThread_succeed() throws Exception {
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_DISABLED);
+
+        final AtomicBoolean succeedRef = new AtomicBoolean(false);
+        mFakeOtDaemon.setThreadEnabled(
+                true,
+                new IOtStatusReceiver.Default() {
+                    @Override
+                    public void onSuccess() {
+                        succeedRef.set(true);
+                    }
+                });
+        mTestLooper.dispatchAll();
+
+        assertThat(succeedRef.get()).isTrue();
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
+    }
+
+    @Test
+    public void getChannelMasks_succeed_onSuccessIsInvoked() throws Exception {
+        final AtomicInteger supportedChannelMaskRef = new AtomicInteger();
+        final AtomicInteger preferredChannelMaskRef = new AtomicInteger();
+        final AtomicBoolean errorRef = new AtomicBoolean(false);
+        mFakeOtDaemon.setChannelMasks(
+                DEFAULT_SUPPORTED_CHANNEL_MASK, DEFAULT_PREFERRED_CHANNEL_MASK);
+        mFakeOtDaemon.setChannelMasksReceiverOtError(FakeOtDaemon.OT_ERROR_NONE);
+
+        mFakeOtDaemon.getChannelMasks(
+                new IChannelMasksReceiver.Default() {
+                    @Override
+                    public void onSuccess(int supportedChannelMask, int preferredChannelMask) {
+                        supportedChannelMaskRef.set(supportedChannelMask);
+                        preferredChannelMaskRef.set(preferredChannelMask);
+                    }
+
+                    @Override
+                    public void onError(int otError, String message) {
+                        errorRef.set(true);
+                    }
+                });
+        mTestLooper.dispatchAll();
+
+        assertThat(errorRef.get()).isFalse();
+        assertThat(supportedChannelMaskRef.get()).isEqualTo(DEFAULT_SUPPORTED_CHANNEL_MASK);
+        assertThat(preferredChannelMaskRef.get()).isEqualTo(DEFAULT_PREFERRED_CHANNEL_MASK);
+    }
+
+    @Test
+    public void getChannelMasks_failed_onErrorIsInvoked() throws Exception {
+        final AtomicInteger errorRef = new AtomicInteger(FakeOtDaemon.OT_ERROR_NONE);
+        final AtomicBoolean succeedRef = new AtomicBoolean(false);
+        mFakeOtDaemon.setChannelMasksReceiverOtError(OT_ERROR_INVALID_STATE);
+
+        mFakeOtDaemon.getChannelMasks(
+                new IChannelMasksReceiver.Default() {
+                    @Override
+                    public void onSuccess(int supportedChannelMask, int preferredChannelMask) {
+                        succeedRef.set(true);
+                    }
+
+                    @Override
+                    public void onError(int otError, String message) {
+                        errorRef.set(otError);
+                    }
+                });
+        mTestLooper.dispatchAll();
+
+        assertThat(succeedRef.get()).isFalse();
+        assertThat(errorRef.get()).isEqualTo(OT_ERROR_INVALID_STATE);
+    }
+
+    @Test
+    public void terminate_statesAreResetAndDeathCallbackIsInvoked() throws Exception {
+        DeathRecipient mockDeathRecipient = mock(DeathRecipient.class);
+        mFakeOtDaemon.linkToDeath(mockDeathRecipient, 0);
+        mFakeOtDaemon.initialize(
+                mMockTunFd,
+                true,
+                mMockNsdPublisher,
+                mOverriddenMeshcopTxts,
+                mMockCallback,
+                TEST_DEFAULT_COUNTRY_CODE);
+
+        mFakeOtDaemon.terminate();
+        mTestLooper.dispatchAll();
+
+        assertThat(mFakeOtDaemon.isInitialized()).isFalse();
+        OtDaemonState state = mFakeOtDaemon.getState();
+        assertThat(state.isInterfaceUp).isEqualTo(false);
+        assertThat(state.partitionId).isEqualTo(-1);
+        assertThat(state.deviceRole).isEqualTo(OT_DEVICE_ROLE_DISABLED);
+        assertThat(state.activeDatasetTlvs).isEqualTo(new byte[0]);
+        assertThat(state.pendingDatasetTlvs).isEqualTo(new byte[0]);
+        BackboneRouterState bbrState = mFakeOtDaemon.getBackboneRouterState();
+        assertThat(bbrState.multicastForwardingEnabled).isFalse();
+        assertThat(bbrState.listeningAddresses).isEqualTo(new ArrayList<>());
+        assertThat(mFakeOtDaemon.getDeathRecipient()).isNull();
+        assertThat(mFakeOtDaemon.getTunFd()).isNull();
+        assertThat(mFakeOtDaemon.getNsdPublisher()).isNull();
+        assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_DISABLED);
+        verify(mockDeathRecipient, times(1)).binderDied();
     }
 }

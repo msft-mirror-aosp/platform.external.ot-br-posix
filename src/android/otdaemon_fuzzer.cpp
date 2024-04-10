@@ -36,8 +36,12 @@ using otbr::Android::OtDaemonServer;
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-    otbr::Ncp::ControllerOpenThread ncp("", {}, "", true, false);
-    auto                            service = ndk::SharedRefBase::make<OtDaemonServer>(ncp);
+    otbr::Application app("", {}, {}, false, "", 0);
+    auto              service = ndk::SharedRefBase::make<OtDaemonServer>(app);
     fuzzService(service->asBinder().get(), FuzzedDataProvider(data, size));
     return 0;
+}
+
+extern "C" void otPlatReset(otInstance *aInstance)
+{
 }

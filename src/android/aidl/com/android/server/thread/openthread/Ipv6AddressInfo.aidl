@@ -35,7 +35,10 @@ package com.android.server.thread.openthread;
  */
 parcelable Ipv6AddressInfo {
     byte[]  address; // The raw IPv6 addres bytes, should be 16 bytes
-    int     scope; // The scope of the address
     int     prefixLength; // Valid for only unicast addresses
     boolean isPreferred; // Valid for only unicast addresses
+    boolean isMeshLocal; // Valid for only unicast addresses
+    boolean isActiveOmr; // Valid for only unicast addresses. Active OMR means the prefix is added
+                         // to netdata, if the OMR prefix is removed from netdata then the address
+                         // is not active OMR anymore.
 }
