@@ -47,12 +47,9 @@ oneway interface IOtDaemonCallback {
     /**
      * Called when Thread interface address has been changed.
      *
-     * @param addressInfo the IPv6 address which has been updated. This can be both unicast and
-     *                    multicast addresses
-     * @param isAdded {@code true} if this address is being added to the Thread interface;
-     *                Otherwise, this address is being removed
+     * @param addressInfoList the list of unicast and multicast IPv6 addresses.
      */
-    void onAddressChanged(in Ipv6AddressInfo addressInfo, boolean isAdded);
+    void onAddressChanged(in List<Ipv6AddressInfo> addressInfoList);
 
     /**
      * Called when backbone router state or multicast forwarding listening addresses has been
