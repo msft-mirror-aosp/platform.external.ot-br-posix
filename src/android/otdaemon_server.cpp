@@ -363,8 +363,8 @@ void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                  
 
     otIp6AddressToString(aAddress, addressString, sizeof(addressString));
 
-    otbrLogDebug("Multicast forwarding address changed, %s is %s", addressString,
-                 (aEvent == OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ADDED) ? "added" : "removed");
+    otbrLogInfo("Multicast forwarding address changed, %s is %s", addressString,
+                (aEvent == OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ADDED) ? "added" : "removed");
 
     if (thisServer->mCallback == nullptr)
     {
