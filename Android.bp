@@ -135,6 +135,7 @@ cc_defaults {
         "-DOTBR_CONFIG_FILE=\"src/android/otbr-config-android.h\"",
         "-DOTBR_ENABLE_VENDOR_SERVER=1", // for OtDaemonServer
         "-DOTBR_ENABLE_BACKBONE_ROUTER=1",
+        "-DOTBR_ENABLE_BACKBONE_ROUTER_ON_INIT=0",
         "-DOTBR_ENABLE_BORDER_ROUTING=1",
         "-DOTBR_ENABLE_BORDER_ROUTING_COUNTERS=1",
         "-DOTBR_ENABLE_BORDER_AGENT=1",
