@@ -132,6 +132,7 @@ void OtDaemonServer::Init(void)
     otBackboneRouterSetMulticastListenerCallback(GetOtInstance(), OtDaemonServer::HandleBackboneMulticastListenerEvent,
                                                  this);
     otIcmp6SetEchoMode(GetOtInstance(), OT_ICMP6_ECHO_HANDLER_DISABLED);
+    otIp6SetReceiveFilterEnabled(GetOtInstance(), true);
 
     mTaskRunner.Post(kTelemetryCheckInterval, [this]() { PushTelemetryIfConditionMatch(); });
 }
