@@ -32,6 +32,7 @@ import com.android.server.thread.openthread.DnsTxtAttribute;
 import com.android.server.thread.openthread.INsdStatusReceiver;
 import com.android.server.thread.openthread.INsdDiscoverServiceCallback;
 import com.android.server.thread.openthread.INsdResolveServiceCallback;
+import com.android.server.thread.openthread.INsdResolveHostCallback;
 
 /**
  * The service which supports mDNS advertising and discovery by {@link NsdManager}.
@@ -150,4 +151,29 @@ oneway interface INsdPublisher {
      *                             service resolution operation
      */
     void stopServiceResolution(int listenerId);
+
+    /**
+     * Resolves an mDNS host.
+     *
+     * <p>To stop resolving a host, use stopHostResolution.
+     *
+     * @param name the hostname
+     * @param callback the callback when a host is resolved.
+     * @param listenerId the ID of DnsResolver.Callback which is used to identify the
+     *                             host resolution operation
+     */
+    void resolveHost(in String name,
+                     in INsdResolveHostCallback callback,
+                     int listenerId);
+
+    /**
+     * Stops resolving an mDNS host.
+     *
+     * <p>To stop resolving a host, the caller must pass in the same listener ID which was used
+     * when starting resolving the host.
+     *
+     * @param listenerId the ID of the DnsResolver.Callback which is used to identify the
+     *                             host resolution operation
+     */
+    void stopHostResolution(int listenerId);
 }

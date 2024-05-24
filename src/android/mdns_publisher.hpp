@@ -32,6 +32,7 @@
 #include "mdns/mdns.hpp"
 
 #include <aidl/com/android/server/thread/openthread/BnNsdDiscoverServiceCallback.h>
+#include <aidl/com/android/server/thread/openthread/BnNsdResolveHostCallback.h>
 #include <aidl/com/android/server/thread/openthread/BnNsdResolveServiceCallback.h>
 #include <aidl/com/android/server/thread/openthread/BnNsdStatusReceiver.h>
 #include <aidl/com/android/server/thread/openthread/DnsTxtAttribute.h>
@@ -42,6 +43,7 @@ namespace otbr {
 namespace Android {
 using Status = ::ndk::ScopedAStatus;
 using aidl::com::android::server::thread::openthread::BnNsdDiscoverServiceCallback;
+using aidl::com::android::server::thread::openthread::BnNsdResolveHostCallback;
 using aidl::com::android::server::thread::openthread::BnNsdResolveServiceCallback;
 using aidl::com::android::server::thread::openthread::BnNsdStatusReceiver;
 using aidl::com::android::server::thread::openthread::DnsTxtAttribute;
@@ -157,6 +159,29 @@ public:
         std::map<std::string, std::set<ServiceResolver *>> mResolvers;
     };
 
+    struct HostSubscription : private ::NonCopyable
+    {
+        explicit HostSubscription(std::string                    aName,
+                                  MdnsPublisher                 &aPublisher,
+                                  std::shared_ptr<INsdPublisher> aNsdPublisher,
+                                  int                            listenerId)
+            : mName(std::move(aName))
+            , mPublisher(aPublisher)
+            , mNsdPublisher(std::move(aNsdPublisher))
+            , mListenerId(listenerId)
+        {
+        }
+
+        ~HostSubscription(void) { Release(); }
+
+        void Release(void) { mNsdPublisher->stopHostResolution(mListenerId); }
+
+        std::string                    mName;
+        MdnsPublisher                 &mPublisher;
+        std::shared_ptr<INsdPublisher> mNsdPublisher;
+        const int32_t                  mListenerId;
+    };
+
     class NsdDiscoverServiceCallback : public BnNsdDiscoverServiceCallback
     {
     public:
@@ -189,6 +214,20 @@ public:
 
     private:
         ServiceSubscription &mSubscription;
+    };
+
+    class NsdResolveHostCallback : public BnNsdResolveHostCallback
+    {
+    public:
+        explicit NsdResolveHostCallback(HostSubscription &aSubscription)
+            : mSubscription(aSubscription)
+        {
+        }
+
+        Status onHostResolved(const std::string &aName, const std::vector<std::string> &aAddresses);
+
+    private:
+        HostSubscription &mSubscription;
     };
 
 protected:
@@ -272,9 +311,11 @@ private:
     };
 
     typedef std::vector<std::unique_ptr<ServiceSubscription>> ServiceSubscriptionList;
+    typedef std::vector<std::unique_ptr<HostSubscription>>    HostSubscriptionList;
 
-    static constexpr int kMinResolvedTtl = 1;
-    static constexpr int kMaxResolvedTtl = 10;
+    static constexpr int kDefaultResolvedTtl = 10;
+    static constexpr int kMinResolvedTtl     = 1;
+    static constexpr int kMaxResolvedTtl     = 10;
 
     int32_t AllocateListenerId(void);
 
@@ -282,6 +323,7 @@ private:
     int32_t                        mNextListenerId;
     std::shared_ptr<INsdPublisher> mNsdPublisher = nullptr;
     ServiceSubscriptionList        mServiceSubscriptions;
+    HostSubscriptionList           mHostSubscriptions;
 };
 
 } // namespace Android
