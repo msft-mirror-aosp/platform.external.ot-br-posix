@@ -31,6 +31,7 @@ package com.android.server.thread.openthread;
 import com.android.server.thread.openthread.BackboneRouterState;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.OtDaemonState;
+import com.android.server.thread.openthread.OnMeshPrefixConfig;
 
 /** OpenThread daemon callbacks. */
 oneway interface IOtDaemonCallback {
@@ -66,4 +67,11 @@ oneway interface IOtDaemonCallback {
      * @param enabled {@code true} if Thread is enabled, {@code false} if Thread is disabled.
      */
     void onThreadEnabledChanged(in int enabled);
+
+    /**
+     * Called when Thread on-mesh prefixes have changed.
+     *
+     * @param onMeshPrefixConfigList the list of IPv6 prefixes.
+     */
+    void onPrefixChanged(in List<OnMeshPrefixConfig> onMeshPrefixConfigList);
 }
