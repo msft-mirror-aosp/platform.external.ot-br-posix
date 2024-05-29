@@ -158,8 +158,8 @@ private:
     bool                RefreshOnMeshPrefixes();
     Ipv6AddressInfo     ConvertToAddressInfo(const otNetifAddress &aAddress);
     Ipv6AddressInfo     ConvertToAddressInfo(const otNetifMulticastAddress &aAddress);
-    void updateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    void enableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void UpdateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void EnableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
 
     int                                mThreadEnabled = OT_STATE_DISABLED;
     otbr::Application                 &mApplication;
