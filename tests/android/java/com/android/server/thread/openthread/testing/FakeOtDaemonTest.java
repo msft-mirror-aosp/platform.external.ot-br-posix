@@ -186,6 +186,7 @@ public final class FakeOtDaemonTest {
         assertThat(state.deviceRole).isEqualTo(FakeOtDaemon.OT_DEVICE_ROLE_DISABLED);
         assertThat(state.activeDatasetTlvs).isEmpty();
         assertThat(state.pendingDatasetTlvs).isEmpty();
+        assertThat(state.threadEnabled).isEqualTo(OT_STATE_DISABLED);
         assertThat(listenerIdRef.get()).isEqualTo(7);
         BackboneRouterState bbrState = bbrStateRef.get();
         assertThat(bbrState.multicastForwardingEnabled).isFalse();
@@ -345,6 +346,7 @@ public final class FakeOtDaemonTest {
         assertThat(state.deviceRole).isEqualTo(OT_DEVICE_ROLE_DISABLED);
         assertThat(state.activeDatasetTlvs).isEqualTo(new byte[0]);
         assertThat(state.pendingDatasetTlvs).isEqualTo(new byte[0]);
+        assertThat(state.threadEnabled).isEqualTo(OT_STATE_DISABLED);
         BackboneRouterState bbrState = mFakeOtDaemon.getBackboneRouterState();
         assertThat(bbrState.multicastForwardingEnabled).isFalse();
         assertThat(bbrState.listeningAddresses).isEqualTo(new ArrayList<>());
