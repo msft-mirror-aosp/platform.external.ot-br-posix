@@ -161,7 +161,6 @@ private:
     void updateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     void enableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
 
-    int                                mThreadEnabled = OT_STATE_DISABLED;
     otbr::Application                 &mApplication;
     otbr::Ncp::ControllerOpenThread   &mNcp;
     otbr::BorderAgent                 &mBorderAgent;
