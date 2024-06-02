@@ -61,14 +61,6 @@ oneway interface IOtDaemonCallback {
     void onBackboneRouterStateChanged(in BackboneRouterState bbrState);
 
     /**
-     * Called when Thread enabled state has changed. Valid values are STATE_* defined in
-     * {@link ThreadNetworkController}.
-     *
-     * @param enabled {@code true} if Thread is enabled, {@code false} if Thread is disabled.
-     */
-    void onThreadEnabledChanged(in int enabled);
-
-    /**
      * Called when Thread on-mesh prefixes have changed.
      *
      * @param onMeshPrefixConfigList the list of IPv6 prefixes.
