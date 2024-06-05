@@ -108,6 +108,30 @@ Status MdnsPublisher::NsdResolveServiceCallback::onServiceResolved(const std::st
     return Status::ok();
 }
 
+Status MdnsPublisher::NsdResolveHostCallback::onHostResolved(const std::string              &aName,
+                                                             const std::vector<std::string> &aAddresses)
+{
+    DiscoveredHostInfo info;
+
+    info.mTtl = kDefaultResolvedTtl;
+    for (const auto &addressStr : aAddresses)
+    {
+        Ip6Address address;
+        int        error = Ip6Address::FromString(addressStr.c_str(), address);
+
+        if (error != OTBR_ERROR_NONE)
+        {
+            otbrLogInfo("Failed to parse resolved IPv6 address: %s", addressStr.c_str());
+            continue;
+        }
+        info.mAddresses.push_back(address);
+    }
+
+    mSubscription.mPublisher.OnHostResolved(aName, info);
+
+    return Status::ok();
+}
+
 void MdnsPublisher::SetINsdPublisher(std::shared_ptr<INsdPublisher> aINsdPublisher)
 {
     otbrLogInfo("Set INsdPublisher %p", aINsdPublisher.get());
@@ -149,6 +173,12 @@ std::shared_ptr<MdnsPublisher::NsdResolveServiceCallback> CreateNsdResolveServic
     MdnsPublisher::ServiceSubscription &aServiceSubscription)
 {
     return ndk::SharedRefBase::make<MdnsPublisher::NsdResolveServiceCallback>(aServiceSubscription);
+}
+
+std::shared_ptr<MdnsPublisher::NsdResolveHostCallback> CreateNsdResolveHostCallback(
+    MdnsPublisher::HostSubscription &aHostSubscription)
+{
+    return ndk::SharedRefBase::make<MdnsPublisher::NsdResolveHostCallback>(aHostSubscription);
 }
 
 void DieForNotImplemented(const char *aFuncName)
@@ -359,12 +389,42 @@ exit:
 
 void MdnsPublisher::SubscribeHost(const std::string &aHostName)
 {
-    OTBR_UNUSED_VARIABLE(aHostName);
+    auto host = MakeUnique<HostSubscription>(aHostName, *this, mNsdPublisher, AllocateListenerId());
+
+    VerifyOrExit(IsStarted(), otbrLogWarning("No platform mDNS implementation registered!"));
+
+    mNsdPublisher->resolveHost(aHostName, CreateNsdResolveHostCallback(*host), host->mListenerId);
+    mHostSubscriptions.push_back(std::move(host));
+
+    otbrLogInfo("Subscribe host %s (total %zu)", aHostName.c_str(), mHostSubscriptions.size());
+
+exit:
+    return;
 }
 
 void MdnsPublisher::UnsubscribeHost(const std::string &aHostName)
 {
-    OTBR_UNUSED_VARIABLE(aHostName);
+    HostSubscriptionList::iterator it;
+
+    VerifyOrExit(IsStarted());
+
+    it = std::find_if(
+        mHostSubscriptions.begin(), mHostSubscriptions.end(),
+        [&aHostName](const std::unique_ptr<HostSubscription> &aHost) { return aHost->mName == aHostName; });
+
+    VerifyOrExit(it != mHostSubscriptions.end(),
+                 otbrLogWarning("The host %s is already unsubscribed.", aHostName.c_str()));
+
+    {
+        std::unique_ptr<HostSubscription> host = std::move(*it);
+
+        mHostSubscriptions.erase(it);
+    }
+
+    otbrLogInfo("Unsubscribe host %s (left %zu)", aHostName.c_str(), mHostSubscriptions.size());
+
+exit:
+    return;
 }
 
 void MdnsPublisher::OnServiceResolveFailedImpl(const std::string &aType,
