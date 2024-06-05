@@ -89,17 +89,6 @@ static void PropagateResult(int                                       aError,
     }
 }
 
-static Ipv6AddressInfo ConvertToAddressInfo(const otIp6AddressInfo &aAddressInfo)
-{
-    Ipv6AddressInfo addrInfo;
-
-    addrInfo.address.assign(aAddressInfo.mAddress->mFields.m8, BYTE_ARR_END(aAddressInfo.mAddress->mFields.m8));
-    addrInfo.prefixLength = aAddressInfo.mPrefixLength;
-    addrInfo.scope        = aAddressInfo.mScope;
-    addrInfo.isPreferred  = aAddressInfo.mPreferred;
-    return addrInfo;
-}
-
 static const char *ThreadEnabledStateToString(int enabledState)
 {
     switch (enabledState)
@@ -143,6 +132,7 @@ void OtDaemonServer::Init(void)
     otBackboneRouterSetMulticastListenerCallback(GetOtInstance(), OtDaemonServer::HandleBackboneMulticastListenerEvent,
                                                  this);
     otIcmp6SetEchoMode(GetOtInstance(), OT_ICMP6_ECHO_HANDLER_DISABLED);
+    otIp6SetReceiveFilterEnabled(GetOtInstance(), true);
 
     mTaskRunner.Post(kTelemetryCheckInterval, [this]() { PushTelemetryIfConditionMatch(); });
 }
@@ -165,6 +155,8 @@ void OtDaemonServer::BinderDeathCallback(void *aBinderServer)
 
 void OtDaemonServer::StateCallback(otChangedFlags aFlags)
 {
+    std::vector<OnMeshPrefixConfig> onMeshPrefixes;
+
     assert(GetOtInstance() != nullptr);
 
     if (RefreshOtDaemonState(aFlags))
@@ -178,6 +170,7 @@ void OtDaemonServer::StateCallback(otChangedFlags aFlags)
             mCallback->onStateChanged(mState, -1);
         }
     }
+
     if (aFlags & OT_CHANGED_THREAD_BACKBONE_ROUTER_STATE)
     {
         if (mCallback == nullptr)
@@ -189,15 +182,90 @@ void OtDaemonServer::StateCallback(otChangedFlags aFlags)
             mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
         }
     }
+
+    if ((aFlags & OT_CHANGED_THREAD_NETDATA) && RefreshOnMeshPrefixes())
+    {
+        if (mCallback == nullptr)
+        {
+            otbrLogWarning("Ignoring OT netdata changes: callback is not set");
+        }
+        else
+        {
+            onMeshPrefixes.assign(mOnMeshPrefixes.begin(), mOnMeshPrefixes.end());
+            mCallback->onPrefixChanged(onMeshPrefixes);
+        }
+    }
+}
+
+bool OtDaemonServer::RefreshOnMeshPrefixes()
+{
+    std::set<OnMeshPrefixConfig> onMeshPrefixConfigs;
+    otNetworkDataIterator        iterator = OT_NETWORK_DATA_ITERATOR_INIT;
+    otBorderRouterConfig         config;
+    bool                         rv = false;
+
+    VerifyOrExit(GetOtInstance() != nullptr, otbrLogWarning("Can't get on mesh prefixes: OT is not initialized"));
+
+    while (otNetDataGetNextOnMeshPrefix(GetOtInstance(), &iterator, &config) == OT_ERROR_NONE)
+    {
+        OnMeshPrefixConfig onMeshPrefixConfig;
+
+        onMeshPrefixConfig.prefix.assign(std::begin(config.mPrefix.mPrefix.mFields.m8),
+                                         std::end(config.mPrefix.mPrefix.mFields.m8));
+        onMeshPrefixConfig.prefixLength = config.mPrefix.mLength;
+        onMeshPrefixConfigs.insert(onMeshPrefixConfig);
+    }
+
+    if (mOnMeshPrefixes != onMeshPrefixConfigs)
+    {
+        mOnMeshPrefixes = std::move(onMeshPrefixConfigs);
+        rv              = true;
+    }
+exit:
+    return rv;
+}
+
+Ipv6AddressInfo OtDaemonServer::ConvertToAddressInfo(const otNetifAddress &aAddress)
+{
+    Ipv6AddressInfo addrInfo;
+    otIp6Prefix     addressPrefix{aAddress.mAddress, aAddress.mPrefixLength};
+
+    addrInfo.address.assign(std::begin(aAddress.mAddress.mFields.m8), std::end(aAddress.mAddress.mFields.m8));
+    addrInfo.prefixLength = aAddress.mPrefixLength;
+    addrInfo.isPreferred  = aAddress.mPreferred;
+    addrInfo.isMeshLocal  = aAddress.mMeshLocal;
+    addrInfo.isActiveOmr  = otNetDataContainsOmrPrefix(GetOtInstance(), &addressPrefix);
+    return addrInfo;
+}
+
+Ipv6AddressInfo OtDaemonServer::ConvertToAddressInfo(const otNetifMulticastAddress &aAddress)
+{
+    Ipv6AddressInfo addrInfo;
+
+    addrInfo.address.assign(std::begin(aAddress.mAddress.mFields.m8), std::end(aAddress.mAddress.mFields.m8));
+    return addrInfo;
 }
 
 void OtDaemonServer::AddressCallback(const otIp6AddressInfo *aAddressInfo, bool aIsAdded, void *aBinderServer)
 {
-    OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
+    OT_UNUSED_VARIABLE(aAddressInfo);
+    OT_UNUSED_VARIABLE(aIsAdded);
+    OtDaemonServer                *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
+    std::vector<Ipv6AddressInfo>   addrInfoList;
+    const otNetifAddress          *unicastAddrs   = otIp6GetUnicastAddresses(thisServer->GetOtInstance());
+    const otNetifMulticastAddress *multicastAddrs = otIp6GetMulticastAddresses(thisServer->GetOtInstance());
 
+    for (const otNetifAddress *addr = unicastAddrs; addr != nullptr; addr = addr->mNext)
+    {
+        addrInfoList.push_back(thisServer->ConvertToAddressInfo(*addr));
+    }
+    for (const otNetifMulticastAddress *maddr = multicastAddrs; maddr != nullptr; maddr = maddr->mNext)
+    {
+        addrInfoList.push_back(thisServer->ConvertToAddressInfo(*maddr));
+    }
     if (thisServer->mCallback != nullptr)
     {
-        thisServer->mCallback->onAddressChanged(ConvertToAddressInfo(*aAddressInfo), aIsAdded);
+        thisServer->mCallback->onAddressChanged(addrInfoList);
     }
     else
     {
@@ -317,7 +385,6 @@ BackboneRouterState OtDaemonServer::GetBackboneRouterState()
         state.multicastForwardingEnabled = true;
         break;
     }
-    otbrLogInfo("Updating backbone router state (bbr state = %d)", bbrState);
 
     while (otBackboneRouterMulticastListenerGetNext(GetOtInstance(), &iter, &info) == OT_ERROR_NONE)
     {
@@ -340,8 +407,8 @@ void OtDaemonServer::HandleBackboneMulticastListenerEvent(void                  
 
     otIp6AddressToString(aAddress, addressString, sizeof(addressString));
 
-    otbrLogDebug("Multicast forwarding address changed, %s is %s", addressString,
-                 (aEvent == OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ADDED) ? "added" : "removed");
+    otbrLogInfo("Multicast forwarding address changed, %s is %s", addressString,
+                (aEvent == OT_BACKBONE_ROUTER_MULTICAST_LISTENER_ADDED) ? "added" : "removed");
 
     if (thisServer->mCallback == nullptr)
     {
@@ -422,11 +489,11 @@ void OtDaemonServer::initializeInternal(const bool                              
 
     if (enabled)
     {
-        enableThread(nullptr /* aReceiver */);
+        EnableThread(nullptr /* aReceiver */);
     }
     else
     {
-        updateThreadEnabledState(OT_STATE_DISABLED, nullptr /* aReceiver */);
+        UpdateThreadEnabledState(OT_STATE_DISABLED, nullptr /* aReceiver */);
     }
 }
 
@@ -439,13 +506,13 @@ Status OtDaemonServer::terminate(void)
     return Status::ok();
 }
 
-void OtDaemonServer::updateThreadEnabledState(const int enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+void OtDaemonServer::UpdateThreadEnabledState(const int enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    VerifyOrExit(enabled != mThreadEnabled);
+    VerifyOrExit(enabled != mState.threadEnabled);
 
-    otbrLogInfo("Thread enabled state changed: %s -> %s", ThreadEnabledStateToString(mThreadEnabled),
+    otbrLogInfo("Thread enabled state changed: %s -> %s", ThreadEnabledStateToString(mState.threadEnabled),
                 ThreadEnabledStateToString(enabled));
-    mThreadEnabled = enabled;
+    mState.threadEnabled = enabled;
 
     if (aReceiver != nullptr)
     {
@@ -466,14 +533,14 @@ void OtDaemonServer::updateThreadEnabledState(const int enabled, const std::shar
 
     if (mCallback != nullptr)
     {
-        mCallback->onThreadEnabledChanged(mThreadEnabled);
+        mCallback->onStateChanged(mState, -1);
     }
 
 exit:
     return;
 }
 
-void OtDaemonServer::enableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+void OtDaemonServer::EnableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     otOperationalDatasetTlvs datasetTlvs;
 
@@ -483,7 +550,7 @@ void OtDaemonServer::enableThread(const std::shared_ptr<IOtStatusReceiver> &aRec
         (void)otIp6SetEnabled(GetOtInstance(), true);
         (void)otThreadSetEnabled(GetOtInstance(), true);
     }
-    updateThreadEnabledState(OT_STATE_ENABLED, aReceiver);
+    UpdateThreadEnabledState(OT_STATE_ENABLED, aReceiver);
 }
 
 Status OtDaemonServer::setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
@@ -500,9 +567,9 @@ void OtDaemonServer::setThreadEnabledInternal(const bool enabled, const std::sha
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
 
-    VerifyOrExit(mThreadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
+    VerifyOrExit(mState.threadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
-    if ((mThreadEnabled == OT_STATE_ENABLED) == enabled)
+    if ((mState.threadEnabled == OT_STATE_ENABLED) == enabled)
     {
         aReceiver->onSuccess();
         ExitNow();
@@ -510,18 +577,18 @@ void OtDaemonServer::setThreadEnabledInternal(const bool enabled, const std::sha
 
     if (enabled)
     {
-        enableThread(aReceiver);
+        EnableThread(aReceiver);
     }
     else
     {
         // `aReceiver` should not be set here because the operation isn't finished yet
-        updateThreadEnabledState(OT_STATE_DISABLING, nullptr /* aReceiver */);
+        UpdateThreadEnabledState(OT_STATE_DISABLING, nullptr /* aReceiver */);
 
         LeaveGracefully([aReceiver, this]() {
             // Ignore errors as those operations should always succeed
             (void)otThreadSetEnabled(GetOtInstance(), false);
             (void)otIp6SetEnabled(GetOtInstance(), false);
-            updateThreadEnabledState(OT_STATE_DISABLED, aReceiver);
+            UpdateThreadEnabledState(OT_STATE_DISABLED, aReceiver);
         });
     }
 
@@ -554,7 +621,6 @@ void OtDaemonServer::registerStateCallbackInternal(const std::shared_ptr<IOtDaem
     // state callback, here needs to invoke the callback
     RefreshOtDaemonState(/* aFlags */ 0xffffffff);
     mCallback->onStateChanged(mState, listenerId);
-    mCallback->onThreadEnabledChanged(mThreadEnabled);
     mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
 
 exit:
@@ -636,9 +702,9 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
     std::string              message;
     otOperationalDatasetTlvs datasetTlvs;
 
-    VerifyOrExit(mThreadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
+    VerifyOrExit(mState.threadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
-    VerifyOrExit(mThreadEnabled == OT_STATE_ENABLED,
+    VerifyOrExit(mState.threadEnabled == OT_STATE_ENABLED,
                  error   = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
                  message = "Thread is disabled");
 
@@ -694,9 +760,9 @@ void OtDaemonServer::leaveInternal(const std::shared_ptr<IOtStatusReceiver> &aRe
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
 
-    VerifyOrExit(mThreadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
+    VerifyOrExit(mState.threadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
-    if (mThreadEnabled == OT_STATE_DISABLED)
+    if (mState.threadEnabled == OT_STATE_DISABLED)
     {
         FinishLeave(aReceiver);
         ExitNow();
@@ -782,9 +848,9 @@ void OtDaemonServer::scheduleMigrationInternal(const std::vector<uint8_t>       
     std::string          message;
     otOperationalDataset emptyDataset;
 
-    VerifyOrExit(mThreadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
+    VerifyOrExit(mState.threadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
-    VerifyOrExit(mThreadEnabled == OT_STATE_ENABLED,
+    VerifyOrExit(mState.threadEnabled == OT_STATE_ENABLED,
                  error   = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_THREAD_DISABLED),
                  message = "Thread is disabled");
 

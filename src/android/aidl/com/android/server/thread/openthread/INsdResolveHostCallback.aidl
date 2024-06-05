@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2023, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -28,17 +28,8 @@
 
 package com.android.server.thread.openthread;
 
-/**
- * The Thread IPv6 address information which represents both unicast and multicast address.
- *
- * This is a mapping of <a href="https://openthread.io/reference/struct/ot-ip6-address-info">otIp6AddressInfo</a>
- */
-parcelable Ipv6AddressInfo {
-    byte[]  address; // The raw IPv6 addres bytes, should be 16 bytes
-    int     prefixLength; // Valid for only unicast addresses
-    boolean isPreferred; // Valid for only unicast addresses
-    boolean isMeshLocal; // Valid for only unicast addresses
-    boolean isActiveOmr; // Valid for only unicast addresses. Active OMR means the prefix is added
-                         // to netdata, if the OMR prefix is removed from netdata then the address
-                         // is not active OMR anymore.
+/** Receives the information of a resolved host. */
+oneway interface INsdResolveHostCallback {
+    void onHostResolved(in String name,
+                        in List<String> addresses);
 }

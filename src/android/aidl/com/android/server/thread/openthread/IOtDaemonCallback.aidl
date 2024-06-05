@@ -31,6 +31,7 @@ package com.android.server.thread.openthread;
 import com.android.server.thread.openthread.BackboneRouterState;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.OtDaemonState;
+import com.android.server.thread.openthread.OnMeshPrefixConfig;
 
 /** OpenThread daemon callbacks. */
 oneway interface IOtDaemonCallback {
@@ -47,12 +48,9 @@ oneway interface IOtDaemonCallback {
     /**
      * Called when Thread interface address has been changed.
      *
-     * @param addressInfo the IPv6 address which has been updated. This can be both unicast and
-     *                    multicast addresses
-     * @param isAdded {@code true} if this address is being added to the Thread interface;
-     *                Otherwise, this address is being removed
+     * @param addressInfoList the list of unicast and multicast IPv6 addresses.
      */
-    void onAddressChanged(in Ipv6AddressInfo addressInfo, boolean isAdded);
+    void onAddressChanged(in List<Ipv6AddressInfo> addressInfoList);
 
     /**
      * Called when backbone router state or multicast forwarding listening addresses has been
@@ -63,10 +61,9 @@ oneway interface IOtDaemonCallback {
     void onBackboneRouterStateChanged(in BackboneRouterState bbrState);
 
     /**
-     * Called when Thread enabled state has changed. Valid values are STATE_* defined in
-     * {@link ThreadNetworkController}.
+     * Called when Thread on-mesh prefixes have changed.
      *
-     * @param enabled {@code true} if Thread is enabled, {@code false} if Thread is disabled.
+     * @param onMeshPrefixConfigList the list of IPv6 prefixes.
      */
-    void onThreadEnabledChanged(in int enabled);
+    void onPrefixChanged(in List<OnMeshPrefixConfig> onMeshPrefixConfigList);
 }
