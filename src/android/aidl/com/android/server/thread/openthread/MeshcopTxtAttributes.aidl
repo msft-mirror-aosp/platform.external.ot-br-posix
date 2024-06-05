@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2023, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -29,16 +29,29 @@
 package com.android.server.thread.openthread;
 
 /**
- * The Thread IPv6 address information which represents both unicast and multicast address.
- *
- * This is a mapping of <a href="https://openthread.io/reference/struct/ot-ip6-address-info">otIp6AddressInfo</a>
+ *  A collection of MeshCoP TXT entries that are supplied by Android platform.
  */
-parcelable Ipv6AddressInfo {
-    byte[]  address; // The raw IPv6 addres bytes, should be 16 bytes
-    int     prefixLength; // Valid for only unicast addresses
-    boolean isPreferred; // Valid for only unicast addresses
-    boolean isMeshLocal; // Valid for only unicast addresses
-    boolean isActiveOmr; // Valid for only unicast addresses. Active OMR means the prefix is added
-                         // to netdata, if the OMR prefix is removed from netdata then the address
-                         // is not active OMR anymore.
+parcelable MeshcopTxtAttributes {
+    /**
+     * Predefined MeshCoP TXT entry named "mn".
+     *
+     * The length must not exceed 24 UTF-8 bytes.
+     */
+    String modelName;
+
+    /**
+     * Predefined MeshCoP TXT entry named "vn".
+     *
+     * The length must not exceed 24 UTF-8 bytes.
+     */
+    String vendorName;
+
+    /**
+     * Predefined MeshCoP TXT entry named "vo".
+     *
+     * The length must be 3 bytes.
+     */
+    byte[] vendorOui;
+
+    // More vendor-specific (v*) TXT entries can be added here
 }

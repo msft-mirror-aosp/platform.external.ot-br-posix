@@ -27,6 +27,7 @@
 //
 
 package {
+    default_team: "trendy_team_fwk_thread_network",
     default_applicable_licenses: ["external_ot-br-posix_license"],
 }
 
@@ -90,19 +91,16 @@ cc_defaults {
             cflags: [
                 // Optimize for debugging
                 "-Og",
-
-                // Enable daemon CLI for debugging
-                "-DOPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE=1",
-            ]
-        }
+            ],
+        },
     },
 
     // Enable security checks
     sanitize: {
-      misc_undefined: ["bounds"],
-      cfi: true,
-      scs: true,
-   },
+        misc_undefined: ["bounds"],
+        cfi: true,
+        scs: true,
+    },
 }
 
 cc_defaults {
@@ -125,6 +123,7 @@ cc_defaults {
     cflags: [
         "-Wall",
         "-Wextra",
+        "-Wno-unused-function",
 
         // The HAL client implementation requires features which are
         // available on only 31+, but it's guaranteed that ot-daemon
@@ -135,17 +134,36 @@ cc_defaults {
         "-DOTBR_CONFIG_ANDROID_VERSION_HEADER_ENABLE=1",
         "-DOTBR_CONFIG_FILE=\"src/android/otbr-config-android.h\"",
         "-DOTBR_ENABLE_VENDOR_SERVER=1", // for OtDaemonServer
+        "-DOTBR_ENABLE_BACKBONE_ROUTER=1",
+        "-DOTBR_ENABLE_BACKBONE_ROUTER_ON_INIT=0",
         "-DOTBR_ENABLE_BORDER_ROUTING=1",
+        "-DOTBR_ENABLE_BORDER_ROUTING_COUNTERS=1",
+        "-DOTBR_ENABLE_BORDER_AGENT=1",
+        "-DOTBR_ENABLE_PUBLISH_MESHCOP_BA_ID=1",
+        // Used for bypassing the macro check. In fact mdnssd is not used because we don't compile
+        // the related source files.
         "-DOTBR_ENABLE_MDNS_MDNSSD=1",
         "-DOTBR_ENABLE_SRP_ADVERTISING_PROXY=1",
         "-DOTBR_ENABLE_DNSSD_DISCOVERY_PROXY=1",
+        "-DOTBR_ENABLE_SRP_SERVER_AUTO_ENABLE_MODE=1",
         "-DOTBR_PACKAGE_NAME=\"OTBR_AGENT\"",
+        "-DOTBR_STOP_BORDER_AGENT_ON_INIT=1",
+        // The platform specific rules for selecting infrastructure link do not apply to Android
+        "-DOTBR_ENABLE_VENDOR_INFRA_LINK_SELECT=0",
+
+        // Disable 1.4 features, they are not supported on Android yet.
+        "-DOTBR_ENABLE_NAT64=0",
+        "-DOTBR_ENABLE_DNS_UPSTREAM_QUERY=0",
+        "-DOTBR_ENABLE_DHCP6_PD=0",
+        "-DOTBR_ENABLE_TREL=0",
     ],
 
     srcs: [
         "src/agent/application.cpp",
+        "src/android/mdns_publisher.cpp",
         "src/android/otdaemon_server.cpp",
         "src/android/otdaemon_telemetry.cpp",
+        "src/backbone_router/backbone_agent.cpp",
         "src/border_agent/border_agent.cpp",
         "src/ncp/ncp_openthread.cpp",
         "src/sdp_proxy/advertising_proxy.cpp",
@@ -158,7 +176,6 @@ cc_defaults {
         "src/common/task_runner.cpp",
         "src/common/types.cpp",
         "src/mdns/mdns.cpp",
-        "src/mdns/mdns_mdnssd.cpp",
         "src/utils/crc16.cpp",
         "src/utils/dns_utils.cpp",
         "src/utils/hex.cpp",
@@ -192,7 +209,7 @@ cc_defaults {
 
     host_ldlibs: ["-lutil"],
     min_sdk_version: "30",
-    apex_available: [ "com.android.tethering" ],
+    apex_available: ["com.android.tethering"],
 }
 
 cc_binary {
@@ -208,9 +225,9 @@ cc_binary {
 
 cc_fuzz {
     name: "ot_daemon_service_fuzzer",
-    defaults:[
+    defaults: [
         "ot-daemon-defaults",
-        "service_fuzzer_defaults"
+        "service_fuzzer_defaults",
     ],
     srcs: [
         "src/android/otdaemon_fuzzer.cpp",
@@ -241,7 +258,7 @@ cc_library_static {
         "libutils",
     ],
     min_sdk_version: "30",
-    apex_available: [ "com.android.tethering" ],
+    apex_available: ["com.android.tethering"],
 }
 
 genrule {
