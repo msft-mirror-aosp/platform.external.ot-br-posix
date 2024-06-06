@@ -72,7 +72,6 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     private OtDaemonState mState;
     private BackboneRouterState mBbrState;
     private boolean mIsInitialized = false;
-    private int mThreadEnabled = OT_STATE_DISABLED;
     private int mChannelMasksReceiverOtError = OT_ERROR_NONE;
     private int mSupportedChannelMask = 0x07FFF800; // from channel 11 to 26
     private int mPreferredChannelMask = 0;
@@ -98,12 +97,12 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mState.deviceRole = OT_DEVICE_ROLE_DISABLED;
         mState.activeDatasetTlvs = new byte[0];
         mState.pendingDatasetTlvs = new byte[0];
+        mState.threadEnabled = OT_STATE_DISABLED;
         mBbrState = new BackboneRouterState();
         mBbrState.multicastForwardingEnabled = false;
         mBbrState.listeningAddresses = new ArrayList<>();
 
         mTunFd = null;
-        mThreadEnabled = OT_STATE_DISABLED;
         mNsdPublisher = null;
         mIsInitialized = false;
 
@@ -151,7 +150,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
             throws RemoteException {
         mIsInitialized = true;
         mTunFd = tunFd;
-        mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
+        mState.threadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
         mNsdPublisher = nsdPublisher;
         mCountryCode = countryCode;
 
@@ -181,7 +180,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     }
 
     public int getEnabledState() {
-        return mThreadEnabled;
+        return mState.threadEnabled;
     }
 
     public OtDaemonState getState() {
@@ -228,7 +227,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     public void setThreadEnabled(boolean enabled, IOtStatusReceiver receiver) {
         mHandler.post(
                 () -> {
-                    mThreadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
+                    mState.threadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
                     try {
                         receiver.onSuccess();
                     } catch (RemoteException e) {
