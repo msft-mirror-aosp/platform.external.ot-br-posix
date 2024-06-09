@@ -140,9 +140,9 @@ oneway interface IOtDaemon {
      * Leaves from the current network.
      *
      * 1. It returns success immediately if this device has already left or disabled
-     * 2. Else if there is already an onging {@code join} request, no action will be taken but
+     * 2. Else if there is already an onging {@code leave} request, no action will be taken but
      *    the {@code receiver} will be invoked after the previous request is completed
-     * 3. Otherwise, OTBR sends Address Release Notification (i.e. ADDR_REL.ntf) to grcefully
+     * 3. Otherwise, OTBR sends Address Release Notification (i.e. ADDR_REL.ntf) to gracefully
      *    detach from the current network and it takes 1 second to finish
      * 4. The Operational Dataset will be removed from persistent storage
      *
