@@ -53,6 +53,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.SmallTest;
 
 import com.android.server.thread.openthread.BackboneRouterState;
+import com.android.server.thread.openthread.DnsTxtAttribute;
 import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemonCallback;
@@ -67,6 +68,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -119,6 +121,7 @@ public final class FakeOtDaemonTest {
         mOverriddenMeshcopTxts.vendorName = TEST_VENDOR_NAME;
         mOverriddenMeshcopTxts.vendorOui = TEST_VENDOR_OUI;
         mOverriddenMeshcopTxts.modelName = TEST_MODEL_NAME;
+        mOverriddenMeshcopTxts.nonStandardTxtEntries = List.of();
     }
 
     @Test
@@ -126,6 +129,8 @@ public final class FakeOtDaemonTest {
         mOverriddenMeshcopTxts.vendorName = TEST_VENDOR_NAME;
         mOverriddenMeshcopTxts.vendorOui = TEST_VENDOR_OUI;
         mOverriddenMeshcopTxts.modelName = TEST_MODEL_NAME;
+        mOverriddenMeshcopTxts.nonStandardTxtEntries =
+                List.of(new DnsTxtAttribute("v2", new byte[] {0x02}));
 
         mFakeOtDaemon.initialize(
                 mMockTunFd,
@@ -141,6 +146,8 @@ public final class FakeOtDaemonTest {
         assertThat(meshcopTxts.vendorName).isEqualTo(TEST_VENDOR_NAME);
         assertThat(meshcopTxts.vendorOui).isEqualTo(TEST_VENDOR_OUI);
         assertThat(meshcopTxts.modelName).isEqualTo(TEST_MODEL_NAME);
+        assertThat(meshcopTxts.nonStandardTxtEntries)
+                .containsExactly(new DnsTxtAttribute("v2", new byte[] {0x02}));
         assertThat(mFakeOtDaemon.getTunFd()).isEqualTo(mMockTunFd);
         assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_ENABLED);
         assertThat(mFakeOtDaemon.getNsdPublisher()).isEqualTo(mMockNsdPublisher);
