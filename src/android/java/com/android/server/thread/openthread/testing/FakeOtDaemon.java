@@ -52,6 +52,7 @@ import com.android.server.thread.openthread.OtDaemonState;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 /** A fake implementation of the {@link IOtDaemon} AIDL API for testing. */
@@ -158,6 +159,8 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mOverriddenMeshcopTxts.vendorOui = overriddenMeshcopTxts.vendorOui.clone();
         mOverriddenMeshcopTxts.vendorName = overriddenMeshcopTxts.vendorName;
         mOverriddenMeshcopTxts.modelName = overriddenMeshcopTxts.modelName;
+        mOverriddenMeshcopTxts.nonStandardTxtEntries =
+                List.copyOf(overriddenMeshcopTxts.nonStandardTxtEntries);
 
         registerStateCallback(callback, PROACTIVE_LISTENER_ID);
     }
