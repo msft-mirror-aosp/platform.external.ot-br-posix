@@ -31,6 +31,8 @@ package com.android.server.thread.openthread;
 /**
  *  An attribute in DNS TXT Resource Record.
  */
+@JavaOnlyImmutable
+@JavaDerive(equals=true, toString=true)
 parcelable DnsTxtAttribute {
     String name; // The name of the attribute.
     byte[] value; // The value of the attribute.
