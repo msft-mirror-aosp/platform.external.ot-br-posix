@@ -41,5 +41,5 @@ cc_library_static {
         "proto/threadnetwork_atoms.proto",
     ],
     min_sdk_version: "30",
-    apex_available: [ "com.android.tethering" ],
+    apex_available: ["com.android.tethering"],
 }

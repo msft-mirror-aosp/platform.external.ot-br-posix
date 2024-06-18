@@ -33,7 +33,7 @@ package {
 
 filegroup {
     name: "ot-daemon-testing-sources",
-    srcs: ["com/android/server/thread/openthread/testing/*.java"]
+    srcs: ["com/android/server/thread/openthread/testing/*.java"],
 }
 
 java_library {
@@ -41,11 +41,11 @@ java_library {
     srcs: [":ot-daemon-testing-sources"],
 
     static_libs: [
-        "ot-daemon-aidl-java"
+        "ot-daemon-aidl-java",
     ],
 
     visibility: [
         "//packages/modules/Connectivity/thread/tests:__subpackages__",
         "//external/ot-br-posix/tests:__subpackages__",
-    ]
+    ],
 }
