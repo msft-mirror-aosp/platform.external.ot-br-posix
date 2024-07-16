@@ -48,7 +48,7 @@
 #include "common/code_utils.hpp"
 #include "common/mainloop.hpp"
 #include "mdns/mdns.hpp"
-#include "ncp/ncp_openthread.hpp"
+#include "ncp/rcp_host.hpp"
 #include "sdp_proxy/advertising_proxy.hpp"
 #include "sdp_proxy/discovery_proxy.hpp"
 #include "trel_dnssd/trel_dnssd.hpp"
@@ -86,11 +86,11 @@ public:
     /**
      * The constructor to initialize the Thread border agent.
      *
-     * @param[in] aNcp  A reference to the NCP controller.
+     * @param[in] aHost       A reference to the Thread controller.
      * @param[in] aPublisher  A reference to the mDNS Publisher.
      *
      */
-    BorderAgent(otbr::Ncp::ControllerOpenThread &aNcp, Mdns::Publisher &aPublisher);
+    BorderAgent(otbr::Ncp::RcpHost &aHost, Mdns::Publisher &aPublisher);
 
     ~BorderAgent(void) = default;
 
@@ -151,9 +151,13 @@ private:
     std::string GetServiceInstanceNameWithExtAddr(const std::string &aServiceInstanceName) const;
     std::string GetAlternativeServiceInstanceName() const;
 
-    otbr::Ncp::ControllerOpenThread &mNcp;
-    Mdns::Publisher                 &mPublisher;
-    bool                             mIsEnabled;
+    static void HandleEpskcStateChanged(void *aContext);
+    void        PublishEpskcService(void);
+    void        UnpublishEpskcService(void);
+
+    otbr::Ncp::RcpHost &mHost;
+    Mdns::Publisher    &mPublisher;
+    bool                mIsEnabled;
 
     std::map<std::string, std::vector<uint8_t>> mMeshCopTxtUpdate;
 
