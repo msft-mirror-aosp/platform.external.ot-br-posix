@@ -156,6 +156,7 @@ cc_defaults {
         "-DOTBR_ENABLE_DNS_UPSTREAM_QUERY=0",
         "-DOTBR_ENABLE_DHCP6_PD=0",
         "-DOTBR_ENABLE_TREL=0",
+        "-DOTBR_ENABLE_EPSKC=0",
     ],
 
     srcs: [
@@ -165,7 +166,9 @@ cc_defaults {
         "src/android/otdaemon_telemetry.cpp",
         "src/backbone_router/backbone_agent.cpp",
         "src/border_agent/border_agent.cpp",
-        "src/ncp/ncp_openthread.cpp",
+        "src/ncp/ncp_host.cpp",
+        "src/ncp/rcp_host.cpp",
+        "src/ncp/thread_host.cpp",
         "src/sdp_proxy/advertising_proxy.cpp",
         "src/sdp_proxy/discovery_proxy.cpp",
         "src/common/code_utils.cpp",
