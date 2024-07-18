@@ -130,6 +130,7 @@ cc_defaults {
         // will never run on Android U- devices.
         "-Wno-unguarded-availability",
 
+        "-DOTBR_ENABLE_PLATFORM_ANDROID=1",
         "-DOTBR_CONFIG_ANDROID_PROPERTY_ENABLE=1",
         "-DOTBR_CONFIG_ANDROID_VERSION_HEADER_ENABLE=1",
         "-DOTBR_CONFIG_FILE=\"src/android/otbr-config-android.h\"",
