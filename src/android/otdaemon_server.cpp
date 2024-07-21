@@ -108,7 +108,7 @@ static const char *ThreadEnabledStateToString(int enabledState)
 
 OtDaemonServer::OtDaemonServer(Application &aApplication)
     : mApplication(aApplication)
-    , mNcp(aApplication.GetNcp())
+    , mHost(static_cast<otbr::Ncp::RcpHost &>(aApplication.GetHost()))
     , mBorderAgent(aApplication.GetBorderAgent())
     , mMdnsPublisher(static_cast<MdnsPublisher &>(aApplication.GetPublisher()))
     , mBorderRouterConfiguration()
@@ -127,7 +127,7 @@ void OtDaemonServer::Init(void)
 
     assert(GetOtInstance() != nullptr);
 
-    mNcp.AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
+    mHost.AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
     otIp6SetAddressCallback(GetOtInstance(), OtDaemonServer::AddressCallback, this);
     otIp6SetReceiveCallback(GetOtInstance(), OtDaemonServer::ReceiveCallback, this);
     otBackboneRouterSetMulticastListenerCallback(GetOtInstance(), OtDaemonServer::HandleBackboneMulticastListenerEvent,
@@ -441,7 +441,7 @@ exit:
 
 otInstance *OtDaemonServer::GetOtInstance()
 {
-    return mNcp.GetInstance();
+    return mHost.GetInstance();
 }
 
 void OtDaemonServer::Update(MainloopContext &aMainloop)
