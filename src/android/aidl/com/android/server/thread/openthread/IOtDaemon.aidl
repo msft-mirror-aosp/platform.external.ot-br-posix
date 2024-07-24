@@ -30,12 +30,14 @@ package com.android.server.thread.openthread;
 
 import android.os.ParcelFileDescriptor;
 
+import android.net.thread.ChannelMaxPower;
 import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
 import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.INsdPublisher;
+import com.android.server.thread.openthread.MeshcopTxtAttributes;
 
 /**
  * The OpenThread daemon service which provides access to the core Thread stack for
@@ -72,6 +74,7 @@ oneway interface IOtDaemon {
         OT_ERROR_BUSY = 5,
         OT_ERROR_PARSE = 6,
         OT_ERROR_ABORT = 11,
+        OT_ERROR_NOT_IMPLEMENTED = 12,
         OT_ERROR_INVALID_STATE = 13,
         OT_ERROR_RESPONSE_TIMEOUT = 28,
         OT_ERROR_REASSEMBLY_TIMEOUT = 30,
@@ -79,16 +82,30 @@ oneway interface IOtDaemon {
     }
 
     /**
-     * Initializes this service with Thread tunnel interface FD.
+     * Initializes this service.
+     *
+     * <p>This API MUST be called before all other APIs of this interface.
      *
      * @param tunFd the Thread tunnel interface FD which can be used to transmit/receive
      *              packets to/from Thread PAN
      * @param enabled the Thead enabled state from Persistent Settings
      * @param nsdPublisher the INsdPublisher which can be used for mDNS advertisement/discovery
-     *                    on AIL by {@link NsdManager}
+     *                     on AIL by {@link NsdManager}
+     * @param meshcopTxts the MeshCoP TXT values set by the system_server to override the default
+     *                    ones
+     * @param callback the callback for receiving OtDaemonState changes
+     * @param countryCode 2 bytes country code (as defined in ISO 3166) to set
      */
-    void initialize(in ParcelFileDescriptor tunFd, in boolean enabled,
-                    in INsdPublisher nsdPublisher);
+    void initialize(
+            in ParcelFileDescriptor tunFd,
+            in boolean enabled,
+            in INsdPublisher nsdPublisher,
+            in MeshcopTxtAttributes meshcopTxts,
+            in IOtDaemonCallback callback,
+            in String countryCode);
+
+    /** Terminates the ot-daemon process. */
+    void terminate();
 
     /**
      * Enables/disables Thread.
@@ -123,9 +140,9 @@ oneway interface IOtDaemon {
      * Leaves from the current network.
      *
      * 1. It returns success immediately if this device has already left or disabled
-     * 2. Else if there is already an onging {@code join} request, no action will be taken but
+     * 2. Else if there is already an onging {@code leave} request, no action will be taken but
      *    the {@code receiver} will be invoked after the previous request is completed
-     * 3. Otherwise, OTBR sends Address Release Notification (i.e. ADDR_REL.ntf) to grcefully
+     * 3. Otherwise, OTBR sends Address Release Notification (i.e. ADDR_REL.ntf) to gracefully
      *    detach from the current network and it takes 1 second to finish
      * 4. The Operational Dataset will be removed from persistent storage
      *
@@ -143,7 +160,7 @@ oneway interface IOtDaemon {
     /**
      * Sets the country code.
      *
-     * @param countryCode 2 byte country code (as defined in ISO 3166) to set.
+     * @param countryCode 2 bytes country code (as defined in ISO 3166) to set.
      * @param receiver the receiver to receive result of this operation
      */
     oneway void setCountryCode(in String countryCode, in IOtStatusReceiver receiver);
@@ -164,6 +181,14 @@ oneway interface IOtDaemon {
      * @param receiver the receiver to receive result of this operation
      */
     void getChannelMasks(in IChannelMasksReceiver receiver);
+
+   /**
+    * Sets the max power of each channel
+    *
+    * @param channelMaxPowers an array of {@code ChannelMaxPower}.
+    * @param receiver the receiver to the receive result of this operation.
+    */
+    void setChannelMaxPowers(in ChannelMaxPower[] channelMaxPowers, in IOtStatusReceiver receiver);
 
     // TODO: add Border Router APIs
 }

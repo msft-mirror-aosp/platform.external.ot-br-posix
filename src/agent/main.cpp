@@ -31,10 +31,6 @@
 #include <openthread-br/config.h>
 
 #include <algorithm>
-#include <fstream>
-#include <mutex>
-#include <sstream>
-#include <string>
 #include <vector>
 
 #include <assert.h>
@@ -47,7 +43,7 @@
 #include <openthread/logging.h>
 #include <openthread/platform/radio.h>
 
-#if __ANDROID__ && OTBR_CONFIG_ANDROID_PROPERTY_ENABLE
+#if OTBR_ENABLE_PLATFORM_ANDROID
 #include <cutils/properties.h>
 #endif
 
@@ -56,7 +52,13 @@
 #include "common/logging.hpp"
 #include "common/mainloop.hpp"
 #include "common/types.hpp"
-#include "ncp/ncp_openthread.hpp"
+#include "ncp/thread_host.hpp"
+
+#ifdef OTBR_ENABLE_PLATFORM_ANDROID
+#ifndef __ANDROID__
+#error "OTBR_ENABLE_PLATFORM_ANDROID can be enabled for only Android devices"
+#endif
+#endif
 
 static const char kDefaultInterfaceName[] = "wpan0";
 
@@ -70,6 +72,7 @@ enum
     OTBR_OPT_HELP                    = 'h',
     OTBR_OPT_INTERFACE_NAME          = 'I',
     OTBR_OPT_VERBOSE                 = 'v',
+    OTBR_OPT_SYSLOG_DISABLE          = 's',
     OTBR_OPT_VERSION                 = 'V',
     OTBR_OPT_SHORTMAX                = 128,
     OTBR_OPT_RADIO_VERSION,
@@ -78,7 +81,7 @@ enum
     OTBR_OPT_REST_LISTEN_PORT,
 };
 
-#ifndef __ANDROID__
+#ifndef OTBR_ENABLE_PLATFORM_ANDROID
 static jmp_buf sResetJump;
 #endif
 static otbr::Application *gApp = nullptr;
@@ -90,6 +93,7 @@ static const struct option kOptions[] = {
     {"help", no_argument, nullptr, OTBR_OPT_HELP},
     {"thread-ifname", required_argument, nullptr, OTBR_OPT_INTERFACE_NAME},
     {"verbose", no_argument, nullptr, OTBR_OPT_VERBOSE},
+    {"syslog-disable", no_argument, nullptr, OTBR_OPT_SYSLOG_DISABLE},
     {"version", no_argument, nullptr, OTBR_OPT_VERSION},
     {"radio-version", no_argument, nullptr, OTBR_OPT_RADIO_VERSION},
     {"auto-attach", optional_argument, nullptr, OTBR_OPT_AUTO_ATTACH},
@@ -115,6 +119,7 @@ exit:
     return successful;
 }
 
+#ifndef OTBR_ENABLE_PLATFORM_ANDROID
 static constexpr char kAutoAttachDisableArg[] = "--auto-attach=0";
 static char           sAutoAttachDisableArgStorage[sizeof(kAutoAttachDisableArg)];
 
@@ -132,13 +137,15 @@ static std::vector<char *> AppendAutoAttachDisableArg(int argc, char *argv[])
 
     return args;
 }
+#endif
 
 static void PrintHelp(const char *aProgramName)
 {
     fprintf(stderr,
-            "Usage: %s [-I interfaceName] [-B backboneIfName] [-d DEBUG_LEVEL] [-v] [--auto-attach[=0/1]] RADIO_URL "
-            "[RADIO_URL]\n"
-            "    --auto-attach defaults to 1\n",
+            "Usage: %s [-I interfaceName] [-B backboneIfName] [-d DEBUG_LEVEL] [-v] [-s] [--auto-attach[=0/1]] "
+            "RADIO_URL [RADIO_URL]\n"
+            "    --auto-attach defaults to 1\n"
+            "    -s disables syslog and prints to standard out\n",
             aProgramName);
     fprintf(stderr, "%s", otSysGetRadioUrlHelpString());
 }
@@ -158,7 +165,7 @@ static otbrLogLevel GetDefaultLogLevel(void)
 {
     otbrLogLevel level = OTBR_LOG_INFO;
 
-#if __ANDROID__ && OTBR_CONFIG_ANDROID_PROPERTY_ENABLE
+#if OTBR_ENABLE_PLATFORM_ANDROID
     char value[PROPERTY_VALUE_MAX];
 
     property_get("ro.build.type", value, "user");
@@ -173,17 +180,18 @@ static otbrLogLevel GetDefaultLogLevel(void)
 
 static void PrintRadioVersionAndExit(const std::vector<const char *> &aRadioUrls)
 {
-    otbr::Ncp::ControllerOpenThread ncpOpenThread{/* aInterfaceName */ "", aRadioUrls, /* aBackboneInterfaceName */ "",
-                                                  /* aDryRun */ true, /* aEnableAutoAttach */ false};
-    const char                     *radioVersion;
+    auto host = std::unique_ptr<otbr::Ncp::ThreadHost>(
+        otbr::Ncp::ThreadHost::Create(/* aInterfaceName */ "", aRadioUrls,
+                                      /* aBackboneInterfaceName */ "",
+                                      /* aDryRun */ true, /* aEnableAutoAttach */ false));
+    const char *coprocessorVersion;
 
-    ncpOpenThread.Init();
+    host->Init();
 
-    radioVersion = otPlatRadioGetVersionString(ncpOpenThread.GetInstance());
-    otbrLogNotice("Radio version: %s", radioVersion);
-    printf("%s\n", radioVersion);
+    coprocessorVersion = host->GetCoprocessorVersion();
+    printf("%s\n", coprocessorVersion);
 
-    ncpOpenThread.Deinit();
+    host->Deinit();
 
     exit(EXIT_SUCCESS);
 }
@@ -195,6 +203,7 @@ static int realmain(int argc, char *argv[])
     int                       ret               = EXIT_SUCCESS;
     const char               *interfaceName     = kDefaultInterfaceName;
     bool                      verbose           = false;
+    bool                      syslogDisable     = false;
     bool                      printRadioVersion = false;
     bool                      enableAutoAttach  = true;
     const char               *restListenAddress = "";
@@ -205,7 +214,7 @@ static int realmain(int argc, char *argv[])
 
     std::set_new_handler(OnAllocateFailed);
 
-    while ((opt = getopt_long(argc, argv, "B:d:hI:Vv", kOptions, nullptr)) != -1)
+    while ((opt = getopt_long(argc, argv, "B:d:hI:Vvs", kOptions, nullptr)) != -1)
     {
         switch (opt)
         {
@@ -226,6 +235,10 @@ static int realmain(int argc, char *argv[])
 
         case OTBR_OPT_VERBOSE:
             verbose = true;
+            break;
+
+        case OTBR_OPT_SYSLOG_DISABLE:
+            syslogDisable = true;
             break;
 
         case OTBR_OPT_VERSION:
@@ -269,9 +282,9 @@ static int realmain(int argc, char *argv[])
         }
     }
 
-    otbrLogInit(argv[0], logLevel, verbose);
+    otbrLogInit(argv[0], logLevel, verbose, syslogDisable);
     otbrLogNotice("Running %s", OTBR_PACKAGE_VERSION);
-    otbrLogNotice("Thread version: %s", otbr::Ncp::ControllerOpenThread::GetThreadVersion());
+    otbrLogNotice("Thread version: %s", otbr::Ncp::RcpHost::GetThreadVersion());
     otbrLogNotice("Thread interface: %s", interfaceName);
 
     if (backboneInterfaceNames.empty())
@@ -319,7 +332,7 @@ void otPlatReset(otInstance *aInstance)
     gApp->Deinit();
     gApp = nullptr;
 
-#ifndef __ANDROID__
+#ifndef OTBR_ENABLE_PLATFORM_ANDROID
     longjmp(sResetJump, 1);
     assert(false);
 #else
@@ -331,7 +344,7 @@ void otPlatReset(otInstance *aInstance)
 
 int main(int argc, char *argv[])
 {
-#ifndef __ANDROID__
+#ifndef OTBR_ENABLE_PLATFORM_ANDROID
     if (setjmp(sResetJump))
     {
         std::vector<char *> args = AppendAutoAttachDisableArg(argc, argv);

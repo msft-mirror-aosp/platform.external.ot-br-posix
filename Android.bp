@@ -27,6 +27,7 @@
 //
 
 package {
+    default_team: "trendy_team_fwk_thread_network",
     default_applicable_licenses: ["external_ot-br-posix_license"],
 }
 
@@ -129,19 +130,34 @@ cc_defaults {
         // will never run on Android U- devices.
         "-Wno-unguarded-availability",
 
+        "-DOTBR_ENABLE_PLATFORM_ANDROID=1",
         "-DOTBR_CONFIG_ANDROID_PROPERTY_ENABLE=1",
         "-DOTBR_CONFIG_ANDROID_VERSION_HEADER_ENABLE=1",
         "-DOTBR_CONFIG_FILE=\"src/android/otbr-config-android.h\"",
         "-DOTBR_ENABLE_VENDOR_SERVER=1", // for OtDaemonServer
+        "-DOTBR_ENABLE_BACKBONE_ROUTER=1",
+        "-DOTBR_ENABLE_BACKBONE_ROUTER_ON_INIT=0",
         "-DOTBR_ENABLE_BORDER_ROUTING=1",
+        "-DOTBR_ENABLE_BORDER_ROUTING_COUNTERS=1",
         "-DOTBR_ENABLE_BORDER_AGENT=1",
         "-DOTBR_ENABLE_PUBLISH_MESHCOP_BA_ID=1",
         // Used for bypassing the macro check. In fact mdnssd is not used because we don't compile
         // the related source files.
         "-DOTBR_ENABLE_MDNS_MDNSSD=1",
-        "-DOTBR_ENABLE_SRP_ADVERTISING_PROXY=0",
-        "-DOTBR_ENABLE_DNSSD_DISCOVERY_PROXY=0",
+        "-DOTBR_ENABLE_SRP_ADVERTISING_PROXY=1",
+        "-DOTBR_ENABLE_DNSSD_DISCOVERY_PROXY=1",
+        "-DOTBR_ENABLE_SRP_SERVER_AUTO_ENABLE_MODE=1",
         "-DOTBR_PACKAGE_NAME=\"OTBR_AGENT\"",
+        "-DOTBR_STOP_BORDER_AGENT_ON_INIT=1",
+        // The platform specific rules for selecting infrastructure link do not apply to Android
+        "-DOTBR_ENABLE_VENDOR_INFRA_LINK_SELECT=0",
+
+        // Disable 1.4 features, they are not supported on Android yet.
+        "-DOTBR_ENABLE_NAT64=0",
+        "-DOTBR_ENABLE_DNS_UPSTREAM_QUERY=0",
+        "-DOTBR_ENABLE_DHCP6_PD=0",
+        "-DOTBR_ENABLE_TREL=0",
+        "-DOTBR_ENABLE_EPSKC=0",
     ],
 
     srcs: [
@@ -149,8 +165,11 @@ cc_defaults {
         "src/android/mdns_publisher.cpp",
         "src/android/otdaemon_server.cpp",
         "src/android/otdaemon_telemetry.cpp",
+        "src/backbone_router/backbone_agent.cpp",
         "src/border_agent/border_agent.cpp",
-        "src/ncp/ncp_openthread.cpp",
+        "src/ncp/ncp_host.cpp",
+        "src/ncp/rcp_host.cpp",
+        "src/ncp/thread_host.cpp",
         "src/sdp_proxy/advertising_proxy.cpp",
         "src/sdp_proxy/discovery_proxy.cpp",
         "src/common/code_utils.cpp",
