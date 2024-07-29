@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2023, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -28,36 +28,69 @@
 
 /**
  * @file
- * This file has helper functions to convert internal state representations
- * to string (useful for APIs).
- *
+ * This file includes definitions for the d-bus object of Thread service when
+ * the co-processor is an NCP.
  */
-#ifndef OTBR_COMMON_API_STRINGS_HPP_
-#define OTBR_COMMON_API_STRINGS_HPP_
+
+#ifndef OTBR_DBUS_THREAD_OBJECT_NCP_HPP_
+#define OTBR_DBUS_THREAD_OBJECT_NCP_HPP_
 
 #include "openthread-br/config.h"
 
 #include <string>
 
-#include <openthread/border_routing.h>
-#include <openthread/thread.h>
+#include <openthread/link.h>
 
-#define OTBR_ROLE_NAME_DISABLED "disabled"
-#define OTBR_ROLE_NAME_DETACHED "detached"
-#define OTBR_ROLE_NAME_CHILD "child"
-#define OTBR_ROLE_NAME_ROUTER "router"
-#define OTBR_ROLE_NAME_LEADER "leader"
+#include "dbus/server/dbus_object.hpp"
+#include "mdns/mdns.hpp"
+#include "ncp/ncp_host.hpp"
 
-#if OTBR_ENABLE_DHCP6_PD
-#define OTBR_DHCP6_PD_STATE_NAME_DISABLED "disabled"
-#define OTBR_DHCP6_PD_STATE_NAME_STOPPED "stopped"
-#define OTBR_DHCP6_PD_STATE_NAME_RUNNING "running"
-#endif
+namespace otbr {
+namespace DBus {
 
-std::string GetDeviceRoleName(otDeviceRole aRole);
+/**
+ * @addtogroup border-router-dbus-server
+ *
+ * @brief
+ *   This module includes the <a href="dbus-api.html">dbus server api</a>.
+ *
+ * @{
+ */
 
-#if OTBR_ENABLE_DHCP6_PD
-std::string GetDhcp6PdStateName(otBorderRoutingDhcp6PdState aDhcp6PdState);
-#endif // OTBR_ENABLE_DHCP6_PD
+class DBusThreadObjectNcp : public DBusObject
+{
+public:
+    /**
+     * This constructor of dbus thread object.
+     *
+     * @param[in] aConnection     The dbus connection.
+     * @param[in] aInterfaceName  The dbus interface name.
+     * @param[in] aHost           The Thread controller.
+     *
+     */
+    DBusThreadObjectNcp(DBusConnection &aConnection, const std::string &aInterfaceName, otbr::Ncp::NcpHost &aHost);
 
-#endif // OTBR_COMMON_API_STRINGS_HPP_
+    /**
+     * This method initializes the dbus thread object.
+     *
+     * @retval OTBR_ERROR_NONE  The initialization succeeded.
+     * @retval OTBR_ERROR_DBUS  The initialization failed due to dbus connection.
+     *
+     */
+    otbrError Init(void) override;
+
+private:
+    void AsyncGetDeviceRoleHandler(DBusRequest &aRequest);
+    void ReplyAsyncGetProperty(DBusRequest &aRequest, const std::string &aContent);
+
+    otbr::Ncp::NcpHost &mHost;
+};
+
+/**
+ * @}
+ */
+
+} // namespace DBus
+} // namespace otbr
+
+#endif // OTBR_DBUS_THREAD_OBJECT_NCP_HPP_
