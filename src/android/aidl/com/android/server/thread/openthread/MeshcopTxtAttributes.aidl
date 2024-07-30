@@ -28,6 +28,8 @@
 
 package com.android.server.thread.openthread;
 
+import com.android.server.thread.openthread.DnsTxtAttribute;
+
 /**
  *  A collection of MeshCoP TXT entries that are supplied by Android platform.
  */
@@ -53,5 +55,11 @@ parcelable MeshcopTxtAttributes {
      */
     byte[] vendorOui;
 
-    // More vendor-specific (v*) TXT entries can be added here
+    /**
+     * Non-standard (vendor-specific) _meshcop._udp TXT entries.
+     *
+     * All TXT keys MUST start with "v".
+     *
+     */
+    List<DnsTxtAttribute> nonStandardTxtEntries;
 }
