@@ -43,7 +43,7 @@
 #include "android/mdns_publisher.hpp"
 #include "common/mainloop.hpp"
 #include "common/time.hpp"
-#include "ncp/ncp_openthread.hpp"
+#include "ncp/rcp_host.hpp"
 
 namespace otbr {
 namespace Android {
@@ -162,7 +162,7 @@ private:
     void EnableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
 
     otbr::Application                 &mApplication;
-    otbr::Ncp::ControllerOpenThread   &mNcp;
+    otbr::Ncp::RcpHost                &mHost;
     otbr::BorderAgent                 &mBorderAgent;
     MdnsPublisher                     &mMdnsPublisher;
     std::shared_ptr<INsdPublisher>     mINsdPublisher;
