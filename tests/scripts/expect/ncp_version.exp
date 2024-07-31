@@ -1,5 +1,6 @@
+#!/usr/bin/expect -f
 #
-#  Copyright (c) 2021, The OpenThread Authors.
+#  Copyright (c) 2024, The OpenThread Authors.
 #  All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
@@ -25,18 +26,17 @@
 #  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 #  POSSIBILITY OF SUCH DAMAGE.
 #
+set timeout 1
 
-add_library(otbr-ncp
-    ncp_host.cpp
-    ncp_host.hpp
-    rcp_host.cpp
-    rcp_host.hpp
-    thread_host.cpp
-    thread_host.hpp
-)
+# Spawn the otbr-agent with NCP in Dry Run mode
+spawn $::env(EXP_OTBR_AGENT_PATH) -I $::env(EXP_TUN_NAME) -v -d7 --radio-version "spinel+hdlc+forkpty://$::env(EXP_OT_NCP_PATH)?forkpty-arg=$::env(EXP_LEADER_NODE_ID)"
 
-target_link_libraries(otbr-ncp PRIVATE
-    otbr-common
-    $<$<BOOL:${OTBR_FEATURE_FLAGS}>:otbr-proto>
-    $<$<BOOL:${OTBR_TELEMETRY_DATA_API}>:otbr-proto>
-)
+# Expect the NCP version
+expect -re {OPENTHREAD/[0-9a-z]{6,9}; SIMULATION} {
+} timeout {
+    puts "timeout!"
+    exit 1
+}
+
+# Wait for the spawned process to terminate
+expect eof
