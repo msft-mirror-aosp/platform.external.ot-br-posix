@@ -78,6 +78,10 @@ public:
     // Dump information for debugging.
     binder_status_t dump(int aFd, const char **aArgs, uint32_t aNumArgs) override;
 
+    static OtDaemonServer *Get(void) { return sOtDaemonServer; }
+
+    void NotifyNat64PrefixDiscoveryDone(void);
+
 private:
     using LeaveCallback = std::function<void()>;
 
@@ -159,6 +163,8 @@ private:
     Ipv6AddressInfo     ConvertToAddressInfo(const otNetifMulticastAddress &aAddress);
     void UpdateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     void EnableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+
+    static OtDaemonServer *sOtDaemonServer;
 
     otbr::Application                 &mApplication;
     otbr::Ncp::RcpHost                &mHost;
