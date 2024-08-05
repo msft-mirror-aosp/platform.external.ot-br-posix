@@ -32,9 +32,8 @@ package com.android.server.thread.openthread;
  * The Thread Border Router configuration.
  *
  */
-parcelable BorderRouterConfigurationParcel {
+@JavaDerive(equals=true, toString=true)
+parcelable BorderRouterConfiguration {
     boolean isBorderRoutingEnabled; // Whether the border routing feature is enabled.
     String  infraInterfaceName; // The name of infra network interface.
-    // An ICMPv6 socket on infra network interface. This is required by the border routing feature.
-    ParcelFileDescriptor infraInterfaceIcmp6Socket;
 }
