@@ -31,7 +31,7 @@ package com.android.server.thread.openthread;
 import android.os.ParcelFileDescriptor;
 
 import android.net.thread.ChannelMaxPower;
-import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
+import com.android.server.thread.openthread.BorderRouterConfiguration;
 import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.IOtStatusReceiver;
@@ -169,11 +169,14 @@ oneway interface IOtDaemon {
      * Configures the Border Router features.
      *
      * @param brConfig the border router's configuration
+     * @param infraIcmp6Socket the ICMPv6 socket on the infrastructure network
      * @param receiver the status receiver
      *
      */
     oneway void configureBorderRouter(
-        in BorderRouterConfigurationParcel brConfig, in IOtStatusReceiver receiver);
+        in BorderRouterConfiguration brConfig,
+        in ParcelFileDescriptor infraIcmp6Socket,
+        in IOtStatusReceiver receiver);
 
     /**
      * Gets the supported and preferred channel masks.

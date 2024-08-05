@@ -54,7 +54,7 @@ using Status               = ::ndk::ScopedAStatus;
 using aidl::android::net::thread::ChannelMaxPower;
 using aidl::com::android::server::thread::openthread::BackboneRouterState;
 using aidl::com::android::server::thread::openthread::BnOtDaemon;
-using aidl::com::android::server::thread::openthread::BorderRouterConfigurationParcel;
+using aidl::com::android::server::thread::openthread::BorderRouterConfiguration;
 using aidl::com::android::server::thread::openthread::IChannelMasksReceiver;
 using aidl::com::android::server::thread::openthread::INsdPublisher;
 using aidl::com::android::server::thread::openthread::IOtDaemon;
@@ -127,12 +127,11 @@ private:
                                const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setChannelMaxPowersInternal(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
                                        const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    Status configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
+    Status configureBorderRouter(const BorderRouterConfiguration          &aBorderRouterConfiguration,
+                                 const ScopedFileDescriptor               &aInfraInterfaceIcmp6Socket,
                                  const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   configureBorderRouterInternal(int                                       aIcmp6SocketFd,
-                                         const std::string                        &aInfraInterfaceName,
-                                         bool                                      aIsBorderRoutingEnabled,
-                                         bool                                      aIsBorderRouterConfigChanged,
+    void   configureBorderRouterInternal(const BorderRouterConfiguration          &aBorderRouterConfiguration,
+                                         int                                       aIcmp6SocketFd,
                                          const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status getChannelMasks(const std::shared_ptr<IChannelMasksReceiver> &aReceiver) override;
     void   getChannelMasksInternal(const std::shared_ptr<IChannelMasksReceiver> &aReceiver);
@@ -175,7 +174,8 @@ private:
     std::shared_ptr<IOtStatusReceiver> mJoinReceiver;
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
-    BorderRouterConfigurationParcel    mBorderRouterConfiguration;
+    BorderRouterConfiguration          mBorderRouterConfiguration;
+    int                                mInfraIcmp6Socket;
     std::set<OnMeshPrefixConfig>       mOnMeshPrefixes;
     static constexpr Seconds           kTelemetryCheckInterval           = Seconds(600);          // 600 seconds
     static constexpr Seconds           kTelemetryUploadIntervalThreshold = Seconds(60 * 60 * 12); // 12 hours
