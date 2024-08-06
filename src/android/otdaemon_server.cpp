@@ -115,9 +115,9 @@ OtDaemonServer::OtDaemonServer(Application &aApplication)
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
-    mBorderRouterConfiguration.infraInterfaceName        = "";
-    mBorderRouterConfiguration.infraInterfaceIcmp6Socket = ScopedFileDescriptor();
-    mBorderRouterConfiguration.isBorderRoutingEnabled    = false;
+    mBorderRouterConfiguration.infraInterfaceName     = "";
+    mBorderRouterConfiguration.isBorderRoutingEnabled = false;
+    mInfraIcmp6Socket                                 = -1;
 }
 
 void OtDaemonServer::Init(void)
@@ -1033,71 +1033,59 @@ exit:
     return Status::ok();
 }
 
-Status OtDaemonServer::configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
+Status OtDaemonServer::configureBorderRouter(const BorderRouterConfiguration          &aBorderRouterConfiguration,
+                                             const ScopedFileDescriptor               &aInfraIcmp6Socket,
                                              const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    int         icmp6SocketFd               = aBorderRouterConfiguration.infraInterfaceIcmp6Socket.dup().release();
-    std::string infraInterfaceName          = aBorderRouterConfiguration.infraInterfaceName;
-    bool        isBorderRoutingEnabled      = aBorderRouterConfiguration.isBorderRoutingEnabled;
-    bool        isBorderRouterConfigChanged = (mBorderRouterConfiguration != aBorderRouterConfiguration);
+    int infraIcmp6Socket = aInfraIcmp6Socket.dup().release();
 
-    otbrLogInfo("Configuring Border Router: %s", aBorderRouterConfiguration.toString().c_str());
-
-    // The copy constructor of `BorderRouterConfigurationParcel` is deleted. It is unable to directly pass the
-    // `aBorderRouterConfiguration` to the lambda function. Only the necessary parameters of
-    // `BorderRouterConfigurationParcel` are passed to the lambda function here.
-    mTaskRunner.Post(
-        [icmp6SocketFd, infraInterfaceName, isBorderRoutingEnabled, isBorderRouterConfigChanged, aReceiver, this]() {
-            configureBorderRouterInternal(icmp6SocketFd, infraInterfaceName, isBorderRoutingEnabled,
-                                          isBorderRouterConfigChanged, aReceiver);
-        });
+    mTaskRunner.Post([aBorderRouterConfiguration, infraIcmp6Socket, aReceiver, this]() {
+        configureBorderRouterInternal(aBorderRouterConfiguration, infraIcmp6Socket, aReceiver);
+    });
 
     return Status::ok();
 }
 
-void OtDaemonServer::configureBorderRouterInternal(int                aIcmp6SocketFd,
-                                                   const std::string &aInfraInterfaceName,
-                                                   bool               aIsBorderRoutingEnabled,
-                                                   bool               aIsBorderRouterConfigChanged,
+void OtDaemonServer::configureBorderRouterInternal(const BorderRouterConfiguration          &aBorderRouterConfiguration,
+                                                   int                                       aInfraIcmp6Socket,
                                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    int         icmp6SocketFd = aIcmp6SocketFd;
-    otError     error         = OT_ERROR_NONE;
+    otError     error = OT_ERROR_NONE;
     std::string message;
 
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+    otbrLogInfo("Configuring Border Router: %s", aBorderRouterConfiguration.toString().c_str());
 
-    if (aIsBorderRouterConfigChanged)
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+    VerifyOrExit(aBorderRouterConfiguration != mBorderRouterConfiguration || aInfraIcmp6Socket != mInfraIcmp6Socket);
+
+    if (aBorderRouterConfiguration.isBorderRoutingEnabled)
     {
-        if (aIsBorderRoutingEnabled)
-        {
-            unsigned int infraIfIndex = if_nametoindex(aInfraInterfaceName.c_str());
-            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
-                          message = "failed to disable border routing");
-            otSysSetInfraNetif(aInfraInterfaceName.c_str(), icmp6SocketFd);
-            icmp6SocketFd = -1;
-            SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
-                          message = "failed to initialize border routing");
-            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
-                          message = "failed to enable border routing");
-            // TODO: b/320836258 - Make BBR independently configurable
-            otBackboneRouterSetEnabled(GetOtInstance(), true /* aEnabled */);
-        }
-        else
-        {
-            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
-                          message = "failed to disable border routing");
-            otBackboneRouterSetEnabled(GetOtInstance(), false /* aEnabled */);
-        }
+        unsigned int infraIfIndex = if_nametoindex(aBorderRouterConfiguration.infraInterfaceName.c_str());
+        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
+                      message = "failed to disable border routing");
+        otSysSetInfraNetif(aBorderRouterConfiguration.infraInterfaceName.c_str(), aInfraIcmp6Socket);
+        aInfraIcmp6Socket = -1;
+        SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
+                      message = "failed to initialize border routing");
+        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
+                      message = "failed to enable border routing");
+        // TODO: b/320836258 - Make BBR independently configurable
+        otBackboneRouterSetEnabled(GetOtInstance(), true /* aEnabled */);
+    }
+    else
+    {
+        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
+                      message = "failed to disable border routing");
+        otBackboneRouterSetEnabled(GetOtInstance(), false /* aEnabled */);
     }
 
-    mBorderRouterConfiguration.isBorderRoutingEnabled = aIsBorderRoutingEnabled;
-    mBorderRouterConfiguration.infraInterfaceName     = aInfraInterfaceName;
+    mBorderRouterConfiguration = aBorderRouterConfiguration;
+    mInfraIcmp6Socket          = aInfraIcmp6Socket;
 
 exit:
     if (error != OT_ERROR_NONE)
     {
-        close(icmp6SocketFd);
+        close(aInfraIcmp6Socket);
     }
     PropagateResult(error, message, aReceiver);
 }
