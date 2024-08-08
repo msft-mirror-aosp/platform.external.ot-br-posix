@@ -106,6 +106,8 @@ static const char *ThreadEnabledStateToString(int enabledState)
     }
 }
 
+OtDaemonServer *OtDaemonServer::sOtDaemonServer = nullptr;
+
 OtDaemonServer::OtDaemonServer(Application &aApplication)
     : mApplication(aApplication)
     , mHost(static_cast<otbr::Ncp::RcpHost &>(aApplication.GetHost()))
@@ -118,6 +120,7 @@ OtDaemonServer::OtDaemonServer(Application &aApplication)
     mBorderRouterConfiguration.infraInterfaceName     = "";
     mBorderRouterConfiguration.isBorderRoutingEnabled = false;
     mInfraIcmp6Socket                                 = -1;
+    sOtDaemonServer                                   = this;
 }
 
 void OtDaemonServer::Init(void)
@@ -1150,6 +1153,34 @@ void OtDaemonServer::PushTelemetryIfConditionMatch()
 
 exit:
     return;
+}
+
+void OtDaemonServer::NotifyNat64PrefixDiscoveryDone(void)
+{
+    // TODO: b/357479886 - Use the discovered AIL NAT64 prefix. For now we just assume no NAT64 prefix is on AIL so the
+    // Border Router will locally generate a NAT64 prefix and use it.
+    otIp6Prefix prefix{};
+    uint32_t    infraIfIndex = if_nametoindex(mBorderRouterConfiguration.infraInterfaceName.c_str());
+
+    otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &prefix);
+
+exit:
+    return;
+}
+
+extern "C" otError otPlatInfraIfDiscoverNat64Prefix(uint32_t aInfraIfIndex)
+{
+    OT_UNUSED_VARIABLE(aInfraIfIndex);
+
+    OtDaemonServer *otDaemonServer = OtDaemonServer::Get();
+    otError         error          = OT_ERROR_NONE;
+
+    VerifyOrExit(otDaemonServer != nullptr, error = OT_ERROR_INVALID_STATE);
+
+    otDaemonServer->NotifyNat64PrefixDiscoveryDone();
+
+exit:
+    return error;
 }
 
 } // namespace Android
