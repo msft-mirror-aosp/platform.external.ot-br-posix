@@ -32,6 +32,7 @@ package com.android.server.thread.openthread;
  * The Thread Border Router configuration.
  *
  */
+@JavaOnlyImmutable
 @JavaDerive(equals=true, toString=true)
 parcelable BorderRouterConfiguration {
     boolean isBorderRoutingEnabled; // Whether the border routing feature is enabled.
