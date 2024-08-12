@@ -30,6 +30,5 @@ package com.android.server.thread.openthread;
 
 /** Receives the information of a resolved host. */
 oneway interface INsdResolveHostCallback {
-    void onHostResolved(in String name,
-                        in List<String> addresses);
+    void onHostResolved(in String name, in List<String> addresses);
 }
