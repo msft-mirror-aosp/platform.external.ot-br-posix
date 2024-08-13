@@ -68,7 +68,7 @@ using aidl::com::android::server::thread::openthread::OtDaemonState;
 class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendor::VendorServer
 {
 public:
-    explicit OtDaemonServer(Application &aApplication);
+    OtDaemonServer(otbr::Ncp::RcpHost &rcpHost, otbr::Mdns::Publisher &mdnsPublisher, otbr::BorderAgent &borderAgent);
     virtual ~OtDaemonServer(void) = default;
 
     // Disallow copy and assign.
@@ -166,10 +166,9 @@ private:
 
     static OtDaemonServer *sOtDaemonServer;
 
-    otbr::Application                 &mApplication;
     otbr::Ncp::RcpHost                &mHost;
-    otbr::BorderAgent                 &mBorderAgent;
     MdnsPublisher                     &mMdnsPublisher;
+    otbr::BorderAgent                 &mBorderAgent;
     std::shared_ptr<INsdPublisher>     mINsdPublisher;
     MeshcopTxtAttributes               mMeshcopTxts;
     TaskRunner                         mTaskRunner;
