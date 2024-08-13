@@ -343,9 +343,10 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     }
 
     @Override
-    public void configureBorderRouter(BorderRouterConfiguration config,
-                                      ParcelFileDescriptor infraIcmp6Socket,
-                                      IOtStatusReceiver receiver)
+    public void configureBorderRouter(
+            BorderRouterConfiguration config,
+            ParcelFileDescriptor infraIcmp6Socket,
+            IOtStatusReceiver receiver)
             throws RemoteException {
         throw new UnsupportedOperationException(
                 "FakeOtDaemon#configureBorderRouter is not implemented!");
