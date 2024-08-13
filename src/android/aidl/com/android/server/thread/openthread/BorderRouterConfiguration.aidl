@@ -36,5 +36,5 @@ package com.android.server.thread.openthread;
 @JavaDerive(equals=true, toString=true)
 parcelable BorderRouterConfiguration {
     boolean isBorderRoutingEnabled; // Whether the border routing feature is enabled.
-    String  infraInterfaceName; // The name of infra network interface.
+    String infraInterfaceName; // The name of infra network interface.
 }
