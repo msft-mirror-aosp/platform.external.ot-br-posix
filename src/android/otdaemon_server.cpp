@@ -33,6 +33,8 @@
 #include <net/if.h>
 #include <string.h>
 
+#include <algorithm>
+
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android/binder_manager.h>
@@ -1015,15 +1017,26 @@ Status OtDaemonServer::setChannelMaxPowersInternal(const std::vector<ChannelMaxP
         VerifyOrExit((channelMaxPower.channel >= OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MIN) &&
                          (channelMaxPower.channel <= OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MAX),
                      error = OT_ERROR_INVALID_ARGS, message = "The channel is invalid");
-        VerifyOrExit((channelMaxPower.maxPower >= INT16_MIN) && (channelMaxPower.maxPower <= INT16_MAX),
-                     error = OT_ERROR_INVALID_ARGS, message = "The max power is invalid");
     }
 
     for (ChannelMaxPower channelMaxPower : aChannelMaxPowers)
     {
-        channel  = static_cast<uint8_t>(channelMaxPower.channel);
-        maxPower = static_cast<int16_t>(channelMaxPower.maxPower);
-        otbrLogInfo("Set channel max power: channel=%u, maxPower=%d", channel, maxPower);
+        channel = static_cast<uint8_t>(channelMaxPower.channel);
+
+        // INT_MIN indicates that the corresponding channel is disabled in Thread Android API `setChannelMaxPowers()`
+        if (channelMaxPower.maxPower == INT_MIN)
+        {
+            // INT16_MAX indicates that the corresponding channel is disabled in OpenThread API
+            // `otPlatRadioSetChannelTargetPower()`.
+            maxPower = INT16_MAX;
+        }
+        else
+        {
+            maxPower = std::clamp(channelMaxPower.maxPower, INT16_MIN, INT16_MAX - 1);
+        }
+
+        otbrLogInfo("Set channel max power: channel=%u, maxPower=%d", static_cast<unsigned int>(channel),
+                    static_cast<int>(maxPower));
         SuccessOrExit(error   = otPlatRadioSetChannelTargetPower(GetOtInstance(), channel, maxPower),
                       message = "Failed to set channel max power");
     }
