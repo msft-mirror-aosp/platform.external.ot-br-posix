@@ -42,6 +42,7 @@
 #include <openthread/icmp6.h>
 #include <openthread/ip6.h>
 #include <openthread/link.h>
+#include <openthread/nat64.h>
 #include <openthread/openthread-system.h>
 #include <openthread/platform/infra_if.h>
 #include <openthread/platform/radio.h>
@@ -58,7 +59,9 @@ namespace vendor {
 
 std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplication)
 {
-    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aApplication);
+    return ndk::SharedRefBase::make<Android::OtDaemonServer>(
+        static_cast<otbr::Ncp::RcpHost &>(aApplication.GetHost()),
+        static_cast<otbr::Android::MdnsPublisher &>(aApplication.GetPublisher()), aApplication.GetBorderAgent());
 }
 
 } // namespace vendor
@@ -105,18 +108,22 @@ static const char *ThreadEnabledStateToString(int enabledState)
     }
 }
 
-OtDaemonServer::OtDaemonServer(Application &aApplication)
-    : mApplication(aApplication)
-    , mNcp(aApplication.GetNcp())
-    , mBorderAgent(aApplication.GetBorderAgent())
-    , mMdnsPublisher(static_cast<MdnsPublisher &>(aApplication.GetPublisher()))
+OtDaemonServer *OtDaemonServer::sOtDaemonServer = nullptr;
+
+OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &rcpHost,
+                               otbr::Mdns::Publisher &mdnsPublisher,
+                               otbr::BorderAgent     &borderAgent)
+    : mHost(rcpHost)
+    , mMdnsPublisher(static_cast<MdnsPublisher &>(mdnsPublisher))
+    , mBorderAgent(borderAgent)
     , mBorderRouterConfiguration()
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
-    mBorderRouterConfiguration.infraInterfaceName        = "";
-    mBorderRouterConfiguration.infraInterfaceIcmp6Socket = ScopedFileDescriptor();
-    mBorderRouterConfiguration.isBorderRoutingEnabled    = false;
+    mBorderRouterConfiguration.infraInterfaceName     = "";
+    mBorderRouterConfiguration.isBorderRoutingEnabled = false;
+    mInfraIcmp6Socket                                 = -1;
+    sOtDaemonServer                                   = this;
 }
 
 void OtDaemonServer::Init(void)
@@ -126,13 +133,14 @@ void OtDaemonServer::Init(void)
 
     assert(GetOtInstance() != nullptr);
 
-    mNcp.AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
+    mHost.AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
     otIp6SetAddressCallback(GetOtInstance(), OtDaemonServer::AddressCallback, this);
     otIp6SetReceiveCallback(GetOtInstance(), OtDaemonServer::ReceiveCallback, this);
     otBackboneRouterSetMulticastListenerCallback(GetOtInstance(), OtDaemonServer::HandleBackboneMulticastListenerEvent,
                                                  this);
     otIcmp6SetEchoMode(GetOtInstance(), OT_ICMP6_ECHO_HANDLER_DISABLED);
     otIp6SetReceiveFilterEnabled(GetOtInstance(), true);
+    otNat64SetReceiveIp4Callback(GetOtInstance(), &OtDaemonServer::ReceiveCallback, this);
 
     mTaskRunner.Post(kTelemetryCheckInterval, [this]() { PushTelemetryIfConditionMatch(); });
 }
@@ -278,8 +286,7 @@ void OtDaemonServer::ReceiveCallback(otMessage *aMessage, void *aBinderServer)
     static_cast<OtDaemonServer *>(aBinderServer)->ReceiveCallback(aMessage);
 }
 
-// FIXME(wgtdkp): We should reuse the same code in openthread/src/posix/platform/netif.cp
-// after the refactor there is done: https://github.com/openthread/openthread/pull/9293
+// TODO: b/291053118 - We should reuse the same code in openthread/src/posix/platform/netif.cpp
 void OtDaemonServer::ReceiveCallback(otMessage *aMessage)
 {
     char     packet[kMaxIp6Size];
@@ -303,8 +310,23 @@ exit:
     otMessageFree(aMessage);
 }
 
-// FIXME(wgtdkp): this doesn't support NAT64, we should use a shared library with ot-posix
-// to handle packet translations between the tunnel interface and Thread.
+static constexpr uint8_t kIpVersion4 = 4;
+static constexpr uint8_t kIpVersion6 = 6;
+
+// TODO: b/291053118 - We should reuse the same code in openthread/src/posix/platform/netif.cpp
+static uint8_t getIpVersion(const uint8_t *data)
+{
+    assert(data != nullptr);
+
+    // Mute compiler warnings.
+    OT_UNUSED_VARIABLE(kIpVersion4);
+    OT_UNUSED_VARIABLE(kIpVersion6);
+
+    return (static_cast<uint8_t>(data[0]) >> 4) & 0x0F;
+}
+
+// TODO: b/291053118 - we should use a shared library with ot-posix to handle packet translations
+// between the tunnel interface and Thread.
 void OtDaemonServer::TransmitCallback(void)
 {
     char              packet[kMaxIp6Size];
@@ -313,6 +335,7 @@ void OtDaemonServer::TransmitCallback(void)
     otError           error   = OT_ERROR_NONE;
     otMessageSettings settings;
     int               fd = mTunFd.get();
+    bool              isIp4;
 
     assert(GetOtInstance() != nullptr);
 
@@ -336,13 +359,14 @@ void OtDaemonServer::TransmitCallback(void)
     settings.mLinkSecurityEnabled = (otThreadGetDeviceRole(GetOtInstance()) != OT_DEVICE_ROLE_DISABLED);
     settings.mPriority            = OT_MESSAGE_PRIORITY_LOW;
 
-    message = otIp6NewMessage(GetOtInstance(), &settings);
+    isIp4   = (getIpVersion(reinterpret_cast<uint8_t *>(packet)) == kIpVersion4);
+    message = isIp4 ? otIp4NewMessage(GetOtInstance(), &settings) : otIp6NewMessage(GetOtInstance(), &settings);
     VerifyOrExit(message != nullptr, error = OT_ERROR_NO_BUFS);
     otMessageSetOrigin(message, OT_MESSAGE_ORIGIN_HOST_UNTRUSTED);
 
     SuccessOrExit(error = otMessageAppend(message, packet, static_cast<uint16_t>(length)));
 
-    error   = otIp6Send(GetOtInstance(), message);
+    error   = isIp4 ? otNat64Send(GetOtInstance(), message) : otIp6Send(GetOtInstance(), message);
     message = nullptr;
 
 exit:
@@ -423,7 +447,7 @@ exit:
 
 otInstance *OtDaemonServer::GetOtInstance()
 {
-    return mNcp.GetInstance();
+    return mHost.GetInstance();
 }
 
 void OtDaemonServer::Update(MainloopContext &aMainloop)
@@ -477,14 +501,26 @@ void OtDaemonServer::initializeInternal(const bool                              
                                         const std::shared_ptr<IOtDaemonCallback> &aCallback,
                                         const std::string                        &aCountryCode)
 {
-    std::string instanceName = aMeshcopTxts.vendorName + " " + aMeshcopTxts.modelName;
+    std::string              instanceName = aMeshcopTxts.vendorName + " " + aMeshcopTxts.modelName;
+    Mdns::Publisher::TxtList nonStandardTxts;
+    otbrError                error;
 
     setCountryCodeInternal(aCountryCode, nullptr /* aReceiver */);
     registerStateCallbackInternal(aCallback, -1 /* listenerId */);
 
     mMdnsPublisher.SetINsdPublisher(aINsdPublisher);
-    mBorderAgent.SetMeshCopServiceValues(instanceName, aMeshcopTxts.modelName, aMeshcopTxts.vendorName,
-                                         aMeshcopTxts.vendorOui);
+
+    for (const auto &txtAttr : aMeshcopTxts.nonStandardTxtEntries)
+    {
+        nonStandardTxts.emplace_back(txtAttr.name.c_str(), txtAttr.value.data(), txtAttr.value.size());
+    }
+    error = mBorderAgent.SetMeshCopServiceValues(instanceName, aMeshcopTxts.modelName, aMeshcopTxts.vendorName,
+                                                 aMeshcopTxts.vendorOui, nonStandardTxts);
+    if (error != OTBR_ERROR_NONE)
+    {
+        otbrLogCrit("Failed to set MeshCoP values: %d", static_cast<int>(error));
+    }
+
     mBorderAgent.SetEnabled(enabled);
 
     if (enabled)
@@ -780,7 +816,7 @@ exit:
 void OtDaemonServer::FinishLeave(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     (void)otInstanceErasePersistentInfo(GetOtInstance());
-    OT_UNUSED_VARIABLE(mApplication); // Avoid the unused-private-field issue.
+
     // TODO: b/323301831 - Re-init the Application class.
     if (aReceiver != nullptr)
     {
@@ -1003,71 +1039,59 @@ exit:
     return Status::ok();
 }
 
-Status OtDaemonServer::configureBorderRouter(const BorderRouterConfigurationParcel    &aBorderRouterConfiguration,
+Status OtDaemonServer::configureBorderRouter(const BorderRouterConfiguration          &aBorderRouterConfiguration,
+                                             const ScopedFileDescriptor               &aInfraIcmp6Socket,
                                              const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    int         icmp6SocketFd               = aBorderRouterConfiguration.infraInterfaceIcmp6Socket.dup().release();
-    std::string infraInterfaceName          = aBorderRouterConfiguration.infraInterfaceName;
-    bool        isBorderRoutingEnabled      = aBorderRouterConfiguration.isBorderRoutingEnabled;
-    bool        isBorderRouterConfigChanged = (mBorderRouterConfiguration != aBorderRouterConfiguration);
+    int infraIcmp6Socket = aInfraIcmp6Socket.dup().release();
 
-    otbrLogInfo("Configuring Border Router: %s", aBorderRouterConfiguration.toString().c_str());
-
-    // The copy constructor of `BorderRouterConfigurationParcel` is deleted. It is unable to directly pass the
-    // `aBorderRouterConfiguration` to the lambda function. Only the necessary parameters of
-    // `BorderRouterConfigurationParcel` are passed to the lambda function here.
-    mTaskRunner.Post(
-        [icmp6SocketFd, infraInterfaceName, isBorderRoutingEnabled, isBorderRouterConfigChanged, aReceiver, this]() {
-            configureBorderRouterInternal(icmp6SocketFd, infraInterfaceName, isBorderRoutingEnabled,
-                                          isBorderRouterConfigChanged, aReceiver);
-        });
+    mTaskRunner.Post([aBorderRouterConfiguration, infraIcmp6Socket, aReceiver, this]() {
+        configureBorderRouterInternal(aBorderRouterConfiguration, infraIcmp6Socket, aReceiver);
+    });
 
     return Status::ok();
 }
 
-void OtDaemonServer::configureBorderRouterInternal(int                aIcmp6SocketFd,
-                                                   const std::string &aInfraInterfaceName,
-                                                   bool               aIsBorderRoutingEnabled,
-                                                   bool               aIsBorderRouterConfigChanged,
+void OtDaemonServer::configureBorderRouterInternal(const BorderRouterConfiguration          &aBorderRouterConfiguration,
+                                                   int                                       aInfraIcmp6Socket,
                                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    int         icmp6SocketFd = aIcmp6SocketFd;
-    otError     error         = OT_ERROR_NONE;
+    otError     error = OT_ERROR_NONE;
     std::string message;
 
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+    otbrLogInfo("Configuring Border Router: %s", aBorderRouterConfiguration.toString().c_str());
 
-    if (aIsBorderRouterConfigChanged)
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+    VerifyOrExit(aBorderRouterConfiguration != mBorderRouterConfiguration || aInfraIcmp6Socket != mInfraIcmp6Socket);
+
+    if (aBorderRouterConfiguration.isBorderRoutingEnabled)
     {
-        if (aIsBorderRoutingEnabled)
-        {
-            unsigned int infraIfIndex = if_nametoindex(aInfraInterfaceName.c_str());
-            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
-                          message = "failed to disable border routing");
-            otSysSetInfraNetif(aInfraInterfaceName.c_str(), icmp6SocketFd);
-            icmp6SocketFd = -1;
-            SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
-                          message = "failed to initialize border routing");
-            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
-                          message = "failed to enable border routing");
-            // TODO: b/320836258 - Make BBR independently configurable
-            otBackboneRouterSetEnabled(GetOtInstance(), true /* aEnabled */);
-        }
-        else
-        {
-            SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
-                          message = "failed to disable border routing");
-            otBackboneRouterSetEnabled(GetOtInstance(), false /* aEnabled */);
-        }
+        unsigned int infraIfIndex = if_nametoindex(aBorderRouterConfiguration.infraInterfaceName.c_str());
+        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
+                      message = "failed to disable border routing");
+        otSysSetInfraNetif(aBorderRouterConfiguration.infraInterfaceName.c_str(), aInfraIcmp6Socket);
+        aInfraIcmp6Socket = -1;
+        SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
+                      message = "failed to initialize border routing");
+        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
+                      message = "failed to enable border routing");
+        // TODO: b/320836258 - Make BBR independently configurable
+        otBackboneRouterSetEnabled(GetOtInstance(), true /* aEnabled */);
+    }
+    else
+    {
+        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
+                      message = "failed to disable border routing");
+        otBackboneRouterSetEnabled(GetOtInstance(), false /* aEnabled */);
     }
 
-    mBorderRouterConfiguration.isBorderRoutingEnabled = aIsBorderRoutingEnabled;
-    mBorderRouterConfiguration.infraInterfaceName     = aInfraInterfaceName;
+    mBorderRouterConfiguration = aBorderRouterConfiguration;
+    mInfraIcmp6Socket          = aInfraIcmp6Socket;
 
 exit:
     if (error != OT_ERROR_NONE)
     {
-        close(icmp6SocketFd);
+        close(aInfraIcmp6Socket);
     }
     PropagateResult(error, message, aReceiver);
 }
@@ -1132,6 +1156,34 @@ void OtDaemonServer::PushTelemetryIfConditionMatch()
 
 exit:
     return;
+}
+
+void OtDaemonServer::NotifyNat64PrefixDiscoveryDone(void)
+{
+    // TODO: b/357479886 - Use the discovered AIL NAT64 prefix. For now we just assume no NAT64 prefix is on AIL so the
+    // Border Router will locally generate a NAT64 prefix and use it.
+    otIp6Prefix prefix{};
+    uint32_t    infraIfIndex = if_nametoindex(mBorderRouterConfiguration.infraInterfaceName.c_str());
+
+    otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &prefix);
+
+exit:
+    return;
+}
+
+extern "C" otError otPlatInfraIfDiscoverNat64Prefix(uint32_t aInfraIfIndex)
+{
+    OT_UNUSED_VARIABLE(aInfraIfIndex);
+
+    OtDaemonServer *otDaemonServer = OtDaemonServer::Get();
+    otError         error          = OT_ERROR_NONE;
+
+    VerifyOrExit(otDaemonServer != nullptr, error = OT_ERROR_INVALID_STATE);
+
+    otDaemonServer->NotifyNat64PrefixDiscoveryDone();
+
+exit:
+    return error;
 }
 
 } // namespace Android
