@@ -41,7 +41,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 
 import com.android.server.thread.openthread.BackboneRouterState;
-import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
+import com.android.server.thread.openthread.BorderRouterConfiguration;
 import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemon;
@@ -52,6 +52,7 @@ import com.android.server.thread.openthread.OtDaemonState;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.NoSuchElementException;
 
 /** A fake implementation of the {@link IOtDaemon} AIDL API for testing. */
@@ -158,6 +159,8 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mOverriddenMeshcopTxts.vendorOui = overriddenMeshcopTxts.vendorOui.clone();
         mOverriddenMeshcopTxts.vendorName = overriddenMeshcopTxts.vendorName;
         mOverriddenMeshcopTxts.modelName = overriddenMeshcopTxts.modelName;
+        mOverriddenMeshcopTxts.nonStandardTxtEntries =
+                List.copyOf(overriddenMeshcopTxts.nonStandardTxtEntries);
 
         registerStateCallback(callback, PROACTIVE_LISTENER_ID);
     }
@@ -341,7 +344,9 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
 
     @Override
     public void configureBorderRouter(
-            BorderRouterConfigurationParcel config, IOtStatusReceiver receiver)
+            BorderRouterConfiguration config,
+            ParcelFileDescriptor infraIcmp6Socket,
+            IOtStatusReceiver receiver)
             throws RemoteException {
         throw new UnsupportedOperationException(
                 "FakeOtDaemon#configureBorderRouter is not implemented!");

@@ -29,9 +29,10 @@
 package com.android.server.thread.openthread;
 
 import com.android.server.thread.openthread.DnsTxtAttribute;
-import com.android.server.thread.openthread.INsdStatusReceiver;
 import com.android.server.thread.openthread.INsdDiscoverServiceCallback;
+import com.android.server.thread.openthread.INsdResolveHostCallback;
 import com.android.server.thread.openthread.INsdResolveServiceCallback;
+import com.android.server.thread.openthread.INsdStatusReceiver;
 
 /**
  * The service which supports mDNS advertising and discovery by {@link NsdManager}.
@@ -56,14 +57,9 @@ oneway interface INsdPublisher {
      * @param listenerId the ID of the NsdManager.RegistrationListener which is used to
      *                             identify the registration
      */
-    void registerService(in @nullable String hostname,
-                        in String name,
-                        in String type,
-                        in List<String> subtypeList,
-                        int port,
-                        in List<DnsTxtAttribute> txt,
-                        in INsdStatusReceiver receiver,
-                        int listenerId);
+    void registerService(in @nullable String hostname, in String name, in String type,
+            in List<String> subtypeList, int port, in List<DnsTxtAttribute> txt,
+            in INsdStatusReceiver receiver, int listenerId);
 
     /**
      * Registers an mDNS host.
@@ -77,10 +73,8 @@ oneway interface INsdPublisher {
      * @param listenerId the ID of the NsdManager.RegistrationListener which is used to
      *                             identify the registration
      */
-    void registerHost(in String name,
-                      in List<String> addresses,
-                      in INsdStatusReceiver receiver,
-                      int listenerId);
+    void registerHost(in String name, in List<String> addresses, in INsdStatusReceiver receiver,
+            int listenerId);
 
     /**
      * Unregisters an mDNS service.
@@ -108,9 +102,7 @@ oneway interface INsdPublisher {
      * @param listenerId the ID of the NsdManager.DiscoveryListener which is used to identify the
      *                             service discovery operation
      */
-    void discoverService(in String type,
-                         in INsdDiscoverServiceCallback callback,
-                         int listenerId);
+    void discoverService(in String type, in INsdDiscoverServiceCallback callback, int listenerId);
 
     /**
      * Stops discovering services of a specific type.
@@ -135,10 +127,8 @@ oneway interface INsdPublisher {
      * @param listenerId the ID of the NsdManager.ServiceInfoCallback which is used to identify the
      *                             service resolution operation
      */
-    void resolveService(in String name,
-                        in String type,
-                        in INsdResolveServiceCallback callback,
-                        int listenerId);
+    void resolveService(
+            in String name, in String type, in INsdResolveServiceCallback callback, int listenerId);
 
     /**
      * Stops resolving an mDNS service instance.
@@ -150,4 +140,27 @@ oneway interface INsdPublisher {
      *                             service resolution operation
      */
     void stopServiceResolution(int listenerId);
+
+    /**
+     * Resolves an mDNS host.
+     *
+     * <p>To stop resolving a host, use stopHostResolution.
+     *
+     * @param name the hostname
+     * @param callback the callback when a host is resolved.
+     * @param listenerId the ID of DnsResolver.Callback which is used to identify the
+     *                             host resolution operation
+     */
+    void resolveHost(in String name, in INsdResolveHostCallback callback, int listenerId);
+
+    /**
+     * Stops resolving an mDNS host.
+     *
+     * <p>To stop resolving a host, the caller must pass in the same listener ID which was used
+     * when starting resolving the host.
+     *
+     * @param listenerId the ID of the DnsResolver.Callback which is used to identify the
+     *                             host resolution operation
+     */
+    void stopHostResolution(int listenerId);
 }
