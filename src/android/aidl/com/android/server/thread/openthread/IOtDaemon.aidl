@@ -28,15 +28,14 @@
 
 package com.android.server.thread.openthread;
 
-import android.os.ParcelFileDescriptor;
-
 import android.net.thread.ChannelMaxPower;
-import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
+import android.os.ParcelFileDescriptor;
+import com.android.server.thread.openthread.BorderRouterConfiguration;
 import com.android.server.thread.openthread.IChannelMasksReceiver;
-import com.android.server.thread.openthread.Ipv6AddressInfo;
-import com.android.server.thread.openthread.IOtStatusReceiver;
-import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.INsdPublisher;
+import com.android.server.thread.openthread.IOtDaemonCallback;
+import com.android.server.thread.openthread.IOtStatusReceiver;
+import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.MeshcopTxtAttributes;
 
 /**
@@ -96,13 +95,9 @@ oneway interface IOtDaemon {
      * @param callback the callback for receiving OtDaemonState changes
      * @param countryCode 2 bytes country code (as defined in ISO 3166) to set
      */
-    void initialize(
-            in ParcelFileDescriptor tunFd,
-            in boolean enabled,
-            in INsdPublisher nsdPublisher,
-            in MeshcopTxtAttributes meshcopTxts,
-            in IOtDaemonCallback callback,
-            in String countryCode);
+    void initialize(in ParcelFileDescriptor tunFd, in boolean enabled,
+            in INsdPublisher nsdPublisher, in MeshcopTxtAttributes meshcopTxts,
+            in IOtDaemonCallback callback, in String countryCode);
 
     /** Terminates the ot-daemon process. */
     void terminate();
@@ -150,12 +145,12 @@ oneway interface IOtDaemon {
      */
     void leave(in IOtStatusReceiver receiver);
 
-    /** Migrates to the new network specified by {@code pendingOpDatasetTlvs}.
+    /**
+     * Migrates to the new network specified by {@code pendingOpDatasetTlvs}.
      *
      * @sa android.net.thread.ThreadNetworkController#scheduleMigration
      */
-    void scheduleMigration(
-        in byte[] pendingOpDatasetTlvs, in IOtStatusReceiver receiver);
+    void scheduleMigration(in byte[] pendingOpDatasetTlvs, in IOtStatusReceiver receiver);
 
     /**
      * Sets the country code.
@@ -169,11 +164,12 @@ oneway interface IOtDaemon {
      * Configures the Border Router features.
      *
      * @param brConfig the border router's configuration
+     * @param infraIcmp6Socket the ICMPv6 socket on the infrastructure network
      * @param receiver the status receiver
      *
      */
-    oneway void configureBorderRouter(
-        in BorderRouterConfigurationParcel brConfig, in IOtStatusReceiver receiver);
+    oneway void configureBorderRouter(in BorderRouterConfiguration brConfig,
+            in ParcelFileDescriptor infraIcmp6Socket, in IOtStatusReceiver receiver);
 
     /**
      * Gets the supported and preferred channel masks.
@@ -182,12 +178,12 @@ oneway interface IOtDaemon {
      */
     void getChannelMasks(in IChannelMasksReceiver receiver);
 
-   /**
-    * Sets the max power of each channel
-    *
-    * @param channelMaxPowers an array of {@code ChannelMaxPower}.
-    * @param receiver the receiver to the receive result of this operation.
-    */
+    /**
+     * Sets the max power of each channel
+     *
+     * @param channelMaxPowers an array of {@code ChannelMaxPower}.
+     * @param receiver the receiver to the receive result of this operation.
+     */
     void setChannelMaxPowers(in ChannelMaxPower[] channelMaxPowers, in IOtStatusReceiver receiver);
 
     // TODO: add Border Router APIs
