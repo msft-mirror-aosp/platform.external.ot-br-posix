@@ -48,7 +48,7 @@
 #include "common/code_utils.hpp"
 #include "common/mainloop.hpp"
 #include "mdns/mdns.hpp"
-#include "ncp/ncp_openthread.hpp"
+#include "ncp/rcp_host.hpp"
 #include "sdp_proxy/advertising_proxy.hpp"
 #include "sdp_proxy/discovery_proxy.hpp"
 #include "trel_dnssd/trel_dnssd.hpp"
@@ -83,14 +83,17 @@ namespace otbr {
 class BorderAgent : private NonCopyable
 {
 public:
+    /** The callback for receiving ephemeral key changes. */
+    using EphemeralKeyChangedCallback = std::function<void(void)>;
+
     /**
      * The constructor to initialize the Thread border agent.
      *
-     * @param[in] aNcp  A reference to the NCP controller.
+     * @param[in] aHost       A reference to the Thread controller.
      * @param[in] aPublisher  A reference to the mDNS Publisher.
      *
      */
-    BorderAgent(otbr::Ncp::ControllerOpenThread &aNcp, Mdns::Publisher &aPublisher);
+    BorderAgent(otbr::Ncp::RcpHost &aHost, Mdns::Publisher &aPublisher);
 
     ~BorderAgent(void) = default;
 
@@ -134,6 +137,14 @@ public:
      */
     void HandleMdnsState(Mdns::Publisher::State aState);
 
+    /**
+     * This method adds a callback for ephemeral key changes.
+     *
+     * @param[in] aCallback  The callback to receive ephemeral key changed events.
+     *
+     */
+    void AddEphemeralKeyChangedCallback(EphemeralKeyChangedCallback aCallback);
+
 private:
     void Start(void);
     void Stop(void);
@@ -151,9 +162,13 @@ private:
     std::string GetServiceInstanceNameWithExtAddr(const std::string &aServiceInstanceName) const;
     std::string GetAlternativeServiceInstanceName() const;
 
-    otbr::Ncp::ControllerOpenThread &mNcp;
-    Mdns::Publisher                 &mPublisher;
-    bool                             mIsEnabled;
+    static void HandleEpskcStateChanged(void *aContext);
+    void        PublishEpskcService(void);
+    void        UnpublishEpskcService(void);
+
+    otbr::Ncp::RcpHost &mHost;
+    Mdns::Publisher    &mPublisher;
+    bool                mIsEnabled;
 
     std::map<std::string, std::vector<uint8_t>> mMeshCopTxtUpdate;
 
@@ -172,6 +187,8 @@ private:
     // conflicts. For example, this value can be "OpenThread Border Router #7AC3" or
     // "OpenThread Border Router #7AC3 (14379)".
     std::string mServiceInstanceName;
+
+    std::vector<EphemeralKeyChangedCallback> mEphemeralKeyChangedCallbacks;
 };
 
 /**

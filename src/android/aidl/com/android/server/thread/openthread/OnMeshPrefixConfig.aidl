@@ -31,11 +31,12 @@ package com.android.server.thread.openthread;
 /**
  * On-mesh prefix configuration.
  *
- * This is a mapping of <a href="https://openthread.io/reference/struct/ot-border-router-config">otBorderRouterConfig</a>
+ * This is a mapping of <a
+ * href="https://openthread.io/reference/struct/ot-border-router-config">otBorderRouterConfig</a>
  */
 parcelable OnMeshPrefixConfig {
-    byte[]  prefix; // The raw IPv6 prefix bytes, should be 16 bytes
-    int     prefixLength; // The IPv6 prefix length (in bits)
+    byte[] prefix; // The raw IPv6 prefix bytes, should be 16 bytes
+    int prefixLength; // The IPv6 prefix length (in bits)
 
     // More fields of otBorderRouterConfig can be added here when needed.
 }

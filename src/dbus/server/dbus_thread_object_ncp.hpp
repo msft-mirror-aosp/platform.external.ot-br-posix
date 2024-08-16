@@ -26,9 +26,71 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.android.server.thread.openthread;
+/**
+ * @file
+ * This file includes definitions for the d-bus object of Thread service when
+ * the co-processor is an NCP.
+ */
 
-/** Receives the information when a service instance is found/lost. */
-oneway interface INsdDiscoverServiceCallback {
-    void onServiceDiscovered(in String name, in String type, boolean isFound);
-}
+#ifndef OTBR_DBUS_THREAD_OBJECT_NCP_HPP_
+#define OTBR_DBUS_THREAD_OBJECT_NCP_HPP_
+
+#include "openthread-br/config.h"
+
+#include <string>
+
+#include <openthread/link.h>
+
+#include "dbus/server/dbus_object.hpp"
+#include "mdns/mdns.hpp"
+#include "ncp/ncp_host.hpp"
+
+namespace otbr {
+namespace DBus {
+
+/**
+ * @addtogroup border-router-dbus-server
+ *
+ * @brief
+ *   This module includes the <a href="dbus-api.html">dbus server api</a>.
+ *
+ * @{
+ */
+
+class DBusThreadObjectNcp : public DBusObject
+{
+public:
+    /**
+     * This constructor of dbus thread object.
+     *
+     * @param[in] aConnection     The dbus connection.
+     * @param[in] aInterfaceName  The dbus interface name.
+     * @param[in] aHost           The Thread controller.
+     *
+     */
+    DBusThreadObjectNcp(DBusConnection &aConnection, const std::string &aInterfaceName, otbr::Ncp::NcpHost &aHost);
+
+    /**
+     * This method initializes the dbus thread object.
+     *
+     * @retval OTBR_ERROR_NONE  The initialization succeeded.
+     * @retval OTBR_ERROR_DBUS  The initialization failed due to dbus connection.
+     *
+     */
+    otbrError Init(void) override;
+
+private:
+    void AsyncGetDeviceRoleHandler(DBusRequest &aRequest);
+    void ReplyAsyncGetProperty(DBusRequest &aRequest, const std::string &aContent);
+
+    otbr::Ncp::NcpHost &mHost;
+};
+
+/**
+ * @}
+ */
+
+} // namespace DBus
+} // namespace otbr
+
+#endif // OTBR_DBUS_THREAD_OBJECT_NCP_HPP_
