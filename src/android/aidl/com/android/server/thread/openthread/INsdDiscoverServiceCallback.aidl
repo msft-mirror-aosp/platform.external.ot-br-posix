@@ -30,7 +30,5 @@ package com.android.server.thread.openthread;
 
 /** Receives the information when a service instance is found/lost. */
 oneway interface INsdDiscoverServiceCallback {
-    void onServiceDiscovered(in String name,
-                             in String type,
-                             boolean isFound);
+    void onServiceDiscovered(in String name, in String type, boolean isFound);
 }

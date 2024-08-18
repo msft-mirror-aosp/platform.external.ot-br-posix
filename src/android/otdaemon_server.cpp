@@ -59,7 +59,9 @@ namespace vendor {
 
 std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplication)
 {
-    return ndk::SharedRefBase::make<Android::OtDaemonServer>(aApplication);
+    return ndk::SharedRefBase::make<Android::OtDaemonServer>(
+        static_cast<otbr::Ncp::RcpHost &>(aApplication.GetHost()),
+        static_cast<otbr::Android::MdnsPublisher &>(aApplication.GetPublisher()), aApplication.GetBorderAgent());
 }
 
 } // namespace vendor
@@ -108,11 +110,12 @@ static const char *ThreadEnabledStateToString(int enabledState)
 
 OtDaemonServer *OtDaemonServer::sOtDaemonServer = nullptr;
 
-OtDaemonServer::OtDaemonServer(Application &aApplication)
-    : mApplication(aApplication)
-    , mHost(static_cast<otbr::Ncp::RcpHost &>(aApplication.GetHost()))
-    , mBorderAgent(aApplication.GetBorderAgent())
-    , mMdnsPublisher(static_cast<MdnsPublisher &>(aApplication.GetPublisher()))
+OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &rcpHost,
+                               otbr::Mdns::Publisher &mdnsPublisher,
+                               otbr::BorderAgent     &borderAgent)
+    : mHost(rcpHost)
+    , mMdnsPublisher(static_cast<MdnsPublisher &>(mdnsPublisher))
+    , mBorderAgent(borderAgent)
     , mBorderRouterConfiguration()
 {
     mClientDeathRecipient =
@@ -813,7 +816,7 @@ exit:
 void OtDaemonServer::FinishLeave(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     (void)otInstanceErasePersistentInfo(GetOtInstance());
-    OT_UNUSED_VARIABLE(mApplication); // Avoid the unused-private-field issue.
+
     // TODO: b/323301831 - Re-init the Application class.
     if (aReceiver != nullptr)
     {
