@@ -32,12 +32,22 @@
 #include "otdaemon_server.hpp"
 
 using android::fuzzService;
+using otbr::Android::MdnsPublisher;
 using otbr::Android::OtDaemonServer;
+using otbr::Mdns::Publisher;
+using otbr::Ncp::RcpHost;
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-    otbr::Application app("", {}, {}, false, "", 0);
-    auto              service = ndk::SharedRefBase::make<OtDaemonServer>(app);
+    RcpHost           rcpHost       = RcpHost{"" /* aInterfaceName */,
+                              {"threadnetwork_hal://binder?none"},
+                              "" /* aBackboneInterfaceName */,
+                              true /* aDryRun */,
+                              false /* aEnableAutoAttach*/};
+    auto              mdnsPublisher = static_cast<MdnsPublisher *>(Publisher::Create([](Publisher::State) {}));
+    otbr::BorderAgent borderAgent{rcpHost, *mdnsPublisher};
+
+    auto service = ndk::SharedRefBase::make<OtDaemonServer>(rcpHost, *mdnsPublisher, borderAgent);
     fuzzService(service->asBinder().get(), FuzzedDataProvider(data, size));
     return 0;
 }
