@@ -30,8 +30,8 @@ package com.android.server.thread.openthread;
 
 import com.android.server.thread.openthread.BackboneRouterState;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
-import com.android.server.thread.openthread.OtDaemonState;
 import com.android.server.thread.openthread.OnMeshPrefixConfig;
+import com.android.server.thread.openthread.OtDaemonState;
 
 /** OpenThread daemon callbacks. */
 oneway interface IOtDaemonCallback {
