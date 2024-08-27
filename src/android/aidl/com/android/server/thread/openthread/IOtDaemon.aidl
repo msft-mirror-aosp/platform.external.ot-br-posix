@@ -30,13 +30,13 @@ package com.android.server.thread.openthread;
 
 import android.net.thread.ChannelMaxPower;
 import android.os.ParcelFileDescriptor;
-import com.android.server.thread.openthread.BorderRouterConfiguration;
 import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.MeshcopTxtAttributes;
+import com.android.server.thread.openthread.OtDaemonConfiguration;
 
 /**
  * The OpenThread daemon service which provides access to the core Thread stack for
@@ -168,7 +168,7 @@ oneway interface IOtDaemon {
      * @param receiver the status receiver
      *
      */
-    oneway void configureBorderRouter(in BorderRouterConfiguration brConfig,
+    oneway void setConfiguration(in OtDaemonConfiguration brConfig,
             in ParcelFileDescriptor infraIcmp6Socket, in IOtStatusReceiver receiver);
 
     /**
