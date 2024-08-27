@@ -33,6 +33,8 @@
 #include <net/if.h>
 #include <string.h>
 
+#include <algorithm>
+
 #include <android-base/file.h>
 #include <android-base/stringprintf.h>
 #include <android/binder_manager.h>
@@ -116,14 +118,14 @@ OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &rcpHost,
     : mHost(rcpHost)
     , mMdnsPublisher(static_cast<MdnsPublisher &>(mdnsPublisher))
     , mBorderAgent(borderAgent)
-    , mBorderRouterConfiguration()
+    , mConfiguration()
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
-    mBorderRouterConfiguration.infraInterfaceName     = "";
-    mBorderRouterConfiguration.isBorderRoutingEnabled = false;
-    mInfraIcmp6Socket                                 = -1;
-    sOtDaemonServer                                   = this;
+    mConfiguration.infraInterfaceName     = "";
+    mConfiguration.isBorderRoutingEnabled = false;
+    mInfraIcmp6Socket                     = -1;
+    sOtDaemonServer                       = this;
 }
 
 void OtDaemonServer::Init(void)
@@ -1021,15 +1023,26 @@ Status OtDaemonServer::setChannelMaxPowersInternal(const std::vector<ChannelMaxP
         VerifyOrExit((channelMaxPower.channel >= OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MIN) &&
                          (channelMaxPower.channel <= OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MAX),
                      error = OT_ERROR_INVALID_ARGS, message = "The channel is invalid");
-        VerifyOrExit((channelMaxPower.maxPower >= INT16_MIN) && (channelMaxPower.maxPower <= INT16_MAX),
-                     error = OT_ERROR_INVALID_ARGS, message = "The max power is invalid");
     }
 
     for (ChannelMaxPower channelMaxPower : aChannelMaxPowers)
     {
-        channel  = static_cast<uint8_t>(channelMaxPower.channel);
-        maxPower = static_cast<int16_t>(channelMaxPower.maxPower);
-        otbrLogInfo("Set channel max power: channel=%u, maxPower=%d", channel, maxPower);
+        channel = static_cast<uint8_t>(channelMaxPower.channel);
+
+        // INT_MIN indicates that the corresponding channel is disabled in Thread Android API `setChannelMaxPowers()`
+        if (channelMaxPower.maxPower == INT_MIN)
+        {
+            // INT16_MAX indicates that the corresponding channel is disabled in OpenThread API
+            // `otPlatRadioSetChannelTargetPower()`.
+            maxPower = INT16_MAX;
+        }
+        else
+        {
+            maxPower = std::clamp(channelMaxPower.maxPower, INT16_MIN, INT16_MAX - 1);
+        }
+
+        otbrLogInfo("Set channel max power: channel=%u, maxPower=%d", static_cast<unsigned int>(channel),
+                    static_cast<int>(maxPower));
         SuccessOrExit(error   = otPlatRadioSetChannelTargetPower(GetOtInstance(), channel, maxPower),
                       message = "Failed to set channel max power");
     }
@@ -1039,37 +1052,37 @@ exit:
     return Status::ok();
 }
 
-Status OtDaemonServer::configureBorderRouter(const BorderRouterConfiguration          &aBorderRouterConfiguration,
-                                             const ScopedFileDescriptor               &aInfraIcmp6Socket,
-                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+Status OtDaemonServer::setConfiguration(const OtDaemonConfiguration              &aConfiguration,
+                                        const ScopedFileDescriptor               &aInfraIcmp6Socket,
+                                        const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     int infraIcmp6Socket = aInfraIcmp6Socket.dup().release();
 
-    mTaskRunner.Post([aBorderRouterConfiguration, infraIcmp6Socket, aReceiver, this]() {
-        configureBorderRouterInternal(aBorderRouterConfiguration, infraIcmp6Socket, aReceiver);
+    mTaskRunner.Post([aConfiguration, infraIcmp6Socket, aReceiver, this]() {
+        setConfigurationInternal(aConfiguration, infraIcmp6Socket, aReceiver);
     });
 
     return Status::ok();
 }
 
-void OtDaemonServer::configureBorderRouterInternal(const BorderRouterConfiguration          &aBorderRouterConfiguration,
-                                                   int                                       aInfraIcmp6Socket,
-                                                   const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+void OtDaemonServer::setConfigurationInternal(const OtDaemonConfiguration              &aConfiguration,
+                                              int                                       aInfraIcmp6Socket,
+                                              const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     otError     error = OT_ERROR_NONE;
     std::string message;
 
-    otbrLogInfo("Configuring Border Router: %s", aBorderRouterConfiguration.toString().c_str());
+    otbrLogInfo("Configuring Border Router: %s", aConfiguration.toString().c_str());
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(aBorderRouterConfiguration != mBorderRouterConfiguration || aInfraIcmp6Socket != mInfraIcmp6Socket);
+    VerifyOrExit(aConfiguration != mConfiguration || aInfraIcmp6Socket != mInfraIcmp6Socket);
 
-    if (aBorderRouterConfiguration.isBorderRoutingEnabled)
+    if (aConfiguration.isBorderRoutingEnabled)
     {
-        unsigned int infraIfIndex = if_nametoindex(aBorderRouterConfiguration.infraInterfaceName.c_str());
+        unsigned int infraIfIndex = if_nametoindex(aConfiguration.infraInterfaceName.c_str());
         SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
                       message = "failed to disable border routing");
-        otSysSetInfraNetif(aBorderRouterConfiguration.infraInterfaceName.c_str(), aInfraIcmp6Socket);
+        otSysSetInfraNetif(aConfiguration.infraInterfaceName.c_str(), aInfraIcmp6Socket);
         aInfraIcmp6Socket = -1;
         SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
                       message = "failed to initialize border routing");
@@ -1085,8 +1098,8 @@ void OtDaemonServer::configureBorderRouterInternal(const BorderRouterConfigurati
         otBackboneRouterSetEnabled(GetOtInstance(), false /* aEnabled */);
     }
 
-    mBorderRouterConfiguration = aBorderRouterConfiguration;
-    mInfraIcmp6Socket          = aInfraIcmp6Socket;
+    mConfiguration    = aConfiguration;
+    mInfraIcmp6Socket = aInfraIcmp6Socket;
 
 exit:
     if (error != OT_ERROR_NONE)
@@ -1163,7 +1176,7 @@ void OtDaemonServer::NotifyNat64PrefixDiscoveryDone(void)
     // TODO: b/357479886 - Use the discovered AIL NAT64 prefix. For now we just assume no NAT64 prefix is on AIL so the
     // Border Router will locally generate a NAT64 prefix and use it.
     otIp6Prefix prefix{};
-    uint32_t    infraIfIndex = if_nametoindex(mBorderRouterConfiguration.infraInterfaceName.c_str());
+    uint32_t    infraIfIndex = if_nametoindex(mConfiguration.infraInterfaceName.c_str());
 
     otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &prefix);
 
