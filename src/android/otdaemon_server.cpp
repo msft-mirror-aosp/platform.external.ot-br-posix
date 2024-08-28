@@ -122,10 +122,9 @@ OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &rcpHost,
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
-    mConfiguration.infraInterfaceName     = "";
-    mConfiguration.isBorderRoutingEnabled = false;
-    mInfraIcmp6Socket                     = -1;
-    sOtDaemonServer                       = this;
+    mInfraLinkState.interfaceName = "";
+    mInfraIcmp6Socket             = -1;
+    sOtDaemonServer               = this;
 }
 
 void OtDaemonServer::Init(void)
@@ -1053,20 +1052,14 @@ exit:
 }
 
 Status OtDaemonServer::setConfiguration(const OtDaemonConfiguration              &aConfiguration,
-                                        const ScopedFileDescriptor               &aInfraIcmp6Socket,
                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    int infraIcmp6Socket = aInfraIcmp6Socket.dup().release();
-
-    mTaskRunner.Post([aConfiguration, infraIcmp6Socket, aReceiver, this]() {
-        setConfigurationInternal(aConfiguration, infraIcmp6Socket, aReceiver);
-    });
+    mTaskRunner.Post([aConfiguration, aReceiver, this]() { setConfigurationInternal(aConfiguration, aReceiver); });
 
     return Status::ok();
 }
 
 void OtDaemonServer::setConfigurationInternal(const OtDaemonConfiguration              &aConfiguration,
-                                              int                                       aInfraIcmp6Socket,
                                               const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     otError     error = OT_ERROR_NONE;
@@ -1075,14 +1068,46 @@ void OtDaemonServer::setConfigurationInternal(const OtDaemonConfiguration       
     otbrLogInfo("Configuring Border Router: %s", aConfiguration.toString().c_str());
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(aConfiguration != mConfiguration || aInfraIcmp6Socket != mInfraIcmp6Socket);
+    VerifyOrExit(aConfiguration != mConfiguration);
 
-    if (aConfiguration.isBorderRoutingEnabled)
+    mConfiguration = aConfiguration;
+
+exit:
+    PropagateResult(error, message, aReceiver);
+}
+
+Status OtDaemonServer::setInfraLinkState(const InfraLinkState                     &aInfraLinkState,
+                                         const ScopedFileDescriptor               &aInfraIcmp6Socket,
+                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    int infraIcmp6Socket = aInfraIcmp6Socket.dup().release();
+
+    mTaskRunner.Post([aInfraLinkState, infraIcmp6Socket, aReceiver, this]() {
+        setInfraLinkStateInternal(aInfraLinkState, infraIcmp6Socket, aReceiver);
+    });
+
+    return Status::ok();
+}
+
+void OtDaemonServer::setInfraLinkStateInternal(const InfraLinkState                     &aInfraLinkState,
+                                               int                                       aInfraIcmp6Socket,
+                                               const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    otError           error = OT_ERROR_NONE;
+    std::string       message;
+    const std::string infraIfName  = aInfraLinkState.interfaceName.value_or("");
+    unsigned int      infraIfIndex = if_nametoindex(infraIfName.c_str());
+
+    otbrLogInfo("Setting infra link state: %s", aInfraLinkState.toString().c_str());
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+    VerifyOrExit(aInfraLinkState != mInfraLinkState || aInfraIcmp6Socket != mInfraIcmp6Socket);
+
+    if (infraIfIndex != 0)
     {
-        unsigned int infraIfIndex = if_nametoindex(aConfiguration.infraInterfaceName.c_str());
         SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
                       message = "failed to disable border routing");
-        otSysSetInfraNetif(aConfiguration.infraInterfaceName.c_str(), aInfraIcmp6Socket);
+        otSysSetInfraNetif(infraIfName.c_str(), aInfraIcmp6Socket);
         aInfraIcmp6Socket = -1;
         SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
                       message = "failed to initialize border routing");
@@ -1098,7 +1123,7 @@ void OtDaemonServer::setConfigurationInternal(const OtDaemonConfiguration       
         otBackboneRouterSetEnabled(GetOtInstance(), false /* aEnabled */);
     }
 
-    mConfiguration    = aConfiguration;
+    mInfraLinkState   = aInfraLinkState;
     mInfraIcmp6Socket = aInfraIcmp6Socket;
 
 exit:
@@ -1183,7 +1208,7 @@ void OtDaemonServer::NotifyNat64PrefixDiscoveryDone(void)
     // TODO: b/357479886 - Use the discovered AIL NAT64 prefix. For now we just assume no NAT64 prefix is on AIL so the
     // Border Router will locally generate a NAT64 prefix and use it.
     otIp6Prefix prefix{};
-    uint32_t    infraIfIndex = if_nametoindex(mConfiguration.infraInterfaceName.c_str());
+    uint32_t    infraIfIndex = if_nametoindex(mInfraLinkState.interfaceName.value_or("").c_str());
 
     otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &prefix);
 
