@@ -154,6 +154,12 @@ otError RetrieveTelemetryAtom(otInstance                         *otInstance,
     otError                     error = OT_ERROR_NONE;
     std::vector<otNeighborInfo> neighborTable;
 
+    // Begin of ThreadnetworkDeviceInfoReported section.
+    deviceInfoReported.set_thread_version(otThreadGetVersion());
+    deviceInfoReported.set_ot_rcp_version(otGetRadioVersionString(otInstance));
+    // TODO: populate ot_host_version, thread_daemon_version.
+    // End of ThreadnetworkDeviceInfoReported section.
+
     // Begin of WpanStats section.
     auto wpanStats = telemetryDataReported.mutable_wpan_stats();
 
@@ -162,6 +168,15 @@ otError RetrieveTelemetryAtom(otInstance                         *otInstance,
         otLinkModeConfig otCfg = otThreadGetLinkMode(otInstance);
 
         wpanStats->set_node_type(TelemetryNodeTypeFromRoleAndLinkMode(role, otCfg));
+    }
+
+    // Disable telemetry retrieval when Thread stack is disabled. DeviceInfo section above is
+    // always uploaded to understand the device count.
+    if (wpanStats->node_type() == ThreadnetworkTelemetryDataReported::NODE_TYPE_DISABLED) {
+      otbrLogDebug("Skip telemetry retrieval since Thread stack is disabled.");
+      // Return error that only partial telemetries are populated.
+      // TODO: refine the error code name to mean: partial data are populated.
+      return OT_ERROR_FAILED;
     }
 
     wpanStats->set_channel(otLinkGetChannel(otInstance));
@@ -601,10 +616,6 @@ otError RetrieveTelemetryAtom(otInstance                         *otInstance,
         }
         // End of CoexMetrics section.
     }
-
-    deviceInfoReported.set_thread_version(otThreadGetVersion());
-    deviceInfoReported.set_ot_rcp_version(otGetRadioVersionString(otInstance));
-    // TODO: populate ot_host_version, thread_daemon_version.
 
     return error;
 }
