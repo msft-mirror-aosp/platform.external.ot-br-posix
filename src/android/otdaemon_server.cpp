@@ -1140,7 +1140,14 @@ binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumA
     DumpCliCommand("srp server state", aFd);
     DumpCliCommand("srp server service", aFd);
     DumpCliCommand("srp server host", aFd);
-    DumpCliCommand("dataset active", aFd);
+    DumpCliCommand("dataset activetimestamp", aFd);
+    DumpCliCommand("dataset channel", aFd);
+    DumpCliCommand("dataset channelmask", aFd);
+    DumpCliCommand("dataset extpanid", aFd);
+    DumpCliCommand("dataset meshlocalprefix", aFd);
+    DumpCliCommand("dataset networkname", aFd);
+    DumpCliCommand("dataset panid", aFd);
+    DumpCliCommand("dataset securitypolicy", aFd);
     DumpCliCommand("leaderdata", aFd);
     DumpCliCommand("eidcache", aFd);
     DumpCliCommand("counters mac", aFd);
