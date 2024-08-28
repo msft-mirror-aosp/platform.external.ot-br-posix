@@ -34,6 +34,7 @@ import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.IOtStatusReceiver;
+import com.android.server.thread.openthread.InfraLinkState;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
 import com.android.server.thread.openthread.MeshcopTxtAttributes;
 import com.android.server.thread.openthread.OtDaemonConfiguration;
@@ -161,14 +162,23 @@ oneway interface IOtDaemon {
     oneway void setCountryCode(in String countryCode, in IOtStatusReceiver receiver);
 
     /**
-     * Configures the Border Router features.
+     * Sets the configuration at ot-daemon.
      *
-     * @param brConfig the border router's configuration
+     * @param config the configuration
+     * @param receiver the status receiver
+     *
+     */
+    oneway void setConfiguration(in OtDaemonConfiguration config, in IOtStatusReceiver receiver);
+
+    /**
+     * Sets the infrastructure link state.
+     *
+     * @param infraLinkState the infra link state
      * @param infraIcmp6Socket the ICMPv6 socket on the infrastructure network
      * @param receiver the status receiver
      *
      */
-    oneway void setConfiguration(in OtDaemonConfiguration brConfig,
+    oneway void setInfraLinkState(in InfraLinkState infraLinkState,
             in ParcelFileDescriptor infraIcmp6Socket, in IOtStatusReceiver receiver);
 
     /**
