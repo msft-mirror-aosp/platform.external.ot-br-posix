@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2023, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -28,7 +28,9 @@
 
 package com.android.server.thread.openthread;
 
-/** The ot-daemon configuration. */
+/** The ot-daemon platform state. */
 @JavaOnlyImmutable
 @JavaDerive(equals=true, toString=true)
-parcelable OtDaemonConfiguration {}
+parcelable InfraLinkState {
+    @nullable String interfaceName; // The name of infra network interface.
+}
