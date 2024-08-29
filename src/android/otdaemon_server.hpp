@@ -55,6 +55,7 @@ using aidl::android::net::thread::ChannelMaxPower;
 using aidl::com::android::server::thread::openthread::BackboneRouterState;
 using aidl::com::android::server::thread::openthread::BnOtDaemon;
 using aidl::com::android::server::thread::openthread::IChannelMasksReceiver;
+using aidl::com::android::server::thread::openthread::InfraLinkState;
 using aidl::com::android::server::thread::openthread::INsdPublisher;
 using aidl::com::android::server::thread::openthread::IOtDaemon;
 using aidl::com::android::server::thread::openthread::IOtDaemonCallback;
@@ -132,11 +133,15 @@ private:
     Status setChannelMaxPowersInternal(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
                                        const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setConfiguration(const OtDaemonConfiguration              &aConfiguration,
-                            const ScopedFileDescriptor               &aInfraInterfaceIcmp6Socket,
                             const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setConfigurationInternal(const OtDaemonConfiguration              &aConfiguration,
-                                    int                                       aIcmp6SocketFd,
                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status setInfraLinkState(const InfraLinkState                     &aInfraLinkState,
+                             const ScopedFileDescriptor               &aInfraInterfaceIcmp6Socket,
+                             const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   setInfraLinkStateInternal(const InfraLinkState                     &aInfraLinkState,
+                                     int                                       aIcmp6SocketFd,
+                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status getChannelMasks(const std::shared_ptr<IChannelMasksReceiver> &aReceiver) override;
     void   getChannelMasksInternal(const std::shared_ptr<IChannelMasksReceiver> &aReceiver);
 
@@ -180,6 +185,7 @@ private:
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
     OtDaemonConfiguration              mConfiguration;
+    InfraLinkState                     mInfraLinkState;
     int                                mInfraIcmp6Socket;
     std::set<OnMeshPrefixConfig>       mOnMeshPrefixes;
     static constexpr Seconds           kTelemetryCheckInterval           = Seconds(600);          // 600 seconds
