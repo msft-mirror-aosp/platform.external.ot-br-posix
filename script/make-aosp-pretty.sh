@@ -1,0 +1,1 @@
+../../../packages/modules/Connectivity/thread/scripts/make-pretty.sh
