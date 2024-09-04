@@ -31,11 +31,12 @@ package com.android.server.thread.openthread;
 /**
  * The Thread IPv6 address information which represents both unicast and multicast address.
  *
- * This is a mapping of <a href="https://openthread.io/reference/struct/ot-ip6-address-info">otIp6AddressInfo</a>
+ * This is a mapping of <a
+ * href="https://openthread.io/reference/struct/ot-ip6-address-info">otIp6AddressInfo</a>
  */
 parcelable Ipv6AddressInfo {
-    byte[]  address; // The raw IPv6 addres bytes, should be 16 bytes
-    int     prefixLength; // Valid for only unicast addresses
+    byte[] address; // The raw IPv6 addres bytes, should be 16 bytes
+    int prefixLength; // Valid for only unicast addresses
     boolean isPreferred; // Valid for only unicast addresses
     boolean isMeshLocal; // Valid for only unicast addresses
     boolean isActiveOmr; // Valid for only unicast addresses. Active OMR means the prefix is added
