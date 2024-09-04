@@ -41,13 +41,14 @@ import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 
 import com.android.server.thread.openthread.BackboneRouterState;
-import com.android.server.thread.openthread.BorderRouterConfigurationParcel;
 import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemon;
 import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.IOtStatusReceiver;
+import com.android.server.thread.openthread.InfraLinkState;
 import com.android.server.thread.openthread.MeshcopTxtAttributes;
+import com.android.server.thread.openthread.OtDaemonConfiguration;
 import com.android.server.thread.openthread.OtDaemonState;
 
 import java.time.Duration;
@@ -343,11 +344,18 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     }
 
     @Override
-    public void configureBorderRouter(
-            BorderRouterConfigurationParcel config, IOtStatusReceiver receiver)
+    public void setConfiguration(OtDaemonConfiguration config, IOtStatusReceiver receiver)
             throws RemoteException {
         throw new UnsupportedOperationException(
-                "FakeOtDaemon#configureBorderRouter is not implemented!");
+                "FakeOtDaemon#setConfiguration is not implemented!");
+    }
+
+    @Override
+    public void setInfraLinkState(
+            InfraLinkState infraLinkState, ParcelFileDescriptor fd, IOtStatusReceiver receiver)
+            throws RemoteException {
+        throw new UnsupportedOperationException(
+                "FakeOtDaemon#setInfraLinkState is not implemented!");
     }
 
     @Override
