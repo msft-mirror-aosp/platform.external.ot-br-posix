@@ -28,13 +28,7 @@
 
 package com.android.server.thread.openthread;
 
-/**
- * The Thread Border Router configuration.
- *
- */
+/** The ot-daemon configuration. */
 @JavaOnlyImmutable
 @JavaDerive(equals=true, toString=true)
-parcelable BorderRouterConfiguration {
-    boolean isBorderRoutingEnabled; // Whether the border routing feature is enabled.
-    String infraInterfaceName; // The name of infra network interface.
-}
+parcelable OtDaemonConfiguration {}
