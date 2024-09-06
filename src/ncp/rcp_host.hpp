@@ -61,10 +61,33 @@ class FeatureFlagList;
 namespace Ncp {
 
 /**
+ * This class implements the NetworkProperties for architectures where OT APIs are directly accessible.
+ *
+ */
+class OtNetworkProperties : virtual public NetworkProperties
+{
+public:
+    /**
+     * Constructor.
+     *
+     */
+    explicit OtNetworkProperties(void);
+
+    // NetworkProperties methods
+    otDeviceRole GetDeviceRole(void) const override;
+
+    // Set the otInstance
+    void SetInstance(otInstance *aInstance);
+
+private:
+    otInstance *mInstance;
+};
+
+/**
  * This interface defines OpenThread Controller under RCP mode.
  *
  */
-class RcpHost : public MainloopProcessor, public ThreadHost
+class RcpHost : public MainloopProcessor, public ThreadHost, public OtNetworkProperties
 {
 public:
     using ThreadStateChangedCallback = std::function<void(otChangedFlags aFlags)>;
@@ -195,7 +218,10 @@ public:
     ~RcpHost(void) override;
 
     // Thread Control virtual methods
-    void GetDeviceRole(const DeviceRoleHandler aHandler) override;
+    void Join(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs, const AsyncResultReceiver &aRecevier) override;
+    void Leave(const AsyncResultReceiver &aRecevier) override;
+    void ScheduleMigration(const otOperationalDatasetTlvs &aPendingOpDatasetTlvs,
+                           const AsyncResultReceiver       aReceiver) override;
 
     CoprocessorType GetCoprocessorType(void) override
     {
@@ -240,6 +266,7 @@ private:
     TaskRunner                                 mTaskRunner;
     std::vector<ThreadStateChangedCallback>    mThreadStateChangedCallbacks;
     bool                                       mEnableAutoAttach = false;
+
 #if OTBR_ENABLE_FEATURE_FLAGS
     // The applied FeatureFlagList in ApplyFeatureFlagList call, used for debugging purpose.
     std::string mAppliedFeatureFlagListBytes;
