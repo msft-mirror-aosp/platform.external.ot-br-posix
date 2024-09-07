@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2021, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,42 +26,11 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "common/callback.hpp"
+package com.android.server.thread.openthread;
 
-#include <CppUTest/TestHarness.h>
-
-TEST_GROUP(IsNull){};
-
-TEST(IsNull, NullptrIsNull)
-{
-    otbr::OnceCallback<void(void)> noop = nullptr;
-
-    CHECK_TRUE(noop.IsNull());
-}
-
-TEST(IsNull, NonNullptrIsNotNull)
-{
-    otbr::OnceCallback<void(void)> noop = [](void) {};
-
-    CHECK_FALSE(noop.IsNull());
-}
-
-TEST(IsNull, IsNullAfterInvoking)
-{
-    otbr::OnceCallback<int(int)> square = [](int x) { return x * x; };
-
-    std::move(square)(5);
-
-    CHECK_TRUE(square.IsNull());
-}
-
-TEST_GROUP(VerifyInvocation){};
-
-TEST(VerifyInvocation, CallbackResultIsExpected)
-{
-    otbr::OnceCallback<int(int)> square = [](int x) { return x * x; };
-
-    int ret = std::move(square)(5);
-
-    CHECK_EQUAL(ret, 25);
+/** The ot-daemon platform state. */
+@JavaOnlyImmutable
+@JavaDerive(equals=true, toString=true)
+parcelable InfraLinkState {
+    @nullable String interfaceName; // The name of infra network interface.
 }
