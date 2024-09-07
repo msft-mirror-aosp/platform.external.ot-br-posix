@@ -26,10 +26,11 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <gtest/gtest.h>
 #include <string.h>
 
 #include "dbus/common/dbus_message_helper.hpp"
+
+#include <CppUTest/TestHarness.h>
 
 using std::array;
 using std::string;
@@ -167,12 +168,12 @@ TEST(DBusMessage, TestVectorMessage)
     tuple<vector<uint8_t>, vector<uint16_t>, vector<uint32_t>, vector<uint64_t>, vector<int16_t>, vector<int32_t>,
           vector<int64_t>>
         getVals({}, {}, {}, {}, {}, {}, {});
-    EXPECT_NE(msg, nullptr);
+    CHECK(msg != nullptr);
 
-    EXPECT_EQ(TupleToDBusMessage(*msg, setVals), OTBR_ERROR_NONE);
-    EXPECT_EQ(DBusMessageToTuple(*msg, getVals), OTBR_ERROR_NONE);
+    CHECK(TupleToDBusMessage(*msg, setVals) == OTBR_ERROR_NONE);
+    CHECK(DBusMessageToTuple(*msg, getVals) == OTBR_ERROR_NONE);
 
-    EXPECT_EQ(setVals, getVals);
+    CHECK(setVals == getVals);
 
     dbus_message_unref(msg);
 }
@@ -183,12 +184,12 @@ TEST(DBusMessage, TestArrayMessage)
     tuple<array<uint8_t, 4>> setVals({1, 2, 3, 4});
     tuple<array<uint8_t, 4>> getVals({0, 0, 0, 0});
 
-    EXPECT_NE(msg, nullptr);
+    CHECK(msg != nullptr);
 
-    EXPECT_EQ(TupleToDBusMessage(*msg, setVals), OTBR_ERROR_NONE);
-    EXPECT_EQ(DBusMessageToTuple(*msg, getVals), OTBR_ERROR_NONE);
+    CHECK(TupleToDBusMessage(*msg, setVals) == OTBR_ERROR_NONE);
+    CHECK(DBusMessageToTuple(*msg, getVals) == OTBR_ERROR_NONE);
 
-    EXPECT_EQ(setVals, getVals);
+    CHECK(setVals == getVals);
 
     dbus_message_unref(msg);
 }
@@ -203,12 +204,12 @@ TEST(DBusMessage, TestNumberMessage)
         std::make_tuple<uint8_t, uint16_t, uint32_t, uint64_t, bool, int16_t, int32_t, int64_t>(0, 0, 0, 0, false, 0, 0,
                                                                                                 0);
 
-    EXPECT_NE(msg, nullptr);
+    CHECK(msg != nullptr);
 
-    EXPECT_EQ(TupleToDBusMessage(*msg, setVals), OTBR_ERROR_NONE);
-    EXPECT_EQ(DBusMessageToTuple(*msg, getVals), OTBR_ERROR_NONE);
+    CHECK(TupleToDBusMessage(*msg, setVals) == OTBR_ERROR_NONE);
+    CHECK(DBusMessageToTuple(*msg, getVals) == OTBR_ERROR_NONE);
 
-    EXPECT_EQ(setVals, getVals);
+    CHECK(setVals == getVals);
 
     dbus_message_unref(msg);
 }
@@ -220,12 +221,12 @@ TEST(DBusMessage, TestStructMessage)
         0x03, {0x04, 0x05}, {"hello", "world"}, {{1, 0xf0a, "test1"}, {2, 0xf0b, "test2"}});
     tuple<uint8_t, vector<int32_t>, vector<string>, vector<TestStruct>> getVals(0, {}, {}, {});
 
-    EXPECT_NE(msg, nullptr);
+    CHECK(msg != nullptr);
 
-    EXPECT_EQ(TupleToDBusMessage(*msg, setVals), OTBR_ERROR_NONE);
-    EXPECT_EQ(DBusMessageToTuple(*msg, getVals), OTBR_ERROR_NONE);
+    CHECK(TupleToDBusMessage(*msg, setVals) == OTBR_ERROR_NONE);
+    CHECK(DBusMessageToTuple(*msg, getVals) == OTBR_ERROR_NONE);
 
-    EXPECT_EQ(setVals, getVals);
+    CHECK(setVals == getVals);
 
     dbus_message_unref(msg);
 }
@@ -236,12 +237,12 @@ TEST(DBusMessage, TestOtbrChannelQuality)
     tuple<std::vector<otbr::DBus::ChannelQuality>> setVals({{1, 2}});
     tuple<std::vector<otbr::DBus::ChannelQuality>> getVals;
 
-    EXPECT_NE(msg, nullptr);
+    CHECK(msg != nullptr);
 
-    EXPECT_EQ(TupleToDBusMessage(*msg, setVals), OTBR_ERROR_NONE);
-    EXPECT_EQ(DBusMessageToTuple(*msg, getVals), OTBR_ERROR_NONE);
+    CHECK(TupleToDBusMessage(*msg, setVals) == OTBR_ERROR_NONE);
+    CHECK(DBusMessageToTuple(*msg, getVals) == OTBR_ERROR_NONE);
 
-    EXPECT_EQ(std::get<0>(setVals)[0], std::get<0>(getVals)[0]);
+    CHECK(std::get<0>(setVals)[0] == std::get<0>(getVals)[0]);
 
     dbus_message_unref(msg);
 }
@@ -252,12 +253,12 @@ TEST(DBusMessage, TestOtbrChildInfo)
     tuple<std::vector<otbr::DBus::ChildInfo>> setVals({{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, true, false, true, false}});
     tuple<std::vector<otbr::DBus::ChildInfo>> getVals;
 
-    EXPECT_NE(msg, nullptr);
+    CHECK(msg != nullptr);
 
-    EXPECT_EQ(TupleToDBusMessage(*msg, setVals), OTBR_ERROR_NONE);
-    EXPECT_EQ(DBusMessageToTuple(*msg, getVals), OTBR_ERROR_NONE);
+    CHECK(TupleToDBusMessage(*msg, setVals) == OTBR_ERROR_NONE);
+    CHECK(DBusMessageToTuple(*msg, getVals) == OTBR_ERROR_NONE);
 
-    EXPECT_EQ(std::get<0>(setVals)[0], std::get<0>(getVals)[0]);
+    CHECK(std::get<0>(setVals)[0] == std::get<0>(getVals)[0]);
 
     dbus_message_unref(msg);
 }
@@ -269,12 +270,12 @@ TEST(DBusMessage, TestOtbrNeighborInfo)
         {{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, true, false, true, false}});
     tuple<std::vector<otbr::DBus::NeighborInfo>> getVals;
 
-    EXPECT_NE(msg, nullptr);
+    CHECK(msg != nullptr);
 
-    EXPECT_EQ(TupleToDBusMessage(*msg, setVals), OTBR_ERROR_NONE);
-    EXPECT_EQ(DBusMessageToTuple(*msg, getVals), OTBR_ERROR_NONE);
+    CHECK(TupleToDBusMessage(*msg, setVals) == OTBR_ERROR_NONE);
+    CHECK(DBusMessageToTuple(*msg, getVals) == OTBR_ERROR_NONE);
 
-    EXPECT_EQ(std::get<0>(setVals)[0], std::get<0>(getVals)[0]);
+    CHECK(std::get<0>(setVals)[0] == std::get<0>(getVals)[0]);
 
     dbus_message_unref(msg);
 }
@@ -285,12 +286,12 @@ TEST(DBusMessage, TestOtbrLeaderData)
     tuple<std::vector<otbr::DBus::LeaderData>> setVals({{1, 2, 3, 4, 5}});
     tuple<std::vector<otbr::DBus::LeaderData>> getVals;
 
-    EXPECT_NE(msg, nullptr);
+    CHECK(msg != nullptr);
 
-    EXPECT_EQ(TupleToDBusMessage(*msg, setVals), OTBR_ERROR_NONE);
-    EXPECT_EQ(DBusMessageToTuple(*msg, getVals), OTBR_ERROR_NONE);
+    CHECK(TupleToDBusMessage(*msg, setVals) == OTBR_ERROR_NONE);
+    CHECK(DBusMessageToTuple(*msg, getVals) == OTBR_ERROR_NONE);
 
-    EXPECT_EQ(std::get<0>(setVals)[0], std::get<0>(getVals)[0]);
+    CHECK(std::get<0>(setVals)[0] == std::get<0>(getVals)[0]);
 
     dbus_message_unref(msg);
 }
@@ -301,12 +302,12 @@ TEST(DBusMessage, TestOtbrActiveScanResults)
     tuple<std::vector<otbr::DBus::ActiveScanResult>> setVals({{1, "a", 2, {3}, 4, 5, 6, 7, 8, 9, true, false}});
     tuple<std::vector<otbr::DBus::ActiveScanResult>> getVals;
 
-    EXPECT_NE(msg, nullptr);
+    CHECK(msg != nullptr);
 
-    EXPECT_EQ(TupleToDBusMessage(*msg, setVals), OTBR_ERROR_NONE);
-    EXPECT_EQ(DBusMessageToTuple(*msg, getVals), OTBR_ERROR_NONE);
+    CHECK(TupleToDBusMessage(*msg, setVals) == OTBR_ERROR_NONE);
+    CHECK(DBusMessageToTuple(*msg, getVals) == OTBR_ERROR_NONE);
 
-    EXPECT_EQ(std::get<0>(setVals)[0], std::get<0>(getVals)[0]);
+    CHECK(std::get<0>(setVals)[0] == std::get<0>(getVals)[0]);
 
     dbus_message_unref(msg);
 }
@@ -319,12 +320,12 @@ TEST(DBusMessage, TestOtbrExternalRoute)
           true}});
     tuple<std::vector<otbr::DBus::ExternalRoute>> getVals;
 
-    EXPECT_NE(msg, nullptr);
+    CHECK(msg != nullptr);
 
-    EXPECT_EQ(TupleToDBusMessage(*msg, setVals), OTBR_ERROR_NONE);
-    EXPECT_EQ(DBusMessageToTuple(*msg, getVals), OTBR_ERROR_NONE);
+    CHECK(TupleToDBusMessage(*msg, setVals) == OTBR_ERROR_NONE);
+    CHECK(DBusMessageToTuple(*msg, getVals) == OTBR_ERROR_NONE);
 
-    EXPECT_EQ(std::get<0>(setVals)[0], std::get<0>(getVals)[0]);
+    CHECK(std::get<0>(setVals)[0] == std::get<0>(getVals)[0]);
 
     dbus_message_unref(msg);
 }

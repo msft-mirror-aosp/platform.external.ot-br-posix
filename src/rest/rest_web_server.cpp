@@ -79,7 +79,8 @@ void RestWebServer::Init(void)
 
 void RestWebServer::Update(MainloopContext &aMainloop)
 {
-    aMainloop.AddFdToReadSet(mListenFd);
+    FD_SET(mListenFd, &aMainloop.mReadFdSet);
+    aMainloop.mMaxFd = std::max(aMainloop.mMaxFd, mListenFd);
 
     return;
 }

@@ -38,37 +38,12 @@
 #include "lib/spinel/spinel_driver.hpp"
 
 #include "common/mainloop.hpp"
-#include "ncp/ncp_spinel.hpp"
 #include "ncp/thread_host.hpp"
-#include "posix/netif.hpp"
 
 namespace otbr {
 namespace Ncp {
 
-/**
- * This class implements the NetworkProperties under NCP mode.
- *
- */
-class NcpNetworkProperties : virtual public NetworkProperties, public PropsObserver
-{
-public:
-    /**
-     * Constructor
-     *
-     */
-    explicit NcpNetworkProperties(void);
-
-    // NetworkProperties methods
-    otDeviceRole GetDeviceRole(void) const override;
-
-private:
-    // PropsObserver methods
-    void SetDeviceRole(otDeviceRole aRole) override;
-
-    otDeviceRole mDeviceRole;
-};
-
-class NcpHost : public MainloopProcessor, public ThreadHost, public NcpNetworkProperties
+class NcpHost : public MainloopProcessor, public ThreadHost
 {
 public:
     /**
@@ -87,10 +62,7 @@ public:
     ~NcpHost(void) override = default;
 
     // ThreadHost methods
-    void Join(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs, const AsyncResultReceiver &aReceiver) override;
-    void Leave(const AsyncResultReceiver &aReceiver) override;
-    void ScheduleMigration(const otOperationalDatasetTlvs &aPendingOpDatasetTlvs,
-                           const AsyncResultReceiver       aReceiver) override;
+    void            GetDeviceRole(const DeviceRoleHandler aHandler) override;
     CoprocessorType GetCoprocessorType(void) override { return OT_COPROCESSOR_NCP; }
     const char     *GetCoprocessorVersion(void) override;
     const char     *GetInterfaceName(void) const override { return mConfig.mInterfaceName; }
@@ -104,9 +76,6 @@ public:
 private:
     ot::Spinel::SpinelDriver &mSpinelDriver;
     otPlatformConfig          mConfig;
-    NcpSpinel                 mNcpSpinel;
-    TaskRunner                mTaskRunner;
-    Netif                     mNetif;
 };
 
 } // namespace Ncp

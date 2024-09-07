@@ -121,12 +121,14 @@ void NdProxyManager::Update(MainloopContext &aMainloop)
 {
     if (mIcmp6RawSock >= 0)
     {
-        aMainloop.AddFdToReadSet(mIcmp6RawSock);
+        FD_SET(mIcmp6RawSock, &aMainloop.mReadFdSet);
+        aMainloop.mMaxFd = std::max(aMainloop.mMaxFd, mIcmp6RawSock);
     }
 
     if (mUnicastNsQueueSock >= 0)
     {
-        aMainloop.AddFdToReadSet(mUnicastNsQueueSock);
+        FD_SET(mUnicastNsQueueSock, &aMainloop.mReadFdSet);
+        aMainloop.mMaxFd = std::max(aMainloop.mMaxFd, mUnicastNsQueueSock);
     }
 }
 

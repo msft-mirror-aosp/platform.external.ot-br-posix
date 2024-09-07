@@ -26,7 +26,7 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define OTBR_LOG_TAG "RCP_HOST"
+#define OTBR_LOG_TAG "NCP"
 
 #include "ncp/rcp_host.hpp"
 
@@ -65,25 +65,6 @@ static const uint16_t kThreadVersion11 = 2; ///< Thread Version 1.1
 static const uint16_t kThreadVersion12 = 3; ///< Thread Version 1.2
 static const uint16_t kThreadVersion13 = 4; ///< Thread Version 1.3
 static const uint16_t kThreadVersion14 = 5; ///< Thread Version 1.4
-
-// =============================== OtNetworkProperties ===============================
-
-OtNetworkProperties::OtNetworkProperties(void)
-    : mInstance(nullptr)
-{
-}
-
-otDeviceRole OtNetworkProperties::GetDeviceRole(void) const
-{
-    return otThreadGetDeviceRole(mInstance);
-}
-
-void OtNetworkProperties::SetInstance(otInstance *aInstance)
-{
-    mInstance = aInstance;
-}
-
-// =============================== RcpHost ===============================
 
 RcpHost::RcpHost(const char                      *aInterfaceName,
                  const std::vector<const char *> &aRadioUrls,
@@ -240,12 +221,10 @@ void RcpHost::Init(void)
 #endif
 #endif // OTBR_ENABLE_FEATURE_FLAGS
 
-    mThreadHelper = MakeUnique<otbr::agent::ThreadHelper>(mInstance, this);
-
-    OtNetworkProperties::SetInstance(mInstance);
+    mThreadHelper = std::unique_ptr<otbr::agent::ThreadHelper>(new otbr::agent::ThreadHelper(mInstance, this));
 
 exit:
-    SuccessOrDie(error, "Failed to initialize the RCP Host!");
+    SuccessOrDie(error, "Failed to initialize NCP!");
 }
 
 #if OTBR_ENABLE_FEATURE_FLAGS
@@ -292,7 +271,6 @@ void RcpHost::Deinit(void)
     otSysDeinit();
     mInstance = nullptr;
 
-    OtNetworkProperties::SetInstance(nullptr);
     mThreadStateChangedCallbacks.clear();
     mResetHandlers.clear();
 }
@@ -385,7 +363,7 @@ const char *RcpHost::GetThreadVersion(void)
         version = "1.3.0";
         break;
     case kThreadVersion14:
-        version = "1.4.0";
+        version = "1.4";
         break;
     default:
         otbrLogEmerg("Unexpected thread version %hu", otThreadGetVersion());
@@ -394,27 +372,10 @@ const char *RcpHost::GetThreadVersion(void)
     return version;
 }
 
-void RcpHost::Join(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs, const AsyncResultReceiver &aReceiver)
+void RcpHost::GetDeviceRole(const DeviceRoleHandler aHandler)
 {
-    OT_UNUSED_VARIABLE(aActiveOpDatasetTlvs);
-
-    // TODO: Implement Join under RCP mode.
-    mTaskRunner.Post([aReceiver](void) { aReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
-}
-
-void RcpHost::Leave(const AsyncResultReceiver &aReceiver)
-{
-    // TODO: Implement Leave under RCP mode.
-    mTaskRunner.Post([aReceiver](void) { aReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
-}
-
-void RcpHost::ScheduleMigration(const otOperationalDatasetTlvs &aPendingOpDatasetTlvs,
-                                const AsyncResultReceiver       aReceiver)
-{
-    OT_UNUSED_VARIABLE(aPendingOpDatasetTlvs);
-
-    // TODO: Implement ScheduleMigration under RCP mode.
-    mTaskRunner.Post([aReceiver](void) { aReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
+    otDeviceRole role = otThreadGetDeviceRole(mInstance);
+    aHandler(OT_ERROR_NONE, role);
 }
 
 /*

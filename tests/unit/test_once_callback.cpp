@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2024, The OpenThread Authors.
+ *    Copyright (c) 2021, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,71 +26,42 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @file
- * This file includes definitions for the d-bus object of Thread service when
- * the co-processor is an NCP.
- */
+#include "common/callback.hpp"
 
-#ifndef OTBR_DBUS_THREAD_OBJECT_NCP_HPP_
-#define OTBR_DBUS_THREAD_OBJECT_NCP_HPP_
+#include <CppUTest/TestHarness.h>
 
-#include "openthread-br/config.h"
+TEST_GROUP(IsNull){};
 
-#include <string>
-
-#include <openthread/link.h>
-
-#include "dbus/server/dbus_object.hpp"
-#include "mdns/mdns.hpp"
-#include "ncp/ncp_host.hpp"
-
-namespace otbr {
-namespace DBus {
-
-/**
- * @addtogroup border-router-dbus-server
- *
- * @brief
- *   This module includes the <a href="dbus-api.html">dbus server api</a>.
- *
- * @{
- */
-
-class DBusThreadObjectNcp : public DBusObject
+TEST(IsNull, NullptrIsNull)
 {
-public:
-    /**
-     * This constructor of dbus thread object.
-     *
-     * @param[in] aConnection     The dbus connection.
-     * @param[in] aInterfaceName  The dbus interface name.
-     * @param[in] aHost           The Thread controller.
-     *
-     */
-    DBusThreadObjectNcp(DBusConnection &aConnection, const std::string &aInterfaceName, otbr::Ncp::NcpHost &aHost);
+    otbr::OnceCallback<void(void)> noop = nullptr;
 
-    /**
-     * This method initializes the dbus thread object.
-     *
-     * @retval OTBR_ERROR_NONE  The initialization succeeded.
-     * @retval OTBR_ERROR_DBUS  The initialization failed due to dbus connection.
-     *
-     */
-    otbrError Init(void) override;
+    CHECK_TRUE(noop.IsNull());
+}
 
-private:
-    void AsyncGetDeviceRoleHandler(DBusRequest &aRequest);
-    void ReplyAsyncGetProperty(DBusRequest &aRequest, const std::string &aContent);
+TEST(IsNull, NonNullptrIsNotNull)
+{
+    otbr::OnceCallback<void(void)> noop = [](void) {};
 
-    otbr::Ncp::NcpHost &mHost;
-};
+    CHECK_FALSE(noop.IsNull());
+}
 
-/**
- * @}
- */
+TEST(IsNull, IsNullAfterInvoking)
+{
+    otbr::OnceCallback<int(int)> square = [](int x) { return x * x; };
 
-} // namespace DBus
-} // namespace otbr
+    std::move(square)(5);
 
-#endif // OTBR_DBUS_THREAD_OBJECT_NCP_HPP_
+    CHECK_TRUE(square.IsNull());
+}
+
+TEST_GROUP(VerifyInvocation){};
+
+TEST(VerifyInvocation, CallbackResultIsExpected)
+{
+    otbr::OnceCallback<int(int)> square = [](int x) { return x * x; };
+
+    int ret = std::move(square)(5);
+
+    CHECK_EQUAL(ret, 25);
+}

@@ -118,6 +118,7 @@ if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     include(CTest)
 
     if(BUILD_TESTING)
+        pkg_check_modules(CPPUTEST cpputest REQUIRED)
         add_subdirectory(tests)
     endif()
 

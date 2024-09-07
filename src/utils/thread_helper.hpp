@@ -298,25 +298,6 @@ public:
      */
     static void LogOpenThreadResult(const char *aAction, otError aError);
 
-    /**
-     * This method validates and updates a pending dataset do Thread network migration.
-     *
-     * This method validates that:
-     * 1. the given dataset doesn't contain a meshcop Pending Timestamp TLV or a meshcop Delay Timer TLV.
-     * 2. the given dataset has sufficient space to append a Pending Timestamp TLV and a Delay Timer TLV.
-     *
-     * If it's valid, the method will append a meshcop Pending Timestamp TLV with value being the current unix
-     * timestamp and a meshcop Delay Timer TLV with value being @p aDelayMilli.
-     *
-     * @param[in/out] aDatasetTlvs  The dataset to validate and process in TLVs format.
-     * @param[in]     aDelayMilli   The delay time for migration in milliseconds.
-     *
-     * @retval OT_ERROR_NONE          Dataset is valid to do Thread network migration.
-     * @retval OT_ERROR_INVALID_ARGS  Dataset is invalid to do Thread network migration.
-     *
-     */
-    static otError ProcessDatasetForMigration(otOperationalDatasetTlvs &aDatasetTlvs, uint32_t aDelayMilli);
-
 private:
     static void ActiveScanHandler(otActiveScanResult *aResult, void *aThreadHelper);
     void        ActiveScanHandler(otActiveScanResult *aResult);
@@ -344,16 +325,12 @@ private:
 #endif
 #if OTBR_ENABLE_TELEMETRY_DATA_API
 #if OTBR_ENABLE_BORDER_ROUTING
-    void RetrieveInfraLinkInfo(threadnetwork::TelemetryData::InfraLinkInfo &aInfraLinkInfo);
-    void RetrieveExternalRouteInfo(threadnetwork::TelemetryData::ExternalRoutes &aExternalRouteInfo);
+    void RetrieveExternalRouteInfo(threadnetwork::TelemetryData::ExternalRoutes *aExternalRouteInfo);
 #endif
 #if OTBR_ENABLE_DHCP6_PD
     void RetrievePdInfo(threadnetwork::TelemetryData::WpanBorderRouter *aWpanBorderRouter);
     void RetrieveHashedPdPrefix(std::string *aHashedPdPrefix);
     void RetrievePdProcessedRaInfo(threadnetwork::TelemetryData::PdProcessedRaInfo *aPdProcessedRaInfo);
-#endif
-#if OTBR_ENABLE_BORDER_AGENT
-    void RetrieveBorderAgentInfo(threadnetwork::TelemetryData::BorderAgentInfo *aBorderAgentInfo);
 #endif
 #endif // OTBR_ENABLE_TELEMETRY_DATA_API
 

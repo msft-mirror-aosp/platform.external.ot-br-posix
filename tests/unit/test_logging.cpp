@@ -28,13 +28,15 @@
 
 #define OTBR_LOG_TAG "TEST"
 
+#include <CppUTest/TestHarness.h>
+
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
 
-#include <gtest/gtest.h>
-
 #include "common/logging.hpp"
+
+TEST_GROUP(Logging){};
 
 TEST(Logging, TestLoggingHigherLevel)
 {
@@ -48,7 +50,7 @@ TEST(Logging, TestLoggingHigherLevel)
 
     char cmd[128];
     snprintf(cmd, sizeof(cmd), "grep '%s.*cool-higher' /var/log/syslog", ident);
-    EXPECT_NE(system(cmd), 0);
+    CHECK(0 != system(cmd));
 }
 
 TEST(Logging, TestLoggingEqualLevel)
@@ -64,7 +66,7 @@ TEST(Logging, TestLoggingEqualLevel)
     char cmd[128];
     snprintf(cmd, sizeof(cmd), "grep '%s.*cool-equal' /var/log/syslog", ident);
     printf("CMD = %s\n", cmd);
-    EXPECT_EQ(system(cmd), 0);
+    CHECK(0 == system(cmd));
 }
 
 TEST(Logging, TestLoggingEqualLevelNoSyslog)
@@ -80,7 +82,7 @@ TEST(Logging, TestLoggingEqualLevelNoSyslog)
     char cmd[128];
     snprintf(cmd, sizeof(cmd), "grep '%s.*cool-equal' /var/log/syslog", ident);
     printf("CMD = %s\n", cmd);
-    EXPECT_NE(system(cmd), 0);
+    CHECK(0 != system(cmd));
 }
 
 TEST(Logging, TestLoggingLowerLevel)
@@ -95,7 +97,7 @@ TEST(Logging, TestLoggingLowerLevel)
     sleep(0);
 
     snprintf(cmd, sizeof(cmd), "grep '%s.*cool-lower' /var/log/syslog", ident);
-    EXPECT_EQ(system(cmd), 0);
+    CHECK(0 == system(cmd));
 }
 
 TEST(Logging, TestLoggingDump)
@@ -119,12 +121,12 @@ TEST(Logging, TestLoggingDump)
 
     snprintf(cmd, sizeof(cmd),
              "grep '%s.*: foobar: 0000: 6f 6e 65 20 73 75 70 65 72 20 6c 6f 6e 67 20 73' /var/log/syslog", ident);
-    EXPECT_EQ(system(cmd), 0);
+    CHECK(0 == system(cmd));
 
     snprintf(cmd, sizeof(cmd),
              "grep '%s.*: foobar: 0010: 74 72 69 6e 67 20 77 69 74 68 20 6c 6f 74 73 20' /var/log/syslog", ident);
-    EXPECT_EQ(system(cmd), 0);
+    CHECK(0 == system(cmd));
 
     snprintf(cmd, sizeof(cmd), "grep '%s.*: foobar: 0020: 6f 66 20 74 65 78 74 00' /var/log/syslog", ident);
-    EXPECT_EQ(system(cmd), 0);
+    CHECK(0 == system(cmd));
 }

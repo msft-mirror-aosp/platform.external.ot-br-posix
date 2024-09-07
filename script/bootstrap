@@ -53,6 +53,8 @@ install_packages_apt()
 
     sudo apt-get install --no-install-recommends -y build-essential ninja-build cmake
 
+    with RELEASE || sudo apt-get install --no-install-recommends -y libcpputest-dev
+
     sudo apt-get install --no-install-recommends -y rsyslog
 
     # For DBus server
@@ -157,7 +159,7 @@ install_packages_rpm()
 
 install_packages_brew()
 {
-    brew install boost cmake dbus jsoncpp ninja
+    brew install boost cmake cpputest dbus jsoncpp ninja
 }
 
 install_packages_source()

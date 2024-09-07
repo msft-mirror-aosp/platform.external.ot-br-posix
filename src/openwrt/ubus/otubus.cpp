@@ -1824,7 +1824,13 @@ void UBusAgent::Update(MainloopContext &aMainloop)
 {
     VerifyOrExit(otbr::ubus::sUbusEfd != -1);
 
-    aMainloop.AddFdToReadSet(otbr::ubus::sUbusEfd);
+    FD_SET(otbr::ubus::sUbusEfd, &aMainloop.mReadFdSet);
+
+    if (aMainloop.mMaxFd < otbr::ubus::sUbusEfd)
+    {
+        aMainloop.mMaxFd = otbr::ubus::sUbusEfd;
+    }
+
 exit:
     mThreadMutex.unlock();
     return;

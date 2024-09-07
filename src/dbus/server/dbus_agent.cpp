@@ -53,7 +53,7 @@ DBusAgent::DBusAgent(otbr::Ncp::ThreadHost &aHost, Mdns::Publisher &aPublisher)
 {
 }
 
-void DBusAgent::Init(otbr::BorderAgent &aBorderAgent)
+void DBusAgent::Init(void)
 {
     otbrError error = OTBR_ERROR_NONE;
 
@@ -71,7 +71,7 @@ void DBusAgent::Init(otbr::BorderAgent &aBorderAgent)
     {
     case OT_COPROCESSOR_RCP:
         mThreadObject = MakeUnique<DBusThreadObjectRcp>(*mConnection, mInterfaceName,
-                                                        static_cast<Ncp::RcpHost &>(mHost), &mPublisher, aBorderAgent);
+                                                        static_cast<Ncp::RcpHost &>(mHost), &mPublisher);
         break;
 
     case OT_COPROCESSOR_NCP:
@@ -139,7 +139,6 @@ void DBusAgent::Update(MainloopContext &aMainloop)
 {
     unsigned int flags;
     int          fd;
-    uint8_t      fdSetMask = MainloopContext::kErrorFdSet;
 
     if (dbus_connection_get_dispatch_status(mConnection.get()) == DBUS_DISPATCH_DATA_REMAINS)
     {
@@ -163,15 +162,17 @@ void DBusAgent::Update(MainloopContext &aMainloop)
 
         if (flags & DBUS_WATCH_READABLE)
         {
-            fdSetMask |= MainloopContext::kReadFdSet;
+            FD_SET(fd, &aMainloop.mReadFdSet);
         }
 
         if ((flags & DBUS_WATCH_WRITABLE))
         {
-            fdSetMask |= MainloopContext::kWriteFdSet;
+            FD_SET(fd, &aMainloop.mWriteFdSet);
         }
 
-        aMainloop.AddFdToSet(fd, fdSetMask);
+        FD_SET(fd, &aMainloop.mErrorFdSet);
+
+        aMainloop.mMaxFd = std::max(aMainloop.mMaxFd, fd);
     }
 }
 

@@ -26,40 +26,39 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <vector>
-
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-
-using ::testing::ElementsAreArray;
+#include <CppUTest/TestHarness.h>
 
 #include "utils/pskc.hpp"
 
+TEST_GROUP(Pskc)
+{
+    otbr::Psk::Pskc mPSKc;
+};
+
 TEST(Pskc, Test123456_0001020304050607_OpenThread)
 {
-    otbr::Psk::Pskc pskc;
-
     uint8_t extpanid[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
     uint8_t expected[] = {
         0xb7, 0x83, 0x81, 0x27, 0x89, 0x91, 0x1e, 0xb4, 0xea, 0x76, 0x59, 0x6c, 0x9c, 0xed, 0x2a, 0x69,
     };
+    const uint8_t *pskc = nullptr;
 
-    const uint8_t *actual = pskc.ComputePskc(extpanid, "OpenThread", "123456");
-    EXPECT_THAT(std::vector<uint8_t>(actual, actual + OT_PSKC_LENGTH), ElementsAreArray(expected));
+    pskc = mPSKc.ComputePskc(extpanid, "OpenThread", "123456");
+    MEMCMP_EQUAL(expected, pskc, sizeof(expected));
 }
 
 TEST(Pskc, Test_TruncatedNetworkNamePskc_OpenThread)
 {
-    otbr::Psk::Pskc pskc;
-    uint8_t         extpanid[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
-    uint8_t         expected[OT_PSKC_LENGTH];
+    uint8_t        extpanid[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+    const uint8_t *pskc       = nullptr;
+    uint8_t        expected[OT_PSKC_LENGTH];
 
     // First run with shorter network name (max)
-    const uint8_t *actual = pskc.ComputePskc(extpanid, "OpenThread123456", "123456");
-    memcpy(expected, actual, OT_PSKC_LENGTH);
+    pskc = mPSKc.ComputePskc(extpanid, "OpenThread123456", "123456");
+    memcpy(expected, pskc, OT_PSKC_LENGTH);
 
     // Second run with longer network name that gets truncated
-    actual = pskc.ComputePskc(extpanid, "OpenThread123456NetworkNameThatExceedsBuffer", "123456");
+    pskc = mPSKc.ComputePskc(extpanid, "OpenThread123456NetworkNameThatExceedsBuffer", "123456");
 
-    EXPECT_THAT(std::vector<uint8_t>(actual, actual + OT_PSKC_LENGTH), ElementsAreArray(expected));
+    MEMCMP_EQUAL(expected, pskc, OT_PSKC_LENGTH);
 }
