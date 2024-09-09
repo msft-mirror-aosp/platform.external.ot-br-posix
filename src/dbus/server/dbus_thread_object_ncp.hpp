@@ -83,6 +83,10 @@ private:
     void AsyncGetDeviceRoleHandler(DBusRequest &aRequest);
     void ReplyAsyncGetProperty(DBusRequest &aRequest, const std::string &aContent);
 
+    void JoinHandler(DBusRequest &aRequest);
+    void LeaveHandler(DBusRequest &aRequest);
+    void ScheduleMigrationHandler(DBusRequest &aRequest);
+
     otbr::Ncp::NcpHost &mHost;
 };
 
