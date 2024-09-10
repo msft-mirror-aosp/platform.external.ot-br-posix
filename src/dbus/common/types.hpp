@@ -694,13 +694,13 @@ struct Nat64ErrorCounters
 
 struct InfraLinkInfo
 {
-    std::string mName;                   ///< The name of the infrastructure network interface.
-    bool        mIsUp;                   ///< Whether the infrastructure network interface is up.
-    bool        mIsRunning;              ///< Whether the infrastructure network interface is running.
-    bool        mIsMulticast;            ///< Whether the infrastructure network interface is multicast.
-    uint32_t    mLinkLocalAddresses;     ///< The number of link-local addresses on the infra network interface.
-    uint32_t    mUniqueLocalAddresses;   ///< The number of unique local addresses on the infra network interface.
-    uint32_t    mGlobalUnicastAddresses; ///< The number of global unicast addresses on the infra network interface.
+    std::string mName;                      ///< The name of the infrastructure network interface.
+    bool        mIsUp;                      ///< Whether the infrastructure network interface is up.
+    bool        mIsRunning;                 ///< Whether the infrastructure network interface is running.
+    bool        mIsMulticast;               ///< Whether the infrastructure network interface is multicast.
+    uint32_t    mLinkLocalAddressCount;     ///< The number of link-local addresses on the infra network interface.
+    uint32_t    mUniqueLocalAddressCount;   ///< The number of unique local addresses on the infra network interface.
+    uint32_t    mGlobalUnicastAddressCount; ///< The number of global unicast addresses on the infra network interface.
 };
 
 struct TrelInfo
@@ -715,7 +715,7 @@ struct TrelInfo
     };
 
     bool               mEnabled;      ///< Whether TREL is enabled.
-    u_int16_t          mNumTrelPeers; ///< The number of TREL peers.
+    uint16_t           mNumTrelPeers; ///< The number of TREL peers.
     TrelPacketCounters mTrelCounters; ///< The TREL counters.
 };
 

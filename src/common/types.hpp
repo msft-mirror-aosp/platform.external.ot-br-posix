@@ -42,6 +42,9 @@
 #include <string>
 #include <vector>
 
+#include <openthread/error.h>
+#include <openthread/ip6.h>
+
 #include "common/byteswap.hpp"
 
 #ifndef IN6ADDR_ANY
@@ -85,6 +88,7 @@ enum otbrError
     OTBR_ERROR_ABORTED            = -12, ///< The operation is aborted.
     OTBR_ERROR_INVALID_STATE      = -13, ///< The target isn't in a valid state.
     OTBR_ERROR_INFRA_LINK_CHANGED = -14, ///< The infrastructure link is changed.
+    OTBR_ERROR_DROPPED            = -15, ///< The packet is dropped.
 };
 
 namespace otbr {
@@ -142,6 +146,22 @@ public:
     Ip6Address(const uint8_t (&aAddress)[16]);
 
     /**
+     * Constructor with an otIp6Address.
+     *
+     * @param[in] aAddress  A const reference to an otIp6Address.
+     *
+     */
+    explicit Ip6Address(const otIp6Address &aAddress);
+
+    /**
+     * Constructor with a string.
+     *
+     * @param[in] aString The string representing the IPv6 address.
+     *
+     */
+    Ip6Address(const char *aString) { FromString(aString, *this); }
+
+    /**
      * This method overloads `<` operator and compares if the Ip6 address is smaller than the other address.
      *
      * @param[in] aOther  The other Ip6 address to compare with.
@@ -160,6 +180,16 @@ public:
      *
      */
     bool operator==(const Ip6Address &aOther) const { return m64[0] == aOther.m64[0] && m64[1] == aOther.m64[1]; }
+
+    /**
+     * This method overloads `!=` operator and compares if the Ip6 address is NOT equal to the other address.
+     *
+     * @param[in] aOther  The other Ip6 address to compare with.
+     *
+     * @returns Whether the Ip6 address is NOT equal to the other address.
+     *
+     */
+    bool operator!=(const Ip6Address &aOther) const { return !(*this == aOther); }
 
     /**
      * Retrieve the 16-bit Thread locator.
@@ -315,6 +345,43 @@ public:
     Ip6Prefix(void) { Clear(); }
 
     /**
+     * Constructor with an Ip6 address string and prefix length.
+     *
+     * @param[in] aIp6AddrStr The IPv6 address string.
+     * @param[in] aLength     The prefix length.
+     *
+     */
+    Ip6Prefix(const char *aIp6AddrStr, uint8_t aLength)
+        : mPrefix(aIp6AddrStr)
+        , mLength(aLength)
+    {
+    }
+
+    /**
+     * This method overloads `==` operator for comparing two Ip6Prefix objects by comparing their prefix and length.
+     *
+     * Two IpPrefix objects are considered equal if:
+     *  - their lengths are equal, and
+     *  - their first n-bits of the addresses are the same, where n is the length of the prefix.
+     *
+     * @param[in] aOther The Ip6Prefix object to compare with.
+     *
+     * @returns True if the two objects are equal, false otherwise.
+     *
+     */
+    bool operator==(const Ip6Prefix &aOther) const;
+
+    /**
+     * This method overloads `!=` operator for comparing two Ip6Prefix objects.
+
+     * @param[in] aOther The Ip6Prefix object to compare with.
+     *
+     * @returns True if the two objects are NOT equal, false otherwise.
+     *
+     */
+    bool operator!=(const Ip6Prefix &aOther) const;
+
+    /**
      * This method sets the Ip6 prefix to an `otIp6Prefix` value.
      *
      * @param[in] aPrefix  The `otIp6Prefix` value to set the Ip6 prefix.
@@ -344,8 +411,57 @@ public:
      */
     bool IsValid(void) const { return mLength > 0 && mLength <= 128; }
 
+    /**
+     * This method checks if the object is the default route prefix ("::/0")
+     *
+     * @returns true if the object is the default route prefix, false otherwise.
+     *
+     */
+    bool IsDefaultRoutePrefix(void) const { return (*this == Ip6Prefix("::", 0)); }
+
+    /**
+     * This method checks if the object is the ULA prefix ("fc00::/7")
+     *
+     * @returns true if the object is the ULA prefix, false otherwise.
+     *
+     */
+    bool IsUlaPrefix(void) const { return (*this == Ip6Prefix("fc00::", 7)); }
+
     Ip6Address mPrefix; ///< The IPv6 prefix.
     uint8_t    mLength; ///< The IPv6 prefix length (in bits).
+};
+
+/**
+ * This class represents a Ipv6 address and its info.
+ *
+ */
+class Ip6AddressInfo
+{
+public:
+    Ip6AddressInfo(void) { Clear(); }
+
+    Ip6AddressInfo(const otIp6Address &aAddress,
+                   uint8_t             aPrefixLength,
+                   uint8_t             aScope,
+                   bool                aPreferred,
+                   bool                aMeshLocal)
+        : mAddress(aAddress)
+        , mPrefixLength(aPrefixLength)
+        , mScope(aScope)
+        , mPreferred(aPreferred)
+        , mMeshLocal(aMeshLocal)
+    {
+    }
+
+    void Clear(void) { memset(reinterpret_cast<void *>(this), 0, sizeof(*this)); }
+
+    otIp6Address mAddress;
+    uint8_t      mPrefixLength;
+    uint8_t      mScope : 4;
+    bool         mPreferred : 1;
+    bool         mMeshLocal : 1;
+
+    bool operator==(const Ip6AddressInfo &aOther) const { return memcmp(this, &aOther, sizeof(Ip6AddressInfo)) == 0; }
 };
 
 /**
@@ -417,6 +533,16 @@ struct MdnsTelemetryInfo
 static constexpr size_t kVendorOuiLength      = 3;
 static constexpr size_t kMaxVendorNameLength  = 24;
 static constexpr size_t kMaxProductNameLength = 24;
+
+/**
+ * This method converts a otbrError to a otError.
+ *
+ * @param[in]  aError  a otbrError code.
+ *
+ * @returns  a otError code.
+ *
+ */
+otError OtbrErrorToOtError(otbrError aError);
 
 } // namespace otbr
 
