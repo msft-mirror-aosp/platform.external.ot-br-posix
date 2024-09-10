@@ -36,10 +36,6 @@
 
 #include "openthread-br/config.h"
 
-#if !(OTBR_ENABLE_MDNS_AVAHI || OTBR_ENABLE_MDNS_MDNSSD || OTBR_ENABLE_MDNS_MOJO)
-#error "Border Agent feature requires at least one `OTBR_MDNS` implementation"
-#endif
-
 #include <vector>
 
 #include <stdint.h>
@@ -83,6 +79,9 @@ namespace otbr {
 class BorderAgent : private NonCopyable
 {
 public:
+    /** The callback for receiving ephemeral key changes. */
+    using EphemeralKeyChangedCallback = std::function<void(void)>;
+
     /**
      * The constructor to initialize the Thread border agent.
      *
@@ -127,12 +126,45 @@ public:
     void SetEnabled(bool aIsEnabled);
 
     /**
+     * This method enables/disables the Border Agent Ephemeral Key feature.
+     *
+     * @param[in] aIsEnabled  Whether to enable the BA Ephemeral Key feature.
+     *
+     */
+    void SetEphemeralKeyEnabled(bool aIsEnabled);
+
+    /**
+     * This method returns the Border Agent Ephemeral Key feature state.
+     *
+     */
+    bool GetEphemeralKeyEnabled(void) const { return mIsEphemeralKeyEnabled; }
+
+    /**
      * This method handles mDNS publisher's state changes.
      *
      * @param[in] aState  The state of mDNS publisher.
      *
      */
     void HandleMdnsState(Mdns::Publisher::State aState);
+
+    /**
+     * This method creates ephemeral key in the Border Agent.
+     *
+     * @param[out] aEphemeralKey  The ephemeral key digit string of length 9 with first 8 digits randomly
+     *                            generated, and the last 9th digit as verhoeff checksum.
+     *
+     * @returns OTBR_ERROR_INVALID_ARGS  If Verhoeff checksum calculate returns error.
+     * @returns OTBR_ERROR_NONE          If successfully generate the ePSKc.
+     */
+    static otbrError CreateEphemeralKey(std::string &aEphemeralKey);
+
+    /**
+     * This method adds a callback for ephemeral key changes.
+     *
+     * @param[in] aCallback  The callback to receive ephemeral key changed events.
+     *
+     */
+    void AddEphemeralKeyChangedCallback(EphemeralKeyChangedCallback aCallback);
 
 private:
     void Start(void);
@@ -158,6 +190,7 @@ private:
     otbr::Ncp::RcpHost &mHost;
     Mdns::Publisher    &mPublisher;
     bool                mIsEnabled;
+    bool                mIsEphemeralKeyEnabled;
 
     std::map<std::string, std::vector<uint8_t>> mMeshCopTxtUpdate;
 
@@ -176,6 +209,8 @@ private:
     // conflicts. For example, this value can be "OpenThread Border Router #7AC3" or
     // "OpenThread Border Router #7AC3 (14379)".
     std::string mServiceInstanceName;
+
+    std::vector<EphemeralKeyChangedCallback> mEphemeralKeyChangedCallbacks;
 };
 
 /**
