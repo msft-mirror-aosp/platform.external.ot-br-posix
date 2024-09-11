@@ -36,6 +36,7 @@
 #include <aidl/com/android/server/thread/openthread/BnOtDaemon.h>
 #include <aidl/com/android/server/thread/openthread/INsdPublisher.h>
 #include <aidl/com/android/server/thread/openthread/IOtDaemon.h>
+#include <aidl/com/android/server/thread/openthread/InfraLinkState.h>
 #include <openthread/instance.h>
 #include <openthread/ip6.h>
 
@@ -136,12 +137,12 @@ private:
                             const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setConfigurationInternal(const OtDaemonConfiguration              &aConfiguration,
                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    Status setInfraLinkState(const InfraLinkState                     &aInfraLinkState,
-                             const ScopedFileDescriptor               &aInfraInterfaceIcmp6Socket,
-                             const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   setInfraLinkStateInternal(const InfraLinkState                     &aInfraLinkState,
-                                     int                                       aIcmp6SocketFd,
-                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status setInfraLinkInterfaceName(const std::optional<std::string>         &aInterfaceName,
+                                     const ScopedFileDescriptor               &aIcmp6Socket,
+                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   setInfraLinkInterfaceNameInternal(const std::string                        &aInterfaceName,
+                                             int                                       aIcmp6SocketFd,
+                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status getChannelMasks(const std::shared_ptr<IChannelMasksReceiver> &aReceiver) override;
     void   getChannelMasksInternal(const std::shared_ptr<IChannelMasksReceiver> &aReceiver);
 
@@ -185,11 +186,12 @@ private:
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
     OtDaemonConfiguration              mConfiguration;
+    std::set<OnMeshPrefixConfig>       mOnMeshPrefixes;
     InfraLinkState                     mInfraLinkState;
     int                                mInfraIcmp6Socket;
-    std::set<OnMeshPrefixConfig>       mOnMeshPrefixes;
-    static constexpr Seconds           kTelemetryCheckInterval           = Seconds(600);          // 600 seconds
-    static constexpr Seconds           kTelemetryUploadIntervalThreshold = Seconds(60 * 60 * 12); // 12 hours
+
+    static constexpr Seconds kTelemetryCheckInterval           = Seconds(600);          // 600 seconds
+    static constexpr Seconds kTelemetryUploadIntervalThreshold = Seconds(60 * 60 * 12); // 12 hours
 };
 
 } // namespace Android

@@ -46,7 +46,6 @@ import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemon;
 import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.IOtStatusReceiver;
-import com.android.server.thread.openthread.InfraLinkState;
 import com.android.server.thread.openthread.MeshcopTxtAttributes;
 import com.android.server.thread.openthread.OtDaemonConfiguration;
 import com.android.server.thread.openthread.OtDaemonState;
@@ -351,8 +350,8 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     }
 
     @Override
-    public void setInfraLinkState(
-            InfraLinkState infraLinkState, ParcelFileDescriptor fd, IOtStatusReceiver receiver)
+    public void setInfraLinkInterfaceName(
+            String interfaceName, ParcelFileDescriptor fd, IOtStatusReceiver receiver)
             throws RemoteException {
         throw new UnsupportedOperationException(
                 "FakeOtDaemon#setInfraLinkState is not implemented!");
