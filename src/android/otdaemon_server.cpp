@@ -42,6 +42,7 @@
 #include <openthread/icmp6.h>
 #include <openthread/ip6.h>
 #include <openthread/link.h>
+#include <openthread/nat64.h>
 #include <openthread/openthread-system.h>
 #include <openthread/platform/infra_if.h>
 #include <openthread/platform/radio.h>
@@ -107,7 +108,7 @@ static const char *ThreadEnabledStateToString(int enabledState)
 
 OtDaemonServer::OtDaemonServer(Application &aApplication)
     : mApplication(aApplication)
-    , mNcp(aApplication.GetNcp())
+    , mHost(static_cast<otbr::Ncp::RcpHost &>(aApplication.GetHost()))
     , mBorderAgent(aApplication.GetBorderAgent())
     , mMdnsPublisher(static_cast<MdnsPublisher &>(aApplication.GetPublisher()))
     , mBorderRouterConfiguration()
@@ -126,13 +127,14 @@ void OtDaemonServer::Init(void)
 
     assert(GetOtInstance() != nullptr);
 
-    mNcp.AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
+    mHost.AddThreadStateChangedCallback([this](otChangedFlags aFlags) { StateCallback(aFlags); });
     otIp6SetAddressCallback(GetOtInstance(), OtDaemonServer::AddressCallback, this);
     otIp6SetReceiveCallback(GetOtInstance(), OtDaemonServer::ReceiveCallback, this);
     otBackboneRouterSetMulticastListenerCallback(GetOtInstance(), OtDaemonServer::HandleBackboneMulticastListenerEvent,
                                                  this);
     otIcmp6SetEchoMode(GetOtInstance(), OT_ICMP6_ECHO_HANDLER_DISABLED);
     otIp6SetReceiveFilterEnabled(GetOtInstance(), true);
+    otNat64SetReceiveIp4Callback(GetOtInstance(), &OtDaemonServer::ReceiveCallback, this);
 
     mTaskRunner.Post(kTelemetryCheckInterval, [this]() { PushTelemetryIfConditionMatch(); });
 }
@@ -278,8 +280,7 @@ void OtDaemonServer::ReceiveCallback(otMessage *aMessage, void *aBinderServer)
     static_cast<OtDaemonServer *>(aBinderServer)->ReceiveCallback(aMessage);
 }
 
-// FIXME(wgtdkp): We should reuse the same code in openthread/src/posix/platform/netif.cp
-// after the refactor there is done: https://github.com/openthread/openthread/pull/9293
+// TODO: b/291053118 - We should reuse the same code in openthread/src/posix/platform/netif.cpp
 void OtDaemonServer::ReceiveCallback(otMessage *aMessage)
 {
     char     packet[kMaxIp6Size];
@@ -303,8 +304,23 @@ exit:
     otMessageFree(aMessage);
 }
 
-// FIXME(wgtdkp): this doesn't support NAT64, we should use a shared library with ot-posix
-// to handle packet translations between the tunnel interface and Thread.
+static constexpr uint8_t kIpVersion4 = 4;
+static constexpr uint8_t kIpVersion6 = 6;
+
+// TODO: b/291053118 - We should reuse the same code in openthread/src/posix/platform/netif.cpp
+static uint8_t getIpVersion(const uint8_t *data)
+{
+    assert(data != nullptr);
+
+    // Mute compiler warnings.
+    OT_UNUSED_VARIABLE(kIpVersion4);
+    OT_UNUSED_VARIABLE(kIpVersion6);
+
+    return (static_cast<uint8_t>(data[0]) >> 4) & 0x0F;
+}
+
+// TODO: b/291053118 - we should use a shared library with ot-posix to handle packet translations
+// between the tunnel interface and Thread.
 void OtDaemonServer::TransmitCallback(void)
 {
     char              packet[kMaxIp6Size];
@@ -313,6 +329,7 @@ void OtDaemonServer::TransmitCallback(void)
     otError           error   = OT_ERROR_NONE;
     otMessageSettings settings;
     int               fd = mTunFd.get();
+    bool              isIp4;
 
     assert(GetOtInstance() != nullptr);
 
@@ -336,13 +353,14 @@ void OtDaemonServer::TransmitCallback(void)
     settings.mLinkSecurityEnabled = (otThreadGetDeviceRole(GetOtInstance()) != OT_DEVICE_ROLE_DISABLED);
     settings.mPriority            = OT_MESSAGE_PRIORITY_LOW;
 
-    message = otIp6NewMessage(GetOtInstance(), &settings);
+    isIp4   = (getIpVersion(reinterpret_cast<uint8_t *>(packet)) == kIpVersion4);
+    message = isIp4 ? otIp4NewMessage(GetOtInstance(), &settings) : otIp6NewMessage(GetOtInstance(), &settings);
     VerifyOrExit(message != nullptr, error = OT_ERROR_NO_BUFS);
     otMessageSetOrigin(message, OT_MESSAGE_ORIGIN_HOST_UNTRUSTED);
 
     SuccessOrExit(error = otMessageAppend(message, packet, static_cast<uint16_t>(length)));
 
-    error   = otIp6Send(GetOtInstance(), message);
+    error   = isIp4 ? otNat64Send(GetOtInstance(), message) : otIp6Send(GetOtInstance(), message);
     message = nullptr;
 
 exit:
@@ -423,7 +441,7 @@ exit:
 
 otInstance *OtDaemonServer::GetOtInstance()
 {
-    return mNcp.GetInstance();
+    return mHost.GetInstance();
 }
 
 void OtDaemonServer::Update(MainloopContext &aMainloop)
