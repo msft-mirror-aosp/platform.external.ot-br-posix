@@ -311,6 +311,47 @@ exit:
     otMessageFree(aMessage);
 }
 
+int OtDaemonServer::OtCtlCommandCallback(void *aBinderServer, const char *aFormat, va_list aArguments)
+{
+    return static_cast<OtDaemonServer *>(aBinderServer)->OtCtlCommandCallback(aFormat, aArguments);
+}
+
+int OtDaemonServer::OtCtlCommandCallback(const char *aFormat, va_list aArguments)
+{
+    static const std::string kPrompt = "> ";
+    std::string              output;
+
+    VerifyOrExit(mOtCtlOutputReceiver != nullptr, otSysCliInitUsingDaemon(GetOtInstance()));
+
+    android::base::StringAppendV(&output, aFormat, aArguments);
+
+    // Ignore CLI prompt
+    VerifyOrExit(output != kPrompt);
+
+    mOtCtlOutputReceiver->onOutput(output);
+
+    // Check if the command has completed (indicated by "Done" or "Error")
+    if (output.starts_with("Done") || output.starts_with("Error"))
+    {
+        mIsOtCtlOutputComplete = true;
+    }
+
+    // The OpenThread CLI consistently outputs "\r\n" as a newline character. Therefore, we use the presence of "\r\n"
+    // following "Done" or "Error" to signal the completion of a command's output.
+    if (mIsOtCtlOutputComplete && output.ends_with("\r\n"))
+    {
+        if (!mIsOtCtlInteractiveMode)
+        {
+            otSysCliInitUsingDaemon(GetOtInstance());
+        }
+        mIsOtCtlOutputComplete = false;
+        mOtCtlOutputReceiver->onComplete();
+    }
+
+exit:
+    return output.length();
+}
+
 static constexpr uint8_t kIpVersion4 = 4;
 static constexpr uint8_t kIpVersion6 = 6;
 
@@ -1132,6 +1173,35 @@ exit:
         close(aInfraIcmp6Socket);
     }
     PropagateResult(error, message, aReceiver);
+}
+
+Status OtDaemonServer::runOtCtlCommand(const std::string                        &aCommand,
+                                       const bool                                aIsInteractive,
+                                       const std::shared_ptr<IOtOutputReceiver> &aReceiver)
+{
+    mTaskRunner.Post([aCommand, aIsInteractive, aReceiver, this]() {
+        runOtCtlCommandInternal(aCommand, aIsInteractive, aReceiver);
+    });
+
+    return Status::ok();
+}
+
+void OtDaemonServer::runOtCtlCommandInternal(const std::string                        &aCommand,
+                                             const bool                                aIsInteractive,
+                                             const std::shared_ptr<IOtOutputReceiver> &aReceiver)
+{
+    otSysCliInitUsingDaemon(GetOtInstance());
+
+    if (!aCommand.empty())
+    {
+        std::string command = aCommand;
+
+        mIsOtCtlInteractiveMode = aIsInteractive;
+        mOtCtlOutputReceiver    = aReceiver;
+
+        otCliInit(GetOtInstance(), OtDaemonServer::OtCtlCommandCallback, this);
+        otCliInputLine(command.data());
+    }
 }
 
 static int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)
