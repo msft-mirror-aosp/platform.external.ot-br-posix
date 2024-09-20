@@ -183,6 +183,16 @@ oneway interface IOtDaemon {
             in ParcelFileDescriptor icmp6Socket, in IOtStatusReceiver receiver);
 
     /**
+     * Sets the NAT64 prefix discovered from infrastructure link.
+     *
+     * @param nat64Prefix the NAT64 prefix discovered from the infra link
+     * @param receiver the status receiver
+     *
+     */
+    oneway void setInfraLinkNat64Prefix(
+            in @nullable String nat64Prefix, in IOtStatusReceiver receiver);
+
+    /**
      * Gets the supported and preferred channel masks.
      *
      * @param receiver the receiver to receive result of this operation
