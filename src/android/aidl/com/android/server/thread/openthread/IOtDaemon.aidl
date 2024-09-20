@@ -172,15 +172,15 @@ oneway interface IOtDaemon {
     oneway void setConfiguration(in OtDaemonConfiguration config, in IOtStatusReceiver receiver);
 
     /**
-     * Sets the infrastructure link state.
+     * Sets the infrastructure network interface.
      *
-     * @param infraLinkState the infra link state
-     * @param infraIcmp6Socket the ICMPv6 socket on the infrastructure network
+     * @param interfaceName the infra network interface name
+     * @param icmp6Socket the ICMPv6 socket on the infrastructure network
      * @param receiver the status receiver
      *
      */
-    oneway void setInfraLinkState(in InfraLinkState infraLinkState,
-            in ParcelFileDescriptor infraIcmp6Socket, in IOtStatusReceiver receiver);
+    oneway void setInfraLinkInterfaceName(in @nullable String interfaceName,
+            in ParcelFileDescriptor icmp6Socket, in IOtStatusReceiver receiver);
 
     /**
      * Gets the supported and preferred channel masks.

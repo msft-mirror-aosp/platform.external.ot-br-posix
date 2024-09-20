@@ -1117,39 +1117,39 @@ exit:
     PropagateResult(error, message, aReceiver);
 }
 
-Status OtDaemonServer::setInfraLinkState(const InfraLinkState                     &aInfraLinkState,
-                                         const ScopedFileDescriptor               &aInfraIcmp6Socket,
-                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+Status OtDaemonServer::setInfraLinkInterfaceName(const std::optional<std::string>         &aInterfaceName,
+                                                 const ScopedFileDescriptor               &aIcmp6Socket,
+                                                 const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    int infraIcmp6Socket = aInfraIcmp6Socket.dup().release();
+    int icmp6Socket = aIcmp6Socket.dup().release();
 
-    mTaskRunner.Post([aInfraLinkState, infraIcmp6Socket, aReceiver, this]() {
-        setInfraLinkStateInternal(aInfraLinkState, infraIcmp6Socket, aReceiver);
+    mTaskRunner.Post([interfaceName = aInterfaceName.value_or(""), icmp6Socket, aReceiver, this]() {
+        setInfraLinkInterfaceNameInternal(interfaceName, icmp6Socket, aReceiver);
     });
 
     return Status::ok();
 }
 
-void OtDaemonServer::setInfraLinkStateInternal(const InfraLinkState                     &aInfraLinkState,
-                                               int                                       aInfraIcmp6Socket,
-                                               const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+void OtDaemonServer::setInfraLinkInterfaceNameInternal(const std::string                        &aInterfaceName,
+                                                       int                                       aIcmp6Socket,
+                                                       const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     otError           error = OT_ERROR_NONE;
     std::string       message;
-    const std::string infraIfName  = aInfraLinkState.interfaceName.value_or("");
+    const std::string infraIfName  = aInterfaceName;
     unsigned int      infraIfIndex = if_nametoindex(infraIfName.c_str());
 
-    otbrLogInfo("Setting infra link state: %s", aInfraLinkState.toString().c_str());
+    otbrLogInfo("Setting infra link state: %s", aInterfaceName.c_str());
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(aInfraLinkState != mInfraLinkState || aInfraIcmp6Socket != mInfraIcmp6Socket);
+    VerifyOrExit(mInfraLinkState.interfaceName != aInterfaceName || aIcmp6Socket != mInfraIcmp6Socket);
 
-    if (infraIfIndex != 0)
+    if (infraIfIndex != 0 && aIcmp6Socket > 0)
     {
         SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
                       message = "failed to disable border routing");
-        otSysSetInfraNetif(infraIfName.c_str(), aInfraIcmp6Socket);
-        aInfraIcmp6Socket = -1;
+        otSysSetInfraNetif(infraIfName.c_str(), aIcmp6Socket);
+        aIcmp6Socket = -1;
         SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
                       message = "failed to initialize border routing");
         SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
@@ -1164,13 +1164,13 @@ void OtDaemonServer::setInfraLinkStateInternal(const InfraLinkState             
         otBackboneRouterSetEnabled(GetOtInstance(), false /* aEnabled */);
     }
 
-    mInfraLinkState   = aInfraLinkState;
-    mInfraIcmp6Socket = aInfraIcmp6Socket;
+    mInfraLinkState.interfaceName = aInterfaceName;
+    mInfraIcmp6Socket             = aIcmp6Socket;
 
 exit:
     if (error != OT_ERROR_NONE)
     {
-        close(aInfraIcmp6Socket);
+        close(aIcmp6Socket);
     }
     PropagateResult(error, message, aReceiver);
 }
