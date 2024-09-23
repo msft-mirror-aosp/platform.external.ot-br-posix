@@ -33,4 +33,5 @@ package com.android.server.thread.openthread;
 @JavaDerive(equals=true, toString=true)
 parcelable InfraLinkState {
     @nullable String interfaceName; // The name of infra network interface.
+    @nullable String nat64Prefix; // The NAT64 prefix.
 }
