@@ -356,7 +356,14 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
             String interfaceName, ParcelFileDescriptor fd, IOtStatusReceiver receiver)
             throws RemoteException {
         throw new UnsupportedOperationException(
-                "FakeOtDaemon#setInfraLinkState is not implemented!");
+                "FakeOtDaemon#setInfraLinkInterfaceName is not implemented!");
+    }
+
+    @Override
+    public void setInfraLinkNat64Prefix(String nat64Prefix, IOtStatusReceiver receiver)
+            throws RemoteException {
+        throw new UnsupportedOperationException(
+                "FakeOtDaemon#setInfraLinkNat64Prefix is not implemented!");
     }
 
     @Override

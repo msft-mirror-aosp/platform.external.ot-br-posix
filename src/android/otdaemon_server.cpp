@@ -1186,6 +1186,16 @@ Status OtDaemonServer::runOtCtlCommand(const std::string                        
     return Status::ok();
 }
 
+Status OtDaemonServer::setInfraLinkNat64Prefix(const std::optional<std::string>         &aNat64Prefix,
+                                               const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    mTaskRunner.Post([nat64Prefix = aNat64Prefix.value_or(""), aReceiver, this]() {
+        setInfraLinkNat64PrefixInternal(nat64Prefix, aReceiver);
+    });
+
+    return Status::ok();
+}
+
 void OtDaemonServer::runOtCtlCommandInternal(const std::string                        &aCommand,
                                              const bool                                aIsInteractive,
                                              const std::shared_ptr<IOtOutputReceiver> &aReceiver)
@@ -1202,6 +1212,23 @@ void OtDaemonServer::runOtCtlCommandInternal(const std::string                  
         otCliInit(GetOtInstance(), OtDaemonServer::OtCtlCommandCallback, this);
         otCliInputLine(command.data());
     }
+}
+
+void OtDaemonServer::setInfraLinkNat64PrefixInternal(const std::string                        &aNat64Prefix,
+                                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    otError     error = OT_ERROR_NONE;
+    std::string message;
+
+    otbrLogInfo("Setting infra link NAT64 prefix: %s", aNat64Prefix.c_str());
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+
+    mInfraLinkState.nat64Prefix = aNat64Prefix;
+    NotifyNat64PrefixDiscoveryDone();
+
+exit:
+    PropagateResult(error, message, aReceiver);
 }
 
 static int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)
@@ -1275,12 +1302,11 @@ exit:
 
 void OtDaemonServer::NotifyNat64PrefixDiscoveryDone(void)
 {
-    // TODO: b/357479886 - Use the discovered AIL NAT64 prefix. For now we just assume no NAT64 prefix is on AIL so the
-    // Border Router will locally generate a NAT64 prefix and use it.
-    otIp6Prefix prefix{};
+    otIp6Prefix nat64Prefix{};
     uint32_t    infraIfIndex = if_nametoindex(mInfraLinkState.interfaceName.value_or("").c_str());
 
-    otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &prefix);
+    otIp6PrefixFromString(mInfraLinkState.nat64Prefix.value_or("").c_str(), &nat64Prefix);
+    otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &nat64Prefix);
 
 exit:
     return;
