@@ -60,13 +60,11 @@ public:
      * Returns the device role.
      *
      * @returns the device role.
-     *
      */
     virtual otDeviceRole GetDeviceRole(void) const = 0;
 
     /**
      * The destructor.
-     *
      */
     virtual ~NetworkProperties(void) = default;
 };
@@ -76,7 +74,6 @@ public:
  * Thread network.
  *
  * The APIs are unified for both NCP and RCP cases.
- *
  */
 class ThreadHost : virtual public NetworkProperties
 {
@@ -104,7 +101,6 @@ public:
      * @param[in]   aEnableAutoAttach       Whether or not to automatically attach to the saved network.
      *
      * @returns Non-null OpenThread Controller instance.
-     *
      */
     static std::unique_ptr<ThreadHost> Create(const char                      *aInterfaceName,
                                               const std::vector<const char *> &aRadioUrls,
@@ -120,7 +116,6 @@ public:
      *
      * @param[in] aActiveOpDatasetTlvs  A reference to the active operational dataset of the Thread network.
      * @param[in] aReceiver             A receiver to get the async result of this operation.
-     *
      */
     virtual void Join(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs, const AsyncResultReceiver &aRecevier) = 0;
 
@@ -137,7 +132,6 @@ public:
      *    will be passed to @p aReceiver when the error happens.
      *
      * @param[in] aReceiver  A receiver to get the async result of this operation.
-     *
      */
     virtual void Leave(const AsyncResultReceiver &aRecevier) = 0;
 
@@ -146,7 +140,6 @@ public:
      *
      * @param[in] aPendingOpDatasetTlvs  A reference to the pending operational dataset of the Thread network.
      * @param[in] aReceiver              A receiver to get the async result of this operation.
-     *
      */
     virtual void ScheduleMigration(const otOperationalDatasetTlvs &aPendingOpDatasetTlvs,
                                    const AsyncResultReceiver       aReceiver) = 0;
@@ -203,13 +196,11 @@ public:
 
     /**
      * Returns the co-processor type.
-     *
      */
     virtual CoprocessorType GetCoprocessorType(void) = 0;
 
     /**
      * Returns the co-processor version string.
-     *
      */
     virtual const char *GetCoprocessorVersion(void) = 0;
 
@@ -217,25 +208,21 @@ public:
      * This method returns the Thread network interface name.
      *
      * @returns A pointer to the Thread network interface name string.
-     *
      */
     virtual const char *GetInterfaceName(void) const = 0;
 
     /**
      * Initializes the Thread controller.
-     *
      */
     virtual void Init(void) = 0;
 
     /**
      * Deinitializes the Thread controller.
-     *
      */
     virtual void Deinit(void) = 0;
 
     /**
      * The destructor.
-     *
      */
     virtual ~ThreadHost(void) = default;
 };
