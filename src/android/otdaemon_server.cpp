@@ -311,6 +311,47 @@ exit:
     otMessageFree(aMessage);
 }
 
+int OtDaemonServer::OtCtlCommandCallback(void *aBinderServer, const char *aFormat, va_list aArguments)
+{
+    return static_cast<OtDaemonServer *>(aBinderServer)->OtCtlCommandCallback(aFormat, aArguments);
+}
+
+int OtDaemonServer::OtCtlCommandCallback(const char *aFormat, va_list aArguments)
+{
+    static const std::string kPrompt = "> ";
+    std::string              output;
+
+    VerifyOrExit(mOtCtlOutputReceiver != nullptr, otSysCliInitUsingDaemon(GetOtInstance()));
+
+    android::base::StringAppendV(&output, aFormat, aArguments);
+
+    // Ignore CLI prompt
+    VerifyOrExit(output != kPrompt);
+
+    mOtCtlOutputReceiver->onOutput(output);
+
+    // Check if the command has completed (indicated by "Done" or "Error")
+    if (output.starts_with("Done") || output.starts_with("Error"))
+    {
+        mIsOtCtlOutputComplete = true;
+    }
+
+    // The OpenThread CLI consistently outputs "\r\n" as a newline character. Therefore, we use the presence of "\r\n"
+    // following "Done" or "Error" to signal the completion of a command's output.
+    if (mIsOtCtlOutputComplete && output.ends_with("\r\n"))
+    {
+        if (!mIsOtCtlInteractiveMode)
+        {
+            otSysCliInitUsingDaemon(GetOtInstance());
+        }
+        mIsOtCtlOutputComplete = false;
+        mOtCtlOutputReceiver->onComplete();
+    }
+
+exit:
+    return output.length();
+}
+
 static constexpr uint8_t kIpVersion4 = 4;
 static constexpr uint8_t kIpVersion6 = 6;
 
@@ -1076,39 +1117,39 @@ exit:
     PropagateResult(error, message, aReceiver);
 }
 
-Status OtDaemonServer::setInfraLinkState(const InfraLinkState                     &aInfraLinkState,
-                                         const ScopedFileDescriptor               &aInfraIcmp6Socket,
-                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+Status OtDaemonServer::setInfraLinkInterfaceName(const std::optional<std::string>         &aInterfaceName,
+                                                 const ScopedFileDescriptor               &aIcmp6Socket,
+                                                 const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    int infraIcmp6Socket = aInfraIcmp6Socket.dup().release();
+    int icmp6Socket = aIcmp6Socket.dup().release();
 
-    mTaskRunner.Post([aInfraLinkState, infraIcmp6Socket, aReceiver, this]() {
-        setInfraLinkStateInternal(aInfraLinkState, infraIcmp6Socket, aReceiver);
+    mTaskRunner.Post([interfaceName = aInterfaceName.value_or(""), icmp6Socket, aReceiver, this]() {
+        setInfraLinkInterfaceNameInternal(interfaceName, icmp6Socket, aReceiver);
     });
 
     return Status::ok();
 }
 
-void OtDaemonServer::setInfraLinkStateInternal(const InfraLinkState                     &aInfraLinkState,
-                                               int                                       aInfraIcmp6Socket,
-                                               const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+void OtDaemonServer::setInfraLinkInterfaceNameInternal(const std::string                        &aInterfaceName,
+                                                       int                                       aIcmp6Socket,
+                                                       const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     otError           error = OT_ERROR_NONE;
     std::string       message;
-    const std::string infraIfName  = aInfraLinkState.interfaceName.value_or("");
+    const std::string infraIfName  = aInterfaceName;
     unsigned int      infraIfIndex = if_nametoindex(infraIfName.c_str());
 
-    otbrLogInfo("Setting infra link state: %s", aInfraLinkState.toString().c_str());
+    otbrLogInfo("Setting infra link state: %s", aInterfaceName.c_str());
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(aInfraLinkState != mInfraLinkState || aInfraIcmp6Socket != mInfraIcmp6Socket);
+    VerifyOrExit(mInfraLinkState.interfaceName != aInterfaceName || aIcmp6Socket != mInfraIcmp6Socket);
 
-    if (infraIfIndex != 0)
+    if (infraIfIndex != 0 && aIcmp6Socket > 0)
     {
         SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
                       message = "failed to disable border routing");
-        otSysSetInfraNetif(infraIfName.c_str(), aInfraIcmp6Socket);
-        aInfraIcmp6Socket = -1;
+        otSysSetInfraNetif(infraIfName.c_str(), aIcmp6Socket);
+        aIcmp6Socket = -1;
         SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
                       message = "failed to initialize border routing");
         SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
@@ -1123,14 +1164,70 @@ void OtDaemonServer::setInfraLinkStateInternal(const InfraLinkState             
         otBackboneRouterSetEnabled(GetOtInstance(), false /* aEnabled */);
     }
 
-    mInfraLinkState   = aInfraLinkState;
-    mInfraIcmp6Socket = aInfraIcmp6Socket;
+    mInfraLinkState.interfaceName = aInterfaceName;
+    mInfraIcmp6Socket             = aIcmp6Socket;
 
 exit:
     if (error != OT_ERROR_NONE)
     {
-        close(aInfraIcmp6Socket);
+        close(aIcmp6Socket);
     }
+    PropagateResult(error, message, aReceiver);
+}
+
+Status OtDaemonServer::runOtCtlCommand(const std::string                        &aCommand,
+                                       const bool                                aIsInteractive,
+                                       const std::shared_ptr<IOtOutputReceiver> &aReceiver)
+{
+    mTaskRunner.Post([aCommand, aIsInteractive, aReceiver, this]() {
+        runOtCtlCommandInternal(aCommand, aIsInteractive, aReceiver);
+    });
+
+    return Status::ok();
+}
+
+Status OtDaemonServer::setInfraLinkNat64Prefix(const std::optional<std::string>         &aNat64Prefix,
+                                               const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    mTaskRunner.Post([nat64Prefix = aNat64Prefix.value_or(""), aReceiver, this]() {
+        setInfraLinkNat64PrefixInternal(nat64Prefix, aReceiver);
+    });
+
+    return Status::ok();
+}
+
+void OtDaemonServer::runOtCtlCommandInternal(const std::string                        &aCommand,
+                                             const bool                                aIsInteractive,
+                                             const std::shared_ptr<IOtOutputReceiver> &aReceiver)
+{
+    otSysCliInitUsingDaemon(GetOtInstance());
+
+    if (!aCommand.empty())
+    {
+        std::string command = aCommand;
+
+        mIsOtCtlInteractiveMode = aIsInteractive;
+        mOtCtlOutputReceiver    = aReceiver;
+
+        otCliInit(GetOtInstance(), OtDaemonServer::OtCtlCommandCallback, this);
+        otCliInputLine(command.data());
+    }
+}
+
+void OtDaemonServer::setInfraLinkNat64PrefixInternal(const std::string                        &aNat64Prefix,
+                                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    otError     error = OT_ERROR_NONE;
+    std::string message;
+
+    otbrLogInfo("Setting infra link NAT64 prefix: %s", aNat64Prefix.c_str());
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+
+    mInfraLinkState.nat64Prefix = aNat64Prefix;
+    NotifyNat64PrefixDiscoveryDone();
+
+exit:
     PropagateResult(error, message, aReceiver);
 }
 
@@ -1205,12 +1302,11 @@ exit:
 
 void OtDaemonServer::NotifyNat64PrefixDiscoveryDone(void)
 {
-    // TODO: b/357479886 - Use the discovered AIL NAT64 prefix. For now we just assume no NAT64 prefix is on AIL so the
-    // Border Router will locally generate a NAT64 prefix and use it.
-    otIp6Prefix prefix{};
+    otIp6Prefix nat64Prefix{};
     uint32_t    infraIfIndex = if_nametoindex(mInfraLinkState.interfaceName.value_or("").c_str());
 
-    otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &prefix);
+    otIp6PrefixFromString(mInfraLinkState.nat64Prefix.value_or("").c_str(), &nat64Prefix);
+    otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &nat64Prefix);
 
 exit:
     return;

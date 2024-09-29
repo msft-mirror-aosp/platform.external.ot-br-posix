@@ -28,10 +28,9 @@
 
 package com.android.server.thread.openthread;
 
-import com.android.server.thread.openthread.DnsTxtAttribute;
-
-/** Receives the information of a resolved service instance. */
-oneway interface INsdResolveServiceCallback {
-    void onServiceResolved(in String hostname, int netifIndex, in String name, in String type,
-            int port, in List<String> addresses, in List<DnsTxtAttribute> txt, int ttlSeconds);
+/** Receives the output of an ot-ctl command which may fail with an {@code otError} code. */
+oneway interface IOtOutputReceiver {
+    void onOutput(in String output);
+    void onComplete();
+    void onError(int errorCode, String errorMessage);
 }
