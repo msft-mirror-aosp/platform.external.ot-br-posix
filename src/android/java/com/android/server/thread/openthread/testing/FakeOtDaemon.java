@@ -54,7 +54,6 @@ import com.android.server.thread.openthread.OtDaemonConfiguration;
 import com.android.server.thread.openthread.OtDaemonState;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -106,7 +105,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mState.threadEnabled = OT_STATE_DISABLED;
         mState.ephemeralKeyState = OT_EPHEMERAL_KEY_DISABLED;
         mState.ephemeralKeyPasscode = "";
-        mState.ephemeralKeyExpiryMillis = 0;
+        mState.ephemeralKeyLifetimeMillis = 0;
         mBbrState = new BackboneRouterState();
         mBbrState.multicastForwardingEnabled = false;
         mBbrState.listeningAddresses = new ArrayList<>();
@@ -307,7 +306,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
                 () -> {
                     mState.ephemeralKeyState = OT_EPHEMERAL_KEY_ENABLED;
                     mState.ephemeralKeyPasscode = "123456789";
-                    mState.ephemeralKeyExpiryMillis = Instant.now().toEpochMilli() + lifetimeMillis;
+                    mState.ephemeralKeyLifetimeMillis = lifetimeMillis;
                     try {
                         receiver.onSuccess();
                     } catch (RemoteException e) {
@@ -322,7 +321,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
                 () -> {
                     mState.ephemeralKeyState = OT_EPHEMERAL_KEY_DISABLED;
                     mState.ephemeralKeyPasscode = "";
-                    mState.ephemeralKeyExpiryMillis = 0;
+                    mState.ephemeralKeyLifetimeMillis = 0;
                     try {
                         receiver.onSuccess();
                     } catch (RemoteException e) {
