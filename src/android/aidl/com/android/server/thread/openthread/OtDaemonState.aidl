@@ -51,4 +51,16 @@ parcelable OtDaemonState {
 
     // The Thread enabled state OT_STATE_DISABLED, OT_STATE_ENABLED and OT_STATE_DISABLING.
     int threadEnabled;
+
+    // The ephemeral key state EPHEMERAL_KEY_DISABLED, EPHEMERAL_KEY_ENABLED, EPHEMERAL_KEY_IN_USE
+    // defined in {@link ThreadNetworkController}.
+    int ephemeralKeyState;
+
+    // The ephemeral key passcode string, valid when ephemeralKeyState is not
+    // EPHEMERAL_KEY_DISABLED.
+    String ephemeralKeyPasscode;
+
+    // The ephemeral key expiry time in milliseconds since epoch, valid when
+    // ephemeralKeyState is not EPHEMERAL_KEY_DISABLED.
+    long ephemeralKeyExpiryMillis;
 }
