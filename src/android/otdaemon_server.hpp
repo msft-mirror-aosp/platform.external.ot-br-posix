@@ -144,6 +144,10 @@ private:
     void   setInfraLinkInterfaceNameInternal(const std::string                        &aInterfaceName,
                                              int                                       aIcmp6SocketFd,
                                              const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status setInfraLinkNat64Prefix(const std::optional<std::string>         &aNat64Prefix,
+                                   const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   setInfraLinkNat64PrefixInternal(const std::string                        &aNat64Prefix,
+                                           const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status getChannelMasks(const std::shared_ptr<IChannelMasksReceiver> &aReceiver) override;
     void   getChannelMasksInternal(const std::shared_ptr<IChannelMasksReceiver> &aReceiver);
     Status runOtCtlCommand(const std::string                        &aCommand,
@@ -152,6 +156,12 @@ private:
     void   runOtCtlCommandInternal(const std::string                        &aCommand,
                                    const bool                                aIsInteractive,
                                    const std::shared_ptr<IOtOutputReceiver> &aReceiver);
+    Status activateEphemeralKeyMode(const int64_t                             lifetimeMillis,
+                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   activateEphemeralKeyModeInternal(const int64_t                             lifetimeMillis,
+                                            const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status deactivateEphemeralKeyMode(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   deactivateEphemeralKeyModeInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
 
     bool        RefreshOtDaemonState(otChangedFlags aFlags);
     void        LeaveGracefully(const LeaveCallback &aReceiver);
@@ -176,8 +186,11 @@ private:
     bool                RefreshOnMeshPrefixes();
     Ipv6AddressInfo     ConvertToAddressInfo(const otNetifAddress &aAddress);
     Ipv6AddressInfo     ConvertToAddressInfo(const otNetifMulticastAddress &aAddress);
-    void UpdateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    void EnableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void        UpdateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void        EnableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    static void HandleEpskcStateChanged(void *aBinderServer);
+    void        HandleEpskcStateChanged(void);
+    int         GetEphemeralKeyState();
 
     static OtDaemonServer *sOtDaemonServer;
 

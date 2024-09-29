@@ -31,6 +31,7 @@
 #include "android/otdaemon_server.hpp"
 
 #include <net/if.h>
+#include <random>
 #include <string.h>
 
 #include <algorithm>
@@ -48,6 +49,7 @@
 #include <openthread/openthread-system.h>
 #include <openthread/platform/infra_if.h>
 #include <openthread/platform/radio.h>
+#include "openthread/border_agent.h"
 
 #include "agent/vendor.hpp"
 #include "android/otdaemon_telemetry.hpp"
@@ -142,6 +144,7 @@ void OtDaemonServer::Init(void)
     otIcmp6SetEchoMode(GetOtInstance(), OT_ICMP6_ECHO_HANDLER_DISABLED);
     otIp6SetReceiveFilterEnabled(GetOtInstance(), true);
     otNat64SetReceiveIp4Callback(GetOtInstance(), &OtDaemonServer::ReceiveCallback, this);
+    mBorderAgent.AddEphemeralKeyChangedCallback([this]() { HandleEpskcStateChanged(); });
 
     mTaskRunner.Post(kTelemetryCheckInterval, [this]() { PushTelemetryIfConditionMatch(); });
 }
@@ -430,6 +433,44 @@ exit:
     }
 }
 
+void OtDaemonServer::HandleEpskcStateChanged(void *aBinderServer)
+{
+    static_cast<OtDaemonServer *>(aBinderServer)->HandleEpskcStateChanged();
+}
+
+void OtDaemonServer::HandleEpskcStateChanged()
+{
+    mState.ephemeralKeyState = GetEphemeralKeyState();
+
+    if (mCallback != nullptr)
+    {
+        mCallback->onStateChanged(mState, -1);
+    }
+}
+
+int OtDaemonServer::GetEphemeralKeyState()
+{
+    int ephemeralKeyState;
+
+    if (otBorderAgentIsEphemeralKeyActive(GetOtInstance()))
+    {
+        if (otBorderAgentGetState(GetOtInstance()) == OT_BORDER_AGENT_STATE_ACTIVE)
+        {
+            ephemeralKeyState = OT_EPHEMERAL_KEY_IN_USE;
+        }
+        else
+        {
+            ephemeralKeyState = OT_EPHEMERAL_KEY_ENABLED;
+        }
+    }
+    else
+    {
+        ephemeralKeyState = OT_EPHEMERAL_KEY_DISABLED;
+    }
+
+    return ephemeralKeyState;
+}
+
 BackboneRouterState OtDaemonServer::GetBackboneRouterState()
 {
     BackboneRouterState                       state;
@@ -675,6 +716,82 @@ exit:
     {
         PropagateResult(error, message, aReceiver);
     }
+}
+
+Status OtDaemonServer::activateEphemeralKeyMode(const int64_t                             lifetimeMillis,
+                                                const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    mTaskRunner.Post(
+        [lifetimeMillis, aReceiver, this]() { activateEphemeralKeyModeInternal(lifetimeMillis, aReceiver); });
+
+    return Status::ok();
+}
+
+void OtDaemonServer::activateEphemeralKeyModeInternal(const int64_t                             lifetimeMillis,
+                                                      const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    int         error = OT_ERROR_NONE;
+    std::string message;
+    std::string passcode;
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+    VerifyOrExit(isAttached(), error = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_FAILED_PRECONDITION),
+                 message = "Cannot activate ephemeral key mode when this device is not attached to Thread network");
+    VerifyOrExit(!otBorderAgentIsEphemeralKeyActive(GetOtInstance()), error = OT_ERROR_BUSY,
+                 message = "ephemeral key mode is already activated");
+
+    otbrLogInfo("Activating ephemeral key mode with %lldms lifetime.", lifetimeMillis);
+
+    SuccessOrExit(error = mBorderAgent.CreateEphemeralKey(passcode), message = "Failed to create ephemeral key");
+    SuccessOrExit(error   = otBorderAgentSetEphemeralKey(GetOtInstance(), passcode.c_str(),
+                                                         static_cast<uint32_t>(lifetimeMillis), 0 /* aUdpPort */),
+                  message = "Failed to set ephemeral key");
+
+exit:
+    if (aReceiver != nullptr)
+    {
+        if (error == OT_ERROR_NONE)
+        {
+            mState.ephemeralKeyPasscode     = passcode;
+            // TODO: change to monotonic clock
+            mState.ephemeralKeyExpiryMillis = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                  std::chrono::system_clock::now().time_since_epoch())
+                                                  .count() +
+                                              lifetimeMillis;
+            aReceiver->onSuccess();
+        }
+        else
+        {
+            aReceiver->onError(error, message);
+        }
+    }
+}
+
+Status OtDaemonServer::deactivateEphemeralKeyMode(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    mTaskRunner.Post([aReceiver, this]() { deactivateEphemeralKeyModeInternal(aReceiver); });
+
+    return Status::ok();
+}
+
+void OtDaemonServer::deactivateEphemeralKeyModeInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    int         error = OT_ERROR_NONE;
+    std::string message;
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+    otbrLogInfo("Deactivating ephemeral key mode.");
+
+    VerifyOrExit(otBorderAgentIsEphemeralKeyActive(GetOtInstance()), error = OT_ERROR_NONE);
+
+    // TODO: terminate active connections
+    VerifyOrExit(otBorderAgentGetState(GetOtInstance()) != OT_BORDER_AGENT_STATE_ACTIVE, error = OT_ERROR_BUSY,
+                 message = "border agent has active secure session");
+
+    otBorderAgentClearEphemeralKey(GetOtInstance());
+
+exit:
+    PropagateResult(error, message, aReceiver);
 }
 
 Status OtDaemonServer::registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t listenerId)
@@ -1186,6 +1303,16 @@ Status OtDaemonServer::runOtCtlCommand(const std::string                        
     return Status::ok();
 }
 
+Status OtDaemonServer::setInfraLinkNat64Prefix(const std::optional<std::string>         &aNat64Prefix,
+                                               const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    mTaskRunner.Post([nat64Prefix = aNat64Prefix.value_or(""), aReceiver, this]() {
+        setInfraLinkNat64PrefixInternal(nat64Prefix, aReceiver);
+    });
+
+    return Status::ok();
+}
+
 void OtDaemonServer::runOtCtlCommandInternal(const std::string                        &aCommand,
                                              const bool                                aIsInteractive,
                                              const std::shared_ptr<IOtOutputReceiver> &aReceiver)
@@ -1202,6 +1329,23 @@ void OtDaemonServer::runOtCtlCommandInternal(const std::string                  
         otCliInit(GetOtInstance(), OtDaemonServer::OtCtlCommandCallback, this);
         otCliInputLine(command.data());
     }
+}
+
+void OtDaemonServer::setInfraLinkNat64PrefixInternal(const std::string                        &aNat64Prefix,
+                                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    otError     error = OT_ERROR_NONE;
+    std::string message;
+
+    otbrLogInfo("Setting infra link NAT64 prefix: %s", aNat64Prefix.c_str());
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+
+    mInfraLinkState.nat64Prefix = aNat64Prefix;
+    NotifyNat64PrefixDiscoveryDone();
+
+exit:
+    PropagateResult(error, message, aReceiver);
 }
 
 static int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)
@@ -1275,12 +1419,11 @@ exit:
 
 void OtDaemonServer::NotifyNat64PrefixDiscoveryDone(void)
 {
-    // TODO: b/357479886 - Use the discovered AIL NAT64 prefix. For now we just assume no NAT64 prefix is on AIL so the
-    // Border Router will locally generate a NAT64 prefix and use it.
-    otIp6Prefix prefix{};
+    otIp6Prefix nat64Prefix{};
     uint32_t    infraIfIndex = if_nametoindex(mInfraLinkState.interfaceName.value_or("").c_str());
 
-    otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &prefix);
+    otIp6PrefixFromString(mInfraLinkState.nat64Prefix.value_or("").c_str(), &nat64Prefix);
+    otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &nat64Prefix);
 
 exit:
     return;

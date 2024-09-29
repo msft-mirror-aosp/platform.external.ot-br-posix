@@ -58,6 +58,13 @@ oneway interface IOtDaemon {
     /** Thread radio is being disabled. */
     const int OT_STATE_DISABLING = 2;
 
+    /** The ephemeral key is disabled. */
+    const int OT_EPHEMERAL_KEY_DISABLED = 0;
+    /** The ephemeral key is enabled. */
+    const int OT_EPHEMERAL_KEY_ENABLED = 1;
+    /** The ephemeral key is in use. */
+    const int OT_EPHEMERAL_KEY_IN_USE = 2;
+
     enum ErrorCode {
         // Converts to ThreadNetworkException#ERROR_FAILED_PRECONDITION
         OT_ERROR_FAILED_PRECONDITION = -3,
@@ -183,6 +190,16 @@ oneway interface IOtDaemon {
             in ParcelFileDescriptor icmp6Socket, in IOtStatusReceiver receiver);
 
     /**
+     * Sets the NAT64 prefix discovered from infrastructure link.
+     *
+     * @param nat64Prefix the NAT64 prefix discovered from the infra link
+     * @param receiver the status receiver
+     *
+     */
+    oneway void setInfraLinkNat64Prefix(
+            in @nullable String nat64Prefix, in IOtStatusReceiver receiver);
+
+    /**
      * Gets the supported and preferred channel masks.
      *
      * @param receiver the receiver to receive result of this operation
@@ -207,6 +224,24 @@ oneway interface IOtDaemon {
      */
     oneway void runOtCtlCommand(
             in String command, in boolean isInteractive, in IOtOutputReceiver receiver);
+
+    /**
+     * Activates the ephemeral key mode.
+     *
+     * @param lifetimeMillis the lifetime of the ephemeral key in milliseconds
+     * @param receiver the status receiver
+     */
+    void activateEphemeralKeyMode(in long lifetimeMillis, in IOtStatusReceiver receiver);
+
+    /**
+     * Deactivates the ephemeral key mode.
+     *
+     * This will always succeed. If there are active secure sessions with the ephemeral key, the
+     * sessions will be terminated.
+     *
+     * @param receiver the status receiver
+     */
+    void deactivateEphemeralKeyMode(in IOtStatusReceiver receiver);
 
     // TODO: add Border Router APIs
 }

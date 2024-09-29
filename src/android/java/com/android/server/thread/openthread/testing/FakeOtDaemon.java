@@ -28,6 +28,8 @@
 
 package com.android.server.thread.openthread.testing;
 
+import static com.android.server.thread.openthread.IOtDaemon.OT_EPHEMERAL_KEY_DISABLED;
+import static com.android.server.thread.openthread.IOtDaemon.OT_EPHEMERAL_KEY_ENABLED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_DISABLED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_ENABLED;
 
@@ -52,6 +54,7 @@ import com.android.server.thread.openthread.OtDaemonConfiguration;
 import com.android.server.thread.openthread.OtDaemonState;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -101,6 +104,9 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mState.activeDatasetTlvs = new byte[0];
         mState.pendingDatasetTlvs = new byte[0];
         mState.threadEnabled = OT_STATE_DISABLED;
+        mState.ephemeralKeyState = OT_EPHEMERAL_KEY_DISABLED;
+        mState.ephemeralKeyPasscode = "";
+        mState.ephemeralKeyExpiryMillis = 0;
         mBbrState = new BackboneRouterState();
         mBbrState.multicastForwardingEnabled = false;
         mBbrState.listeningAddresses = new ArrayList<>();
@@ -295,6 +301,36 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
                 JOIN_DELAY.toMillis());
     }
 
+    @Override
+    public void activateEphemeralKeyMode(long lifetimeMillis, IOtStatusReceiver receiver) {
+        mHandler.post(
+                () -> {
+                    mState.ephemeralKeyState = OT_EPHEMERAL_KEY_ENABLED;
+                    mState.ephemeralKeyPasscode = "123456789";
+                    mState.ephemeralKeyExpiryMillis = Instant.now().toEpochMilli() + lifetimeMillis;
+                    try {
+                        receiver.onSuccess();
+                    } catch (RemoteException e) {
+                        throw new AssertionError(e);
+                    }
+                });
+    }
+
+    @Override
+    public void deactivateEphemeralKeyMode(IOtStatusReceiver receiver) {
+        mHandler.post(
+                () -> {
+                    mState.ephemeralKeyState = OT_EPHEMERAL_KEY_DISABLED;
+                    mState.ephemeralKeyPasscode = "";
+                    mState.ephemeralKeyExpiryMillis = 0;
+                    try {
+                        receiver.onSuccess();
+                    } catch (RemoteException e) {
+                        throw new AssertionError(e);
+                    }
+                });
+    }
+
     private OtDaemonState makeCopy(OtDaemonState state) {
         OtDaemonState copyState = new OtDaemonState();
         copyState.isInterfaceUp = state.isInterfaceUp;
@@ -356,7 +392,14 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
             String interfaceName, ParcelFileDescriptor fd, IOtStatusReceiver receiver)
             throws RemoteException {
         throw new UnsupportedOperationException(
-                "FakeOtDaemon#setInfraLinkState is not implemented!");
+                "FakeOtDaemon#setInfraLinkInterfaceName is not implemented!");
+    }
+
+    @Override
+    public void setInfraLinkNat64Prefix(String nat64Prefix, IOtStatusReceiver receiver)
+            throws RemoteException {
+        throw new UnsupportedOperationException(
+                "FakeOtDaemon#setInfraLinkNat64Prefix is not implemented!");
     }
 
     @Override
