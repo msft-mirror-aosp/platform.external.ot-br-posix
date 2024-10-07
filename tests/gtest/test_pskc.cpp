@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2023, The OpenThread Authors.
+ *    Copyright (c) 2017, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,15 +26,40 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-package com.android.server.thread.openthread;
+#include <vector>
 
-/**
- * The Thread Border Router configuration.
- *
- */
-@JavaOnlyImmutable
-@JavaDerive(equals=true, toString=true)
-parcelable BorderRouterConfiguration {
-    boolean isBorderRoutingEnabled; // Whether the border routing feature is enabled.
-    String infraInterfaceName; // The name of infra network interface.
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+using ::testing::ElementsAreArray;
+
+#include "utils/pskc.hpp"
+
+TEST(Pskc, Test123456_0001020304050607_OpenThread)
+{
+    otbr::Psk::Pskc pskc;
+
+    uint8_t extpanid[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+    uint8_t expected[] = {
+        0xb7, 0x83, 0x81, 0x27, 0x89, 0x91, 0x1e, 0xb4, 0xea, 0x76, 0x59, 0x6c, 0x9c, 0xed, 0x2a, 0x69,
+    };
+
+    const uint8_t *actual = pskc.ComputePskc(extpanid, "OpenThread", "123456");
+    EXPECT_THAT(std::vector<uint8_t>(actual, actual + OT_PSKC_LENGTH), ElementsAreArray(expected));
+}
+
+TEST(Pskc, Test_TruncatedNetworkNamePskc_OpenThread)
+{
+    otbr::Psk::Pskc pskc;
+    uint8_t         extpanid[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+    uint8_t         expected[OT_PSKC_LENGTH];
+
+    // First run with shorter network name (max)
+    const uint8_t *actual = pskc.ComputePskc(extpanid, "OpenThread123456", "123456");
+    memcpy(expected, actual, OT_PSKC_LENGTH);
+
+    // Second run with longer network name that gets truncated
+    actual = pskc.ComputePskc(extpanid, "OpenThread123456NetworkNameThatExceedsBuffer", "123456");
+
+    EXPECT_THAT(std::vector<uint8_t>(actual, actual + OT_PSKC_LENGTH), ElementsAreArray(expected));
 }

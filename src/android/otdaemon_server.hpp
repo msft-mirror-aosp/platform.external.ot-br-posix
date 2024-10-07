@@ -36,6 +36,7 @@
 #include <aidl/com/android/server/thread/openthread/BnOtDaemon.h>
 #include <aidl/com/android/server/thread/openthread/INsdPublisher.h>
 #include <aidl/com/android/server/thread/openthread/IOtDaemon.h>
+#include <aidl/com/android/server/thread/openthread/InfraLinkState.h>
 #include <openthread/instance.h>
 #include <openthread/ip6.h>
 
@@ -54,15 +55,17 @@ using Status               = ::ndk::ScopedAStatus;
 using aidl::android::net::thread::ChannelMaxPower;
 using aidl::com::android::server::thread::openthread::BackboneRouterState;
 using aidl::com::android::server::thread::openthread::BnOtDaemon;
-using aidl::com::android::server::thread::openthread::BorderRouterConfiguration;
 using aidl::com::android::server::thread::openthread::IChannelMasksReceiver;
+using aidl::com::android::server::thread::openthread::InfraLinkState;
 using aidl::com::android::server::thread::openthread::INsdPublisher;
 using aidl::com::android::server::thread::openthread::IOtDaemon;
 using aidl::com::android::server::thread::openthread::IOtDaemonCallback;
+using aidl::com::android::server::thread::openthread::IOtOutputReceiver;
 using aidl::com::android::server::thread::openthread::IOtStatusReceiver;
 using aidl::com::android::server::thread::openthread::Ipv6AddressInfo;
 using aidl::com::android::server::thread::openthread::MeshcopTxtAttributes;
 using aidl::com::android::server::thread::openthread::OnMeshPrefixConfig;
+using aidl::com::android::server::thread::openthread::OtDaemonConfiguration;
 using aidl::com::android::server::thread::openthread::OtDaemonState;
 
 class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendor::VendorServer
@@ -131,14 +134,34 @@ private:
                                const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setChannelMaxPowersInternal(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
                                        const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    Status configureBorderRouter(const BorderRouterConfiguration          &aBorderRouterConfiguration,
-                                 const ScopedFileDescriptor               &aInfraInterfaceIcmp6Socket,
-                                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   configureBorderRouterInternal(const BorderRouterConfiguration          &aBorderRouterConfiguration,
-                                         int                                       aIcmp6SocketFd,
-                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status setConfiguration(const OtDaemonConfiguration              &aConfiguration,
+                            const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   setConfigurationInternal(const OtDaemonConfiguration              &aConfiguration,
+                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status setInfraLinkInterfaceName(const std::optional<std::string>         &aInterfaceName,
+                                     const ScopedFileDescriptor               &aIcmp6Socket,
+                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   setInfraLinkInterfaceNameInternal(const std::string                        &aInterfaceName,
+                                             int                                       aIcmp6SocketFd,
+                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status setInfraLinkNat64Prefix(const std::optional<std::string>         &aNat64Prefix,
+                                   const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   setInfraLinkNat64PrefixInternal(const std::string                        &aNat64Prefix,
+                                           const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status getChannelMasks(const std::shared_ptr<IChannelMasksReceiver> &aReceiver) override;
     void   getChannelMasksInternal(const std::shared_ptr<IChannelMasksReceiver> &aReceiver);
+    Status runOtCtlCommand(const std::string                        &aCommand,
+                           const bool                                aIsInteractive,
+                           const std::shared_ptr<IOtOutputReceiver> &aReceiver);
+    void   runOtCtlCommandInternal(const std::string                        &aCommand,
+                                   const bool                                aIsInteractive,
+                                   const std::shared_ptr<IOtOutputReceiver> &aReceiver);
+    Status activateEphemeralKeyMode(const int64_t                             lifetimeMillis,
+                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   activateEphemeralKeyModeInternal(const int64_t                             lifetimeMillis,
+                                            const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status deactivateEphemeralKeyMode(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   deactivateEphemeralKeyModeInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
 
     bool        RefreshOtDaemonState(otChangedFlags aFlags);
     void        LeaveGracefully(const LeaveCallback &aReceiver);
@@ -152,6 +175,8 @@ private:
     static void         AddressCallback(const otIp6AddressInfo *aAddressInfo, bool aIsAdded, void *aBinderServer);
     static void         ReceiveCallback(otMessage *aMessage, void *aBinderServer);
     void                ReceiveCallback(otMessage *aMessage);
+    static int          OtCtlCommandCallback(void *aBinderServer, const char *aFormat, va_list aArguments);
+    int                 OtCtlCommandCallback(const char *aFormat, va_list aArguments);
     void                TransmitCallback(void);
     BackboneRouterState GetBackboneRouterState(void);
     static void         HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
@@ -161,8 +186,11 @@ private:
     bool                RefreshOnMeshPrefixes();
     Ipv6AddressInfo     ConvertToAddressInfo(const otNetifAddress &aAddress);
     Ipv6AddressInfo     ConvertToAddressInfo(const otNetifMulticastAddress &aAddress);
-    void UpdateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    void EnableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void        UpdateThreadEnabledState(const int aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void        EnableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    static void HandleEpskcStateChanged(void *aBinderServer);
+    void        HandleEpskcStateChanged(void);
+    int         GetEphemeralKeyState();
 
     static OtDaemonServer *sOtDaemonServer;
 
@@ -179,11 +207,16 @@ private:
     std::shared_ptr<IOtStatusReceiver> mJoinReceiver;
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
-    BorderRouterConfiguration          mBorderRouterConfiguration;
-    int                                mInfraIcmp6Socket;
+    bool                               mIsOtCtlInteractiveMode;
+    bool                               mIsOtCtlOutputComplete;
+    std::shared_ptr<IOtOutputReceiver> mOtCtlOutputReceiver;
+    OtDaemonConfiguration              mConfiguration;
     std::set<OnMeshPrefixConfig>       mOnMeshPrefixes;
-    static constexpr Seconds           kTelemetryCheckInterval           = Seconds(600);          // 600 seconds
-    static constexpr Seconds           kTelemetryUploadIntervalThreshold = Seconds(60 * 60 * 12); // 12 hours
+    InfraLinkState                     mInfraLinkState;
+    int                                mInfraIcmp6Socket;
+
+    static constexpr Seconds kTelemetryCheckInterval           = Seconds(600);          // 600 seconds
+    static constexpr Seconds kTelemetryUploadIntervalThreshold = Seconds(60 * 60 * 12); // 12 hours
 };
 
 } // namespace Android

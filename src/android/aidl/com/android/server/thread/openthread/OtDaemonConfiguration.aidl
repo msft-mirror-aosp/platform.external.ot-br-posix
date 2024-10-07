@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2017, The OpenThread Authors.
+ *    Copyright (c) 2023, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,9 +26,9 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <CppUTest/CommandLineTestRunner.h>
+package com.android.server.thread.openthread;
 
-int main(int argc, const char *argv[])
-{
-    return RUN_ALL_TESTS(argc, argv);
-}
+/** The ot-daemon configuration. */
+@JavaOnlyImmutable
+@JavaDerive(equals=true, toString=true)
+parcelable OtDaemonConfiguration {}

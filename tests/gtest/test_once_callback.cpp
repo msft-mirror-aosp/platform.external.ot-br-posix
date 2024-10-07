@@ -26,24 +26,22 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <gtest/gtest.h>
+
 #include "common/callback.hpp"
-
-#include <CppUTest/TestHarness.h>
-
-TEST_GROUP(IsNull){};
 
 TEST(IsNull, NullptrIsNull)
 {
     otbr::OnceCallback<void(void)> noop = nullptr;
 
-    CHECK_TRUE(noop.IsNull());
+    EXPECT_TRUE(noop.IsNull());
 }
 
 TEST(IsNull, NonNullptrIsNotNull)
 {
     otbr::OnceCallback<void(void)> noop = [](void) {};
 
-    CHECK_FALSE(noop.IsNull());
+    EXPECT_FALSE(noop.IsNull());
 }
 
 TEST(IsNull, IsNullAfterInvoking)
@@ -52,10 +50,8 @@ TEST(IsNull, IsNullAfterInvoking)
 
     std::move(square)(5);
 
-    CHECK_TRUE(square.IsNull());
+    EXPECT_TRUE(square.IsNull());
 }
-
-TEST_GROUP(VerifyInvocation){};
 
 TEST(VerifyInvocation, CallbackResultIsExpected)
 {
@@ -63,5 +59,5 @@ TEST(VerifyInvocation, CallbackResultIsExpected)
 
     int ret = std::move(square)(5);
 
-    CHECK_EQUAL(ret, 25);
+    EXPECT_EQ(ret, 25);
 }
