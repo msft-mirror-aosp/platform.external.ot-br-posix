@@ -752,7 +752,7 @@ exit:
     {
         if (error == OT_ERROR_NONE)
         {
-            mState.ephemeralKeyPasscode     = passcode;
+            mState.ephemeralKeyPasscode = passcode;
             // TODO: change to monotonic clock
             mState.ephemeralKeyExpiryMillis = std::chrono::duration_cast<std::chrono::milliseconds>(
                                                   std::chrono::system_clock::now().time_since_epoch())
@@ -784,10 +784,7 @@ void OtDaemonServer::deactivateEphemeralKeyModeInternal(const std::shared_ptr<IO
 
     VerifyOrExit(otBorderAgentIsEphemeralKeyActive(GetOtInstance()), error = OT_ERROR_NONE);
 
-    // TODO: terminate active connections
-    VerifyOrExit(otBorderAgentGetState(GetOtInstance()) != OT_BORDER_AGENT_STATE_ACTIVE, error = OT_ERROR_BUSY,
-                 message = "border agent has active secure session");
-
+    otBorderAgentDisconnect(GetOtInstance());
     otBorderAgentClearEphemeralKey(GetOtInstance());
 
 exit:
