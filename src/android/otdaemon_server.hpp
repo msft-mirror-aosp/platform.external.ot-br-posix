@@ -103,11 +103,13 @@ private:
 
     Status initialize(const ScopedFileDescriptor               &aTunFd,
                       const bool                                enabled,
+                      const OtDaemonConfiguration              &aConfig,
                       const std::shared_ptr<INsdPublisher>     &aNsdPublisher,
                       const MeshcopTxtAttributes               &aMeshcopTxts,
                       const std::shared_ptr<IOtDaemonCallback> &aCallback,
                       const std::string                        &aCountryCode) override;
     void   initializeInternal(const bool                                enabled,
+                              const OtDaemonConfiguration              &aConfig,
                               const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                               const MeshcopTxtAttributes               &aMeshcopTxts,
                               const std::shared_ptr<IOtDaemonCallback> &aCallback,

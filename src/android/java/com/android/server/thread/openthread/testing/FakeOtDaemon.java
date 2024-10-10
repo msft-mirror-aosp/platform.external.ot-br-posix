@@ -28,6 +28,8 @@
 
 package com.android.server.thread.openthread.testing;
 
+import static com.android.server.thread.openthread.IOtDaemon.ErrorCode.OT_ERROR_INVALID_STATE;
+import static com.android.server.thread.openthread.IOtDaemon.ErrorCode.OT_ERROR_NOT_IMPLEMENTED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_EPHEMERAL_KEY_DISABLED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_EPHEMERAL_KEY_ENABLED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_DISABLED;
@@ -90,6 +92,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable private RemoteException mJoinException;
     @Nullable private RemoteException mRunOtCtlCommandException;
     @Nullable private String mCountryCode;
+    @Nullable private OtDaemonConfiguration mConfiguration;
 
     public FakeOtDaemon(Handler handler) {
         mHandler = handler;
@@ -110,6 +113,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mBbrState = new BackboneRouterState();
         mBbrState.multicastForwardingEnabled = false;
         mBbrState.listeningAddresses = new ArrayList<>();
+        mConfiguration = null;
 
         mTunFd = null;
         mNsdPublisher = null;
@@ -152,6 +156,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     public void initialize(
             ParcelFileDescriptor tunFd,
             boolean enabled,
+            OtDaemonConfiguration config,
             INsdPublisher nsdPublisher,
             MeshcopTxtAttributes overriddenMeshcopTxts,
             IOtDaemonCallback callback,
@@ -171,6 +176,8 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
                 List.copyOf(overriddenMeshcopTxts.nonStandardTxtEntries);
 
         registerStateCallback(callback, PROACTIVE_LISTENER_ID);
+
+        setConfiguration(config, null /* receiver */);
     }
 
     /** Returns {@code true} if {@link initialize} has been called to initialize this object. */
@@ -383,8 +390,15 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Override
     public void setConfiguration(OtDaemonConfiguration config, IOtStatusReceiver receiver)
             throws RemoteException {
-        throw new UnsupportedOperationException(
-                "FakeOtDaemon#setConfiguration is not implemented!");
+        mConfiguration = config;
+        // TODO: b/343814054 - Support enabling/disabling DHCPv6-PD.
+        if (mConfiguration.dhcpv6PdEnabled) {
+            receiver.onError(OT_ERROR_NOT_IMPLEMENTED, "DHCPv6-PD is not supported");
+            return ;
+        }
+        if (receiver != null) {
+            receiver.onSuccess();
+        }
     }
 
     @Override
