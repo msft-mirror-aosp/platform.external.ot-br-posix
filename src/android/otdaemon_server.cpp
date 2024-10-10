@@ -606,6 +606,7 @@ void OtDaemonServer::initializeInternal(const bool                              
     Mdns::Publisher::TxtList nonStandardTxts;
     otbrError                error;
 
+    setConfigurationInternal(aConfig, nullptr /* aReceiver */);
     setCountryCodeInternal(aCountryCode, nullptr /* aReceiver */);
     registerStateCallbackInternal(aCallback, -1 /* listenerId */);
 
@@ -632,8 +633,6 @@ void OtDaemonServer::initializeInternal(const bool                              
     {
         UpdateThreadEnabledState(OT_STATE_DISABLED, nullptr /* aReceiver */);
     }
-
-    setConfiguration(aConfig, nullptr /* aReceiver */);
 }
 
 Status OtDaemonServer::terminate(void)
