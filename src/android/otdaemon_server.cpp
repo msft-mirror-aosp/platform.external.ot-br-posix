@@ -179,7 +179,7 @@ void OtDaemonServer::StateCallback(otChangedFlags aFlags)
         }
         else
         {
-            mCallback->onStateChanged(mState, -1);
+            NotifyStateChanged(/* aListenerId*/ -1);
         }
     }
 
@@ -438,17 +438,33 @@ void OtDaemonServer::HandleEpskcStateChanged(void *aBinderServer)
     static_cast<OtDaemonServer *>(aBinderServer)->HandleEpskcStateChanged();
 }
 
-void OtDaemonServer::HandleEpskcStateChanged()
+void OtDaemonServer::HandleEpskcStateChanged(void)
 {
     mState.ephemeralKeyState = GetEphemeralKeyState();
 
+    NotifyStateChanged(/* aListenerId*/ -1);
+}
+
+void OtDaemonServer::NotifyStateChanged(int64_t aListenerId)
+{
+    if (mState.ephemeralKeyState == OT_EPHEMERAL_KEY_DISABLED)
+    {
+        mState.ephemeralKeyLifetimeMillis = 0;
+    }
+    else
+    {
+        mState.ephemeralKeyLifetimeMillis =
+            mEphemeralKeyExpiryMillis -
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                .count();
+    }
     if (mCallback != nullptr)
     {
-        mCallback->onStateChanged(mState, -1);
+        mCallback->onStateChanged(mState, aListenerId);
     }
 }
 
-int OtDaemonServer::GetEphemeralKeyState()
+int OtDaemonServer::GetEphemeralKeyState(void)
 {
     int ephemeralKeyState;
 
@@ -654,10 +670,7 @@ void OtDaemonServer::UpdateThreadEnabledState(const int enabled, const std::shar
         break;
     }
 
-    if (mCallback != nullptr)
-    {
-        mCallback->onStateChanged(mState, -1);
-    }
+    NotifyStateChanged(/* aListenerId*/ -1);
 
 exit:
     return;
@@ -757,11 +770,10 @@ exit:
         if (error == OT_ERROR_NONE)
         {
             mState.ephemeralKeyPasscode = passcode;
-            // TODO: change to monotonic clock
-            mState.ephemeralKeyExpiryMillis = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                  std::chrono::system_clock::now().time_since_epoch())
-                                                  .count() +
-                                              lifetimeMillis;
+            mEphemeralKeyExpiryMillis   = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                            std::chrono::steady_clock::now().time_since_epoch())
+                                            .count() +
+                                        lifetimeMillis;
             aReceiver->onSuccess();
         }
         else
@@ -816,7 +828,7 @@ void OtDaemonServer::registerStateCallbackInternal(const std::shared_ptr<IOtDaem
     // To ensure that a client app can get the latest correct state immediately when registering a
     // state callback, here needs to invoke the callback
     RefreshOtDaemonState(/* aFlags */ 0xffffffff);
-    mCallback->onStateChanged(mState, listenerId);
+    NotifyStateChanged(listenerId);
     mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
 
 exit:
