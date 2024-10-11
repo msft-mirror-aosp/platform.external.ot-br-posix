@@ -60,7 +60,7 @@ parcelable OtDaemonState {
     // EPHEMERAL_KEY_DISABLED.
     String ephemeralKeyPasscode;
 
-    // The ephemeral key expiry time in milliseconds since epoch, valid when
-    // ephemeralKeyState is not EPHEMERAL_KEY_DISABLED.
-    long ephemeralKeyExpiryMillis;
+    // The ephemeral key lifetime in milliseconds, or 0 when ephemeralKeyState is
+    // EPHEMERAL_KEY_DISABLED.
+    long ephemeralKeyLifetimeMillis;
 }
