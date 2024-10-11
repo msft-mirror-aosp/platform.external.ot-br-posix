@@ -556,6 +556,7 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
 
 Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTunFd,
                                   const bool                                enabled,
+                                  const OtDaemonConfiguration              &aConfig,
                                   const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                   const MeshcopTxtAttributes               &aMeshcopTxts,
                                   const std::shared_ptr<IOtDaemonCallback> &aCallback,
@@ -571,14 +572,15 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
     mINsdPublisher = aINsdPublisher;
     mMeshcopTxts   = aMeshcopTxts;
 
-    mTaskRunner.Post([enabled, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, this]() {
-        initializeInternal(enabled, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode);
+    mTaskRunner.Post([enabled, aConfig, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, this]() {
+        initializeInternal(enabled, aConfig, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode);
     });
 
     return Status::ok();
 }
 
 void OtDaemonServer::initializeInternal(const bool                                enabled,
+                                        const OtDaemonConfiguration              &aConfig,
                                         const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                         const MeshcopTxtAttributes               &aMeshcopTxts,
                                         const std::shared_ptr<IOtDaemonCallback> &aCallback,
@@ -614,6 +616,8 @@ void OtDaemonServer::initializeInternal(const bool                              
     {
         UpdateThreadEnabledState(OT_STATE_DISABLED, nullptr /* aReceiver */);
     }
+
+    setConfiguration(aConfig, nullptr /* aReceiver */);
 }
 
 Status OtDaemonServer::terminate(void)
@@ -1217,13 +1221,18 @@ Status OtDaemonServer::setConfiguration(const OtDaemonConfiguration             
 void OtDaemonServer::setConfigurationInternal(const OtDaemonConfiguration              &aConfiguration,
                                               const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    otError     error = OT_ERROR_NONE;
+    int         error = OT_ERROR_NONE;
     std::string message;
 
-    otbrLogInfo("Configuring Border Router: %s", aConfiguration.toString().c_str());
+    otbrLogInfo("Set configuration: %s", aConfiguration.toString().c_str());
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
     VerifyOrExit(aConfiguration != mConfiguration);
+
+    // TODO: b/343814054 - Support enabling/disabling DHCPv6-PD.
+    VerifyOrExit(!aConfiguration.dhcpv6PdEnabled, error = OT_ERROR_NOT_IMPLEMENTED,
+                 message = "DHCPv6-PD is not supported");
+    otNat64SetEnabled(GetOtInstance(), aConfiguration.nat64Enabled);
 
     mConfiguration = aConfiguration;
 
