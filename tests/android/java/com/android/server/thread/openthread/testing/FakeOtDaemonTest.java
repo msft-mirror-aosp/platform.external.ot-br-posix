@@ -29,6 +29,7 @@
 package com.android.server.thread.openthread.testing;
 
 import static com.android.server.thread.openthread.IOtDaemon.ErrorCode.OT_ERROR_INVALID_STATE;
+import static com.android.server.thread.openthread.IOtDaemon.ErrorCode.OT_ERROR_NOT_IMPLEMENTED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_DISABLED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_ENABLED;
 import static com.android.server.thread.openthread.testing.FakeOtDaemon.OT_DEVICE_ROLE_DISABLED;
@@ -38,8 +39,12 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyByte;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -59,6 +64,7 @@ import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemonCallback;
 import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.MeshcopTxtAttributes;
+import com.android.server.thread.openthread.OtDaemonConfiguration;
 import com.android.server.thread.openthread.OtDaemonState;
 
 import org.junit.Before;
@@ -110,6 +116,7 @@ public final class FakeOtDaemonTest {
     @Mock private INsdPublisher mMockNsdPublisher;
     @Mock private IOtDaemonCallback mMockCallback;
     private MeshcopTxtAttributes mOverriddenMeshcopTxts;
+    private OtDaemonConfiguration mConfig;
 
     @Before
     public void setUp() {
@@ -122,6 +129,7 @@ public final class FakeOtDaemonTest {
         mOverriddenMeshcopTxts.vendorOui = TEST_VENDOR_OUI;
         mOverriddenMeshcopTxts.modelName = TEST_MODEL_NAME;
         mOverriddenMeshcopTxts.nonStandardTxtEntries = List.of();
+        mConfig = new OtDaemonConfiguration.Builder().build();
     }
 
     @Test
@@ -135,6 +143,7 @@ public final class FakeOtDaemonTest {
         mFakeOtDaemon.initialize(
                 mMockTunFd,
                 true,
+                mConfig,
                 mMockNsdPublisher,
                 mOverriddenMeshcopTxts,
                 mMockCallback,
@@ -163,6 +172,7 @@ public final class FakeOtDaemonTest {
         mFakeOtDaemon.initialize(
                 mMockTunFd,
                 true,
+                mConfig,
                 mMockNsdPublisher,
                 mOverriddenMeshcopTxts,
                 mMockCallback,
@@ -279,6 +289,32 @@ public final class FakeOtDaemonTest {
     }
 
     @Test
+    public void setConfiguration_validConfig_onSuccessIsInvoked() throws Exception {
+        IOtStatusReceiver receiver = mock(IOtStatusReceiver.class);
+        mConfig = new OtDaemonConfiguration.Builder().setNat64Enabled(true).build();
+        mFakeOtDaemon.setConfiguration(mConfig, receiver);
+        mTestLooper.dispatchAll();
+
+        verify(receiver).onSuccess();
+        verify(receiver, never()).onError(anyByte(), anyString());
+    }
+
+    @Test
+    public void setConfiguration_supportedConfig_onErrorIsInvoked() throws Exception {
+        IOtStatusReceiver receiver = mock(IOtStatusReceiver.class);
+        mConfig =
+                new OtDaemonConfiguration.Builder()
+                        .setNat64Enabled(true)
+                        .setDhcpv6PdEnabled(true)
+                        .build();
+        mFakeOtDaemon.setConfiguration(mConfig, receiver);
+        mTestLooper.dispatchAll();
+
+        verify(receiver, never()).onSuccess();
+        verify(receiver).onError(eq((int)OT_ERROR_NOT_IMPLEMENTED), anyString());
+    }
+
+    @Test
     public void getChannelMasks_succeed_onSuccessIsInvoked() throws Exception {
         final AtomicInteger supportedChannelMaskRef = new AtomicInteger();
         final AtomicInteger preferredChannelMaskRef = new AtomicInteger();
@@ -338,6 +374,7 @@ public final class FakeOtDaemonTest {
         mFakeOtDaemon.initialize(
                 mMockTunFd,
                 true,
+                mConfig,
                 mMockNsdPublisher,
                 mOverriddenMeshcopTxts,
                 mMockCallback,
