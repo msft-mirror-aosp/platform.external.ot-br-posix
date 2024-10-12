@@ -192,7 +192,8 @@ private:
     void        EnableThread(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     static void HandleEpskcStateChanged(void *aBinderServer);
     void        HandleEpskcStateChanged(void);
-    int         GetEphemeralKeyState();
+    int         GetEphemeralKeyState(void);
+    void        NotifyStateChanged(int64_t aListenerId);
 
     static OtDaemonServer *sOtDaemonServer;
 
@@ -216,6 +217,7 @@ private:
     std::set<OnMeshPrefixConfig>       mOnMeshPrefixes;
     InfraLinkState                     mInfraLinkState;
     int                                mInfraIcmp6Socket;
+    int64_t                            mEphemeralKeyExpiryMillis;
 
     static constexpr Seconds kTelemetryCheckInterval           = Seconds(600);          // 600 seconds
     static constexpr Seconds kTelemetryUploadIntervalThreshold = Seconds(60 * 60 * 12); // 12 hours
