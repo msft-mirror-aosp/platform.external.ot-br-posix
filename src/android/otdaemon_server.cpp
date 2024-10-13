@@ -179,7 +179,7 @@ void OtDaemonServer::StateCallback(otChangedFlags aFlags)
         }
         else
         {
-            mCallback->onStateChanged(mState, -1);
+            NotifyStateChanged(/* aListenerId*/ -1);
         }
     }
 
@@ -438,17 +438,33 @@ void OtDaemonServer::HandleEpskcStateChanged(void *aBinderServer)
     static_cast<OtDaemonServer *>(aBinderServer)->HandleEpskcStateChanged();
 }
 
-void OtDaemonServer::HandleEpskcStateChanged()
+void OtDaemonServer::HandleEpskcStateChanged(void)
 {
     mState.ephemeralKeyState = GetEphemeralKeyState();
 
+    NotifyStateChanged(/* aListenerId*/ -1);
+}
+
+void OtDaemonServer::NotifyStateChanged(int64_t aListenerId)
+{
+    if (mState.ephemeralKeyState == OT_EPHEMERAL_KEY_DISABLED)
+    {
+        mState.ephemeralKeyLifetimeMillis = 0;
+    }
+    else
+    {
+        mState.ephemeralKeyLifetimeMillis =
+            mEphemeralKeyExpiryMillis -
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
+                .count();
+    }
     if (mCallback != nullptr)
     {
-        mCallback->onStateChanged(mState, -1);
+        mCallback->onStateChanged(mState, aListenerId);
     }
 }
 
-int OtDaemonServer::GetEphemeralKeyState()
+int OtDaemonServer::GetEphemeralKeyState(void)
 {
     int ephemeralKeyState;
 
@@ -556,6 +572,7 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
 
 Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTunFd,
                                   const bool                                enabled,
+                                  const OtDaemonConfiguration              &aConfig,
                                   const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                   const MeshcopTxtAttributes               &aMeshcopTxts,
                                   const std::shared_ptr<IOtDaemonCallback> &aCallback,
@@ -571,14 +588,15 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
     mINsdPublisher = aINsdPublisher;
     mMeshcopTxts   = aMeshcopTxts;
 
-    mTaskRunner.Post([enabled, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, this]() {
-        initializeInternal(enabled, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode);
+    mTaskRunner.Post([enabled, aConfig, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, this]() {
+        initializeInternal(enabled, aConfig, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode);
     });
 
     return Status::ok();
 }
 
 void OtDaemonServer::initializeInternal(const bool                                enabled,
+                                        const OtDaemonConfiguration              &aConfig,
                                         const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                         const MeshcopTxtAttributes               &aMeshcopTxts,
                                         const std::shared_ptr<IOtDaemonCallback> &aCallback,
@@ -588,6 +606,7 @@ void OtDaemonServer::initializeInternal(const bool                              
     Mdns::Publisher::TxtList nonStandardTxts;
     otbrError                error;
 
+    setConfigurationInternal(aConfig, nullptr /* aReceiver */);
     setCountryCodeInternal(aCountryCode, nullptr /* aReceiver */);
     registerStateCallbackInternal(aCallback, -1 /* listenerId */);
 
@@ -650,10 +669,7 @@ void OtDaemonServer::UpdateThreadEnabledState(const int enabled, const std::shar
         break;
     }
 
-    if (mCallback != nullptr)
-    {
-        mCallback->onStateChanged(mState, -1);
-    }
+    NotifyStateChanged(/* aListenerId*/ -1);
 
 exit:
     return;
@@ -752,12 +768,11 @@ exit:
     {
         if (error == OT_ERROR_NONE)
         {
-            mState.ephemeralKeyPasscode     = passcode;
-            // TODO: change to monotonic clock
-            mState.ephemeralKeyExpiryMillis = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                  std::chrono::system_clock::now().time_since_epoch())
-                                                  .count() +
-                                              lifetimeMillis;
+            mState.ephemeralKeyPasscode = passcode;
+            mEphemeralKeyExpiryMillis   = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                            std::chrono::steady_clock::now().time_since_epoch())
+                                            .count() +
+                                        lifetimeMillis;
             aReceiver->onSuccess();
         }
         else
@@ -784,10 +799,7 @@ void OtDaemonServer::deactivateEphemeralKeyModeInternal(const std::shared_ptr<IO
 
     VerifyOrExit(otBorderAgentIsEphemeralKeyActive(GetOtInstance()), error = OT_ERROR_NONE);
 
-    // TODO: terminate active connections
-    VerifyOrExit(otBorderAgentGetState(GetOtInstance()) != OT_BORDER_AGENT_STATE_ACTIVE, error = OT_ERROR_BUSY,
-                 message = "border agent has active secure session");
-
+    otBorderAgentDisconnect(GetOtInstance());
     otBorderAgentClearEphemeralKey(GetOtInstance());
 
 exit:
@@ -815,7 +827,7 @@ void OtDaemonServer::registerStateCallbackInternal(const std::shared_ptr<IOtDaem
     // To ensure that a client app can get the latest correct state immediately when registering a
     // state callback, here needs to invoke the callback
     RefreshOtDaemonState(/* aFlags */ 0xffffffff);
-    mCallback->onStateChanged(mState, listenerId);
+    NotifyStateChanged(listenerId);
     mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
 
 exit:
@@ -1220,13 +1232,18 @@ Status OtDaemonServer::setConfiguration(const OtDaemonConfiguration             
 void OtDaemonServer::setConfigurationInternal(const OtDaemonConfiguration              &aConfiguration,
                                               const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    otError     error = OT_ERROR_NONE;
+    int         error = OT_ERROR_NONE;
     std::string message;
 
-    otbrLogInfo("Configuring Border Router: %s", aConfiguration.toString().c_str());
+    otbrLogInfo("Set configuration: %s", aConfiguration.toString().c_str());
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
     VerifyOrExit(aConfiguration != mConfiguration);
+
+    // TODO: b/343814054 - Support enabling/disabling DHCPv6-PD.
+    VerifyOrExit(!aConfiguration.dhcpv6PdEnabled, error = OT_ERROR_NOT_IMPLEMENTED,
+                 message = "DHCPv6-PD is not supported");
+    otNat64SetEnabled(GetOtInstance(), aConfiguration.nat64Enabled);
 
     mConfiguration = aConfiguration;
 
