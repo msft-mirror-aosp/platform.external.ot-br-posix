@@ -145,6 +145,7 @@ void OtDaemonServer::Init(void)
     otIp6SetReceiveFilterEnabled(GetOtInstance(), true);
     otNat64SetReceiveIp4Callback(GetOtInstance(), &OtDaemonServer::ReceiveCallback, this);
     mBorderAgent.AddEphemeralKeyChangedCallback([this]() { HandleEpskcStateChanged(); });
+    mBorderAgent.SetEphemeralKeyEnabled(true);
 
     mTaskRunner.Post(kTelemetryCheckInterval, [this]() { PushTelemetryIfConditionMatch(); });
 }
