@@ -1462,5 +1462,35 @@ exit:
     return error;
 }
 
+Status OtDaemonServer::setNat64Cidr(const std::optional<std::string>         &aCidr,
+                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    mTaskRunner.Post([aCidr, aReceiver, this]() { setNat64CidrInternal(aCidr, aReceiver); });
+
+    return Status::ok();
+}
+
+void OtDaemonServer::setNat64CidrInternal(const std::optional<std::string>         &aCidr,
+                                          const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    otError     error = OT_ERROR_NONE;
+    std::string message;
+    otIp4Cidr   nat64Cidr{};
+    // TODO: Currently we're using the minimal CIDR to clear the NAT64 CIDR, but it's the logic in nat64_translator.cpp
+    // still allows one host in this case. Instead, we should introduce an API otNat64ClearIp4Cidr() to clear the NAT64
+    // CIDR.
+    std::string cidrStr = aCidr.value_or("0.0.0.0/32");
+
+    otbrLogInfo("Setting NAT64 CIDR: %s", cidrStr.c_str());
+
+    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+
+    SuccessOrExit(error = otIp4CidrFromString(cidrStr.c_str(), &nat64Cidr), message = "Failed to parse NAT64 CIDR");
+    SuccessOrExit(error = otNat64SetIp4Cidr(GetOtInstance(), &nat64Cidr), message = "Failed to set NAT64 CIDR");
+
+exit:
+    PropagateResult(error, message, aReceiver);
+}
+
 } // namespace Android
 } // namespace otbr
