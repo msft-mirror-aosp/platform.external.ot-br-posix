@@ -295,6 +295,8 @@ void RcpHost::Deinit(void)
     OtNetworkProperties::SetInstance(nullptr);
     mThreadStateChangedCallbacks.clear();
     mResetHandlers.clear();
+
+    mSetThreadEnabledReceiver = nullptr;
 }
 
 void RcpHost::HandleStateChanged(otChangedFlags aFlags)
@@ -415,6 +417,76 @@ void RcpHost::ScheduleMigration(const otOperationalDatasetTlvs &aPendingOpDatase
 
     // TODO: Implement ScheduleMigration under RCP mode.
     mTaskRunner.Post([aReceiver](void) { aReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
+}
+
+void RcpHost::SetThreadEnabled(bool aEnabled, const AsyncResultReceiver aReceiver)
+{
+    otError error             = OT_ERROR_NONE;
+    bool    receiveResultHere = true;
+
+    VerifyOrExit(mInstance != nullptr, error = OT_ERROR_INVALID_STATE);
+    VerifyOrExit(mSetThreadEnabledReceiver == nullptr, error = OT_ERROR_BUSY);
+
+    if (aEnabled)
+    {
+        otOperationalDatasetTlvs datasetTlvs;
+
+        if (otDatasetGetActiveTlvs(mInstance, &datasetTlvs) != OT_ERROR_NOT_FOUND && datasetTlvs.mLength > 0 &&
+            otThreadGetDeviceRole(mInstance) == OT_DEVICE_ROLE_DISABLED)
+        {
+            SuccessOrExit(error = otIp6SetEnabled(mInstance, true));
+            SuccessOrExit(error = otThreadSetEnabled(mInstance, true));
+        }
+    }
+    else
+    {
+        SuccessOrExit(error = otThreadDetachGracefully(mInstance, DisableThreadAfterDetach, this));
+        mSetThreadEnabledReceiver = aReceiver;
+        receiveResultHere         = false;
+    }
+
+exit:
+    if (receiveResultHere)
+    {
+        mTaskRunner.Post([aReceiver, error](void) { aReceiver(error, ""); });
+    }
+}
+
+void RcpHost::DisableThreadAfterDetach(void *aContext)
+{
+    static_cast<RcpHost *>(aContext)->DisableThreadAfterDetach();
+}
+
+void RcpHost::DisableThreadAfterDetach(void)
+{
+    otError     error = OT_ERROR_NONE;
+    std::string errorMsg;
+
+    SuccessOrExit(error = otThreadSetEnabled(mInstance, false), errorMsg = "Failed to disable Thread stack");
+    SuccessOrExit(error = otIp6SetEnabled(mInstance, false), errorMsg = "Failed to disable Thread interface");
+
+exit:
+    SafeInvokeAndClear(mSetThreadEnabledReceiver, error, errorMsg);
+}
+
+void RcpHost::SetCountryCode(const std::string &aCountryCode, const AsyncResultReceiver &aReceiver)
+{
+    static constexpr int kCountryCodeLength = 2;
+    otError              error              = OT_ERROR_NONE;
+    std::string          errorMsg;
+    uint16_t             countryCode;
+
+    VerifyOrExit((aCountryCode.length() == kCountryCodeLength) && isalpha(aCountryCode[0]) && isalpha(aCountryCode[1]),
+                 error = OT_ERROR_INVALID_ARGS, errorMsg = "The country code is invalid");
+
+    otbrLogInfo("Set country code: %c%c", aCountryCode[0], aCountryCode[1]);
+    VerifyOrExit(mInstance != nullptr, error = OT_ERROR_INVALID_STATE, errorMsg = "OT is not initialized");
+
+    countryCode = static_cast<uint16_t>((aCountryCode[0] << 8) | aCountryCode[1]);
+    SuccessOrExit(error = otLinkSetRegion(mInstance, countryCode), errorMsg = "Failed to set the country code");
+
+exit:
+    mTaskRunner.Post([aReceiver, error, errorMsg](void) { aReceiver(error, errorMsg); });
 }
 
 /*
