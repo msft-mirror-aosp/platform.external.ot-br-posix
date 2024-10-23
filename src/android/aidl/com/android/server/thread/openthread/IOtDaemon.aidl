@@ -202,6 +202,15 @@ oneway interface IOtDaemon {
             in @nullable String nat64Prefix, in IOtStatusReceiver receiver);
 
     /**
+     * Sets the NAT64 CIDR.
+     *
+     * @param nat64Cidr the NAT64 CIDR
+     * @param receiver the status receiver
+     *
+     */
+    oneway void setNat64Cidr(in @nullable String nat64Cidr, in IOtStatusReceiver receiver);
+
+    /**
      * Gets the supported and preferred channel masks.
      *
      * @param receiver the receiver to receive result of this operation
