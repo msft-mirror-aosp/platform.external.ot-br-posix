@@ -40,6 +40,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyByte;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -109,6 +110,7 @@ public final class FakeOtDaemonTest {
     private static final String TEST_VENDOR_NAME = "test vendor";
     private static final String TEST_MODEL_NAME = "test model";
     private static final String TEST_DEFAULT_COUNTRY_CODE = "WW";
+    private static final String TEST_NAT64_CIDR = "192.168.255.0/24";
 
     private FakeOtDaemon mFakeOtDaemon;
     private TestLooper mTestLooper;
@@ -311,7 +313,32 @@ public final class FakeOtDaemonTest {
         mTestLooper.dispatchAll();
 
         verify(receiver, never()).onSuccess();
-        verify(receiver).onError(eq((int)OT_ERROR_NOT_IMPLEMENTED), anyString());
+        verify(receiver).onError(eq((int) OT_ERROR_NOT_IMPLEMENTED), anyString());
+    }
+
+    @Test
+    public void setNat64Cidr_onSuccessIsInvoked() throws Exception {
+        IOtStatusReceiver receiver = mock(IOtStatusReceiver.class);
+        mFakeOtDaemon.setNat64Cidr(TEST_NAT64_CIDR, receiver);
+        mTestLooper.dispatchAll();
+
+        verify(receiver, never()).onError(anyInt(), any());
+        verify(receiver, times(1)).onSuccess();
+    }
+
+    @Test
+    public void setSetNat64CidrException_setNat64CidrFailsWithTheGivenException() {
+        final RemoteException setNat64CidrException = new RemoteException("setNat64Cidr() failed");
+
+        mFakeOtDaemon.setSetNat64CidrException(setNat64CidrException);
+
+        RemoteException thrown =
+                assertThrows(
+                        RemoteException.class,
+                        () ->
+                                mFakeOtDaemon.setNat64Cidr(
+                                        TEST_NAT64_CIDR, new IOtStatusReceiver.Default()));
+        assertThat(thrown).isEqualTo(setNat64CidrException);
     }
 
     @Test
