@@ -89,6 +89,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable private IOtDaemonCallback mCallback;
     @Nullable private Long mCallbackListenerId;
     @Nullable private RemoteException mJoinException;
+    @Nullable private RemoteException mSetNat64CidrException;
     @Nullable private RemoteException mRunOtCtlCommandException;
     @Nullable private String mCountryCode;
     @Nullable private OtDaemonConfiguration mConfiguration;
@@ -393,7 +394,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         // TODO: b/343814054 - Support enabling/disabling DHCPv6-PD.
         if (mConfiguration.dhcpv6PdEnabled) {
             receiver.onError(OT_ERROR_NOT_IMPLEMENTED, "DHCPv6-PD is not supported");
-            return ;
+            return;
         }
         if (receiver != null) {
             receiver.onSuccess();
@@ -413,6 +414,21 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
             throws RemoteException {
         throw new UnsupportedOperationException(
                 "FakeOtDaemon#setInfraLinkNat64Prefix is not implemented!");
+    }
+
+    /** Sets the {@link RemoteException} which will be thrown from {@link #setNat64Cidr}. */
+    public void setSetNat64CidrException(RemoteException exception) {
+        mSetNat64CidrException = exception;
+    }
+
+    @Override
+    public void setNat64Cidr(String nat64Cidr, IOtStatusReceiver receiver) throws RemoteException {
+        if (mSetNat64CidrException != null) {
+            throw mSetNat64CidrException;
+        }
+        if (receiver != null) {
+            receiver.onSuccess();
+        }
     }
 
     @Override
