@@ -432,6 +432,13 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     }
 
     @Override
+    public void setInfraLinkDnsServers(List<String> dnsServers, IOtStatusReceiver receiver)
+            throws RemoteException {
+        throw new UnsupportedOperationException(
+                "FakeOtDaemon#setInfraLinkDnsServers is not implemented!");
+    }
+
+    @Override
     public void scheduleMigration(byte[] pendingDataset, IOtStatusReceiver receiver)
             throws RemoteException {
         throw new UnsupportedOperationException(

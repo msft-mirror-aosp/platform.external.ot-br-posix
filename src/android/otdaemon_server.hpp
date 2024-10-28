@@ -154,6 +154,10 @@ private:
                         const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setNat64CidrInternal(const std::optional<std::string>         &aNat64Cidr,
                                 const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status setInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
+                                  const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void   setInfraLinkDnsServersInternal(const std::vector<std::string>           &aDnsServers,
+                                          const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status getChannelMasks(const std::shared_ptr<IChannelMasksReceiver> &aReceiver) override;
     void   getChannelMasksInternal(const std::shared_ptr<IChannelMasksReceiver> &aReceiver);
     Status runOtCtlCommand(const std::string                        &aCommand,
