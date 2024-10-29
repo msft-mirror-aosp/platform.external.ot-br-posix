@@ -1136,27 +1136,13 @@ Status OtDaemonServer::getChannelMasks(const std::shared_ptr<IChannelMasksReceiv
 
 void OtDaemonServer::getChannelMasksInternal(const std::shared_ptr<IChannelMasksReceiver> &aReceiver)
 {
-    otError  error = OT_ERROR_NONE;
-    uint32_t supportedChannelMask;
-    uint32_t preferredChannelMask;
-
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE);
-
-    supportedChannelMask = otLinkGetSupportedChannelMask(GetOtInstance());
-    preferredChannelMask = otPlatRadioGetPreferredChannelMask(GetOtInstance());
-
-exit:
-    if (aReceiver != nullptr)
-    {
-        if (error == OT_ERROR_NONE)
-        {
-            aReceiver->onSuccess(supportedChannelMask, preferredChannelMask);
-        }
-        else
-        {
-            aReceiver->onError(error, "OT is not initialized");
-        }
-    }
+    auto channelMasksReceiver = [aReceiver](uint32_t aSupportedChannelMask, uint32_t aPreferredChannelMask) {
+        aReceiver->onSuccess(aSupportedChannelMask, aPreferredChannelMask);
+    };
+    auto errorReceiver = [aReceiver](otError aError, const std::string &aMessage) {
+        aReceiver->onError(aError, aMessage);
+    };
+    mHost.GetChannelMasks(channelMasksReceiver, errorReceiver);
 }
 
 Status OtDaemonServer::setChannelMaxPowers(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
