@@ -211,6 +211,15 @@ oneway interface IOtDaemon {
     oneway void setNat64Cidr(in @nullable String nat64Cidr, in IOtStatusReceiver receiver);
 
     /**
+     * Sets the infrastructure link DNS servers.
+     *
+     * @param dnsServers the DNS server IP addresses represented by strings
+     * @param receiver the status receiver
+     *
+     */
+    oneway void setInfraLinkDnsServers(in List<String> dnsServers, in IOtStatusReceiver receiver);
+
+    /**
      * Gets the supported and preferred channel masks.
      *
      * @param receiver the receiver to receive result of this operation
