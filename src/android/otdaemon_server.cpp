@@ -26,6 +26,7 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <linux/in.h>
 #define OTBR_LOG_TAG "BINDER"
 
 #include "android/otdaemon_server.hpp"
@@ -42,6 +43,7 @@
 #include <android/binder_process.h>
 #include <openthread/border_router.h>
 #include <openthread/cli.h>
+#include <openthread/dnssd_server.h>
 #include <openthread/icmp6.h>
 #include <openthread/ip6.h>
 #include <openthread/link.h>
@@ -146,6 +148,7 @@ void OtDaemonServer::Init(void)
     otNat64SetReceiveIp4Callback(GetOtInstance(), &OtDaemonServer::ReceiveCallback, this);
     mBorderAgent.AddEphemeralKeyChangedCallback([this]() { HandleEpskcStateChanged(); });
     mBorderAgent.SetEphemeralKeyEnabled(true);
+    otSysUpstreamDnsServerSetResolvConfEnabled(false);
 
     mTaskRunner.Post(kTelemetryCheckInterval, [this]() { PushTelemetryIfConditionMatch(); });
 }
@@ -1133,27 +1136,13 @@ Status OtDaemonServer::getChannelMasks(const std::shared_ptr<IChannelMasksReceiv
 
 void OtDaemonServer::getChannelMasksInternal(const std::shared_ptr<IChannelMasksReceiver> &aReceiver)
 {
-    otError  error = OT_ERROR_NONE;
-    uint32_t supportedChannelMask;
-    uint32_t preferredChannelMask;
-
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE);
-
-    supportedChannelMask = otLinkGetSupportedChannelMask(GetOtInstance());
-    preferredChannelMask = otPlatRadioGetPreferredChannelMask(GetOtInstance());
-
-exit:
-    if (aReceiver != nullptr)
-    {
-        if (error == OT_ERROR_NONE)
-        {
-            aReceiver->onSuccess(supportedChannelMask, preferredChannelMask);
-        }
-        else
-        {
-            aReceiver->onError(error, "OT is not initialized");
-        }
-    }
+    auto channelMasksReceiver = [aReceiver](uint32_t aSupportedChannelMask, uint32_t aPreferredChannelMask) {
+        aReceiver->onSuccess(aSupportedChannelMask, aPreferredChannelMask);
+    };
+    auto errorReceiver = [aReceiver](otError aError, const std::string &aMessage) {
+        aReceiver->onError(aError, aMessage);
+    };
+    mHost.GetChannelMasks(channelMasksReceiver, errorReceiver);
 }
 
 Status OtDaemonServer::setChannelMaxPowers(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
@@ -1232,6 +1221,8 @@ void OtDaemonServer::setConfigurationInternal(const OtDaemonConfiguration       
     VerifyOrExit(!aConfiguration.dhcpv6PdEnabled, error = OT_ERROR_NOT_IMPLEMENTED,
                  message = "DHCPv6-PD is not supported");
     otNat64SetEnabled(GetOtInstance(), aConfiguration.nat64Enabled);
+    // DNS upstream query is enabled if and only if NAT64 is enabled.
+    otDnssdUpstreamQuerySetEnabled(GetOtInstance(), aConfiguration.nat64Enabled);
 
     mConfiguration = aConfiguration;
 
@@ -1348,6 +1339,53 @@ void OtDaemonServer::setInfraLinkNat64PrefixInternal(const std::string          
 
     mInfraLinkState.nat64Prefix = aNat64Prefix;
     NotifyNat64PrefixDiscoveryDone();
+
+exit:
+    PropagateResult(error, message, aReceiver);
+}
+
+std::vector<otIp6Address> ToOtUpstreamDnsServerAddresses(const std::vector<std::string> &aAddresses)
+{
+    std::vector<otIp6Address> addresses;
+
+    // TODO: b/363738575 - support IPv6
+    for (const auto &addressString : aAddresses)
+    {
+        otIp6Address ip6Address;
+        otIp4Address ip4Address;
+
+        if (otIp4AddressFromString(addressString.c_str(), &ip4Address) != OT_ERROR_NONE)
+        {
+            continue;
+        }
+        otIp4ToIp4MappedIp6Address(&ip4Address, &ip6Address);
+        addresses.push_back(ip6Address);
+    }
+
+    return addresses;
+}
+
+Status OtDaemonServer::setInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
+                                              const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    mTaskRunner.Post([aDnsServers, aReceiver, this]() { setInfraLinkDnsServersInternal(aDnsServers, aReceiver); });
+
+    return Status::ok();
+}
+
+void OtDaemonServer::setInfraLinkDnsServersInternal(const std::vector<std::string>           &aDnsServers,
+                                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+{
+    otError     error = OT_ERROR_NONE;
+    std::string message;
+    auto        dnsServers = ToOtUpstreamDnsServerAddresses(aDnsServers);
+
+    otbrLogInfo("Setting infra link DNS servers: %d servers", aDnsServers.size());
+
+    VerifyOrExit(aDnsServers != mInfraLinkState.dnsServers);
+
+    mInfraLinkState.dnsServers = aDnsServers;
+    otSysUpstreamDnsSetServerList(dnsServers.data(), dnsServers.size());
 
 exit:
     PropagateResult(error, message, aReceiver);
