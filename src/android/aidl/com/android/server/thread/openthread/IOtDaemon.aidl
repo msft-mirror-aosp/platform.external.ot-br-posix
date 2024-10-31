@@ -33,6 +33,7 @@ import android.os.ParcelFileDescriptor;
 import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemonCallback;
+import com.android.server.thread.openthread.IOtOutputReceiver;
 import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.InfraLinkState;
 import com.android.server.thread.openthread.Ipv6AddressInfo;
@@ -56,6 +57,13 @@ oneway interface IOtDaemon {
     const int OT_STATE_ENABLED = 1;
     /** Thread radio is being disabled. */
     const int OT_STATE_DISABLING = 2;
+
+    /** The ephemeral key is disabled. */
+    const int OT_EPHEMERAL_KEY_DISABLED = 0;
+    /** The ephemeral key is enabled. */
+    const int OT_EPHEMERAL_KEY_ENABLED = 1;
+    /** The ephemeral key is in use. */
+    const int OT_EPHEMERAL_KEY_IN_USE = 2;
 
     enum ErrorCode {
         // Converts to ThreadNetworkException#ERROR_FAILED_PRECONDITION
@@ -89,6 +97,7 @@ oneway interface IOtDaemon {
      * @param tunFd the Thread tunnel interface FD which can be used to transmit/receive
      *              packets to/from Thread PAN
      * @param enabled the Thead enabled state from Persistent Settings
+     * @param config the Thread configuration from Persistent Settings
      * @param nsdPublisher the INsdPublisher which can be used for mDNS advertisement/discovery
      *                     on AIL by {@link NsdManager}
      * @param meshcopTxts the MeshCoP TXT values set by the system_server to override the default
@@ -97,8 +106,9 @@ oneway interface IOtDaemon {
      * @param countryCode 2 bytes country code (as defined in ISO 3166) to set
      */
     void initialize(in ParcelFileDescriptor tunFd, in boolean enabled,
-            in INsdPublisher nsdPublisher, in MeshcopTxtAttributes meshcopTxts,
-            in IOtDaemonCallback callback, in String countryCode);
+            in OtDaemonConfiguration config, in INsdPublisher nsdPublisher,
+            in MeshcopTxtAttributes meshcopTxts, in IOtDaemonCallback callback,
+            in String countryCode);
 
     /** Terminates the ot-daemon process. */
     void terminate();
@@ -171,15 +181,43 @@ oneway interface IOtDaemon {
     oneway void setConfiguration(in OtDaemonConfiguration config, in IOtStatusReceiver receiver);
 
     /**
-     * Sets the infrastructure link state.
+     * Sets the infrastructure network interface.
      *
-     * @param infraLinkState the infra link state
-     * @param infraIcmp6Socket the ICMPv6 socket on the infrastructure network
+     * @param interfaceName the infra network interface name
+     * @param icmp6Socket the ICMPv6 socket on the infrastructure network
      * @param receiver the status receiver
      *
      */
-    oneway void setInfraLinkState(in InfraLinkState infraLinkState,
-            in ParcelFileDescriptor infraIcmp6Socket, in IOtStatusReceiver receiver);
+    oneway void setInfraLinkInterfaceName(in @nullable String interfaceName,
+            in ParcelFileDescriptor icmp6Socket, in IOtStatusReceiver receiver);
+
+    /**
+     * Sets the NAT64 prefix discovered from infrastructure link.
+     *
+     * @param nat64Prefix the NAT64 prefix discovered from the infra link
+     * @param receiver the status receiver
+     *
+     */
+    oneway void setInfraLinkNat64Prefix(
+            in @nullable String nat64Prefix, in IOtStatusReceiver receiver);
+
+    /**
+     * Sets the NAT64 CIDR.
+     *
+     * @param nat64Cidr the NAT64 CIDR
+     * @param receiver the status receiver
+     *
+     */
+    oneway void setNat64Cidr(in @nullable String nat64Cidr, in IOtStatusReceiver receiver);
+
+    /**
+     * Sets the infrastructure link DNS servers.
+     *
+     * @param dnsServers the DNS server IP addresses represented by strings
+     * @param receiver the status receiver
+     *
+     */
+    oneway void setInfraLinkDnsServers(in List<String> dnsServers, in IOtStatusReceiver receiver);
 
     /**
      * Gets the supported and preferred channel masks.
@@ -195,6 +233,35 @@ oneway interface IOtDaemon {
      * @param receiver the receiver to the receive result of this operation.
      */
     void setChannelMaxPowers(in ChannelMaxPower[] channelMaxPowers, in IOtStatusReceiver receiver);
+
+    /**
+     * Runs an ot-ctl command.
+     *
+     * @param command the complete ot-ctl command string, including all arguments. Note that the
+     *         "ot-ctl" prefix itself should be omitted from this string
+     * @param isInteractive indicates whether to run command in interactive mode
+     * @param receiver the callback interface to receive the command's output
+     */
+    oneway void runOtCtlCommand(
+            in String command, in boolean isInteractive, in IOtOutputReceiver receiver);
+
+    /**
+     * Activates the ephemeral key mode.
+     *
+     * @param lifetimeMillis the lifetime of the ephemeral key in milliseconds
+     * @param receiver the status receiver
+     */
+    void activateEphemeralKeyMode(in long lifetimeMillis, in IOtStatusReceiver receiver);
+
+    /**
+     * Deactivates the ephemeral key mode.
+     *
+     * This will always succeed. If there are active secure sessions with the ephemeral key, the
+     * sessions will be terminated.
+     *
+     * @param receiver the status receiver
+     */
+    void deactivateEphemeralKeyMode(in IOtStatusReceiver receiver);
 
     // TODO: add Border Router APIs
 }
