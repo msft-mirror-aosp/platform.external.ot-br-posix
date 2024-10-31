@@ -61,6 +61,7 @@ aidl_interface {
     },
     visibility: [
         "//external/ot-br-posix:__subpackages__",
+        "//packages/modules/Connectivity/thread:__subpackages__",
         "//packages/modules/ThreadNetwork/service:__subpackages__",
         "//system/tools/aidl:__subpackages__",
     ],

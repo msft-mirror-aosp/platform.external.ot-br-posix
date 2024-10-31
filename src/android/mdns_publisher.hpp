@@ -205,6 +205,7 @@ public:
         }
 
         Status onServiceResolved(const std::string                  &aHostname,
+                                 int                                 aNetifIndex,
                                  const std::string                  &aName,
                                  const std::string                  &aType,
                                  int                                 aPort,
