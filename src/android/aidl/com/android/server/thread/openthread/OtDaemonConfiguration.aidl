@@ -31,4 +31,7 @@ package com.android.server.thread.openthread;
 /** The ot-daemon configuration. */
 @JavaOnlyImmutable
 @JavaDerive(equals=true, toString=true)
-parcelable OtDaemonConfiguration {}
+parcelable OtDaemonConfiguration {
+    boolean nat64Enabled;
+    boolean dhcpv6PdEnabled;
+}

@@ -71,6 +71,7 @@ exit:
 }
 
 Status MdnsPublisher::NsdResolveServiceCallback::onServiceResolved(const std::string                  &aHostname,
+                                                                   int                                 aNetifIndex,
                                                                    const std::string                  &aName,
                                                                    const std::string                  &aType,
                                                                    int                                 aPort,
@@ -81,10 +82,11 @@ Status MdnsPublisher::NsdResolveServiceCallback::onServiceResolved(const std::st
     DiscoveredInstanceInfo info;
     TxtList                txtList;
 
-    info.mHostName = aHostname + ".local.";
-    info.mName     = aName;
-    info.mPort     = aPort;
-    info.mTtl      = std::clamp(aTtlSeconds, kMinResolvedTtl, kMaxResolvedTtl);
+    info.mHostName   = aHostname + ".local.";
+    info.mName       = aName;
+    info.mPort       = aPort;
+    info.mTtl        = std::clamp(aTtlSeconds, kMinResolvedTtl, kMaxResolvedTtl);
+    info.mNetifIndex = aNetifIndex;
     for (const auto &addressStr : aAddresses)
     {
         Ip6Address address;

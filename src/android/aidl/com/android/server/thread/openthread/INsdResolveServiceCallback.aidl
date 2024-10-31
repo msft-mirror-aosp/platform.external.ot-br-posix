@@ -32,6 +32,6 @@ import com.android.server.thread.openthread.DnsTxtAttribute;
 
 /** Receives the information of a resolved service instance. */
 oneway interface INsdResolveServiceCallback {
-    void onServiceResolved(in String hostname, in String name, in String type, int port,
-            in List<String> addresses, in List<DnsTxtAttribute> txt, int ttlSeconds);
+    void onServiceResolved(in String hostname, int netifIndex, in String name, in String type,
+            int port, in List<String> addresses, in List<DnsTxtAttribute> txt, int ttlSeconds);
 }
