@@ -28,7 +28,6 @@
 
 package com.android.server.thread.openthread.testing;
 
-import static com.android.server.thread.openthread.IOtDaemon.ErrorCode.OT_ERROR_INVALID_STATE;
 import static com.android.server.thread.openthread.IOtDaemon.ErrorCode.OT_ERROR_NOT_IMPLEMENTED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_EPHEMERAL_KEY_DISABLED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_EPHEMERAL_KEY_ENABLED;
@@ -383,7 +382,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     }
 
     @Override
-    public void leave(IOtStatusReceiver receiver) throws RemoteException {
+    public void leave(boolean eraseDataset, IOtStatusReceiver receiver) throws RemoteException {
         throw new UnsupportedOperationException("FakeOtDaemon#leave is not implemented!");
     }
 
