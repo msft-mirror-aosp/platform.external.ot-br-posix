@@ -102,14 +102,14 @@ private:
     // Implements IOtDaemon.aidl
 
     Status initialize(const ScopedFileDescriptor               &aTunFd,
-                      const bool                                enabled,
-                      const OtDaemonConfiguration              &aConfig,
-                      const std::shared_ptr<INsdPublisher>     &aNsdPublisher,
+                      const bool                                aEnabled,
+                      const OtDaemonConfiguration              &aConfiguration,
+                      const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                       const MeshcopTxtAttributes               &aMeshcopTxts,
                       const std::shared_ptr<IOtDaemonCallback> &aCallback,
                       const std::string                        &aCountryCode) override;
-    void   initializeInternal(const bool                                enabled,
-                              const OtDaemonConfiguration              &aConfig,
+    void   initializeInternal(const bool                                aEnabled,
+                              const OtDaemonConfiguration              &aConfiguration,
                               const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                               const MeshcopTxtAttributes               &aMeshcopTxts,
                               const std::shared_ptr<IOtDaemonCallback> &aCallback,
@@ -124,8 +124,8 @@ private:
                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   joinInternal(const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
                         const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    Status leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   leaveInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status leave(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   leaveInternal(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status scheduleMigration(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
                              const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   scheduleMigrationInternal(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
@@ -172,10 +172,11 @@ private:
                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status deactivateEphemeralKeyMode(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   deactivateEphemeralKeyModeInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    static otLinkModeConfig GetLinkModeConfig(bool aBeRouter);
 
     bool        RefreshOtDaemonState(otChangedFlags aFlags);
     void        LeaveGracefully(const LeaveCallback &aReceiver);
-    void        FinishLeave(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void        FinishLeave(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     static void DetachGracefullyCallback(void *aBinderServer);
     void        DetachGracefullyCallback(void);
     static void SendMgmtPendingSetCallback(otError aResult, void *aBinderServer);
