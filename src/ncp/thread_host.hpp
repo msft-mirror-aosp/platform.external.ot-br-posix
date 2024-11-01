@@ -238,9 +238,6 @@ public:
      *
      */
     virtual ~ThreadHost(void) = default;
-
-protected:
-    static otLogLevel ConvertToOtLogLevel(otbrLogLevel aLevel);
 };
 
 } // namespace Ncp
