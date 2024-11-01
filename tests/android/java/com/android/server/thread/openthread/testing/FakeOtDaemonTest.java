@@ -144,7 +144,7 @@ public final class FakeOtDaemonTest {
 
         mFakeOtDaemon.initialize(
                 mMockTunFd,
-                true,
+                true /* enabled */,
                 mConfig,
                 mMockNsdPublisher,
                 mOverriddenMeshcopTxts,
@@ -173,7 +173,7 @@ public final class FakeOtDaemonTest {
     public void registerStateCallback_noStateChange_callbackIsInvoked() throws Exception {
         mFakeOtDaemon.initialize(
                 mMockTunFd,
-                true,
+                true /* enabled */,
                 mConfig,
                 mMockNsdPublisher,
                 mOverriddenMeshcopTxts,
@@ -400,7 +400,7 @@ public final class FakeOtDaemonTest {
         mFakeOtDaemon.linkToDeath(mockDeathRecipient, 0);
         mFakeOtDaemon.initialize(
                 mMockTunFd,
-                true,
+                true /* enabled */,
                 mConfig,
                 mMockNsdPublisher,
                 mOverriddenMeshcopTxts,
