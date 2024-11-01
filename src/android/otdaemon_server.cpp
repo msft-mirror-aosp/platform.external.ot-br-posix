@@ -31,6 +31,7 @@
 
 #include "android/otdaemon_server.hpp"
 
+#include <algorithm>
 #include <net/if.h>
 #include <random>
 #include <string.h>
@@ -55,6 +56,7 @@
 #include "agent/vendor.hpp"
 #include "android/otdaemon_telemetry.hpp"
 #include "common/code_utils.hpp"
+#include "ncp/thread_host.hpp"
 
 #define BYTE_ARR_END(arr) ((arr) + sizeof(arr))
 
@@ -1153,44 +1155,24 @@ Status OtDaemonServer::setChannelMaxPowers(const std::vector<ChannelMaxPower>   
 Status OtDaemonServer::setChannelMaxPowersInternal(const std::vector<ChannelMaxPower>       &aChannelMaxPowers,
                                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    otError     error = OT_ERROR_NONE;
-    std::string message;
-    uint8_t     channel;
-    int16_t     maxPower;
+    // Transform aidl ChannelMaxPower to ThreadHost::ChannelMaxPower
+    std::vector<Ncp::ThreadHost::ChannelMaxPower> channelMaxPowers(aChannelMaxPowers.size());
+    std::transform(aChannelMaxPowers.begin(), aChannelMaxPowers.end(), channelMaxPowers.begin(),
+                   [](const ChannelMaxPower &aChannelMaxPower) {
+                       // INT_MIN indicates that the corresponding channel is disabled in Thread Android API
+                       // `setChannelMaxPowers()` INT16_MAX indicates that the corresponding channel is disabled in
+                       // OpenThread API `otPlatRadioSetChannelTargetPower()`.
+                       return Ncp::ThreadHost::ChannelMaxPower(
+                           aChannelMaxPower.channel,
+                           aChannelMaxPower.maxPower == INT_MIN
+                               ? INT16_MAX
+                               : std::clamp(aChannelMaxPower.maxPower, INT16_MIN, INT16_MAX - 1));
+                   });
 
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+    mHost.SetChannelMaxPowers(channelMaxPowers, [aReceiver](otError aError, const std::string &aMessage) {
+        PropagateResult(aError, aMessage, aReceiver);
+    });
 
-    for (ChannelMaxPower channelMaxPower : aChannelMaxPowers)
-    {
-        VerifyOrExit((channelMaxPower.channel >= OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MIN) &&
-                         (channelMaxPower.channel <= OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MAX),
-                     error = OT_ERROR_INVALID_ARGS, message = "The channel is invalid");
-    }
-
-    for (ChannelMaxPower channelMaxPower : aChannelMaxPowers)
-    {
-        channel = static_cast<uint8_t>(channelMaxPower.channel);
-
-        // INT_MIN indicates that the corresponding channel is disabled in Thread Android API `setChannelMaxPowers()`
-        if (channelMaxPower.maxPower == INT_MIN)
-        {
-            // INT16_MAX indicates that the corresponding channel is disabled in OpenThread API
-            // `otPlatRadioSetChannelTargetPower()`.
-            maxPower = INT16_MAX;
-        }
-        else
-        {
-            maxPower = std::clamp(channelMaxPower.maxPower, INT16_MIN, INT16_MAX - 1);
-        }
-
-        otbrLogInfo("Set channel max power: channel=%u, maxPower=%d", static_cast<unsigned int>(channel),
-                    static_cast<int>(maxPower));
-        SuccessOrExit(error   = otPlatRadioSetChannelTargetPower(GetOtInstance(), channel, maxPower),
-                      message = "Failed to set channel max power");
-    }
-
-exit:
-    PropagateResult(error, message, aReceiver);
     return Status::ok();
 }
 
