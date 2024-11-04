@@ -27,6 +27,7 @@
  */
 #include "android/otdaemon_telemetry.hpp"
 
+#include <openthread/border_agent.h>
 #include <openthread/nat64.h>
 #include <openthread/openthread-system.h>
 #include <openthread/thread.h>
@@ -223,6 +224,31 @@ void RetrieveNat64Counters(otInstance *aInstance, TelemetryData::BorderRoutingCo
         errorCounters->mutable_no_mapping()->set_ipv6_to_ipv4_packets(
             otCounters.mCount6To4[OT_NAT64_DROP_REASON_NO_MAPPING]);
     }
+}
+
+void RetrieveBorderAgentInfo(otInstance *aInstance, TelemetryData::BorderAgentInfo *aBorderAgentInfo)
+{
+    auto baCounters            = aBorderAgentInfo->mutable_border_agent_counters();
+    auto otBorderAgentCounters = *otBorderAgentGetCounters(aInstance);
+
+    baCounters->set_epskc_activations(otBorderAgentCounters.mEpskcActivations);
+    baCounters->set_epskc_deactivation_clears(otBorderAgentCounters.mEpskcDeactivationClears);
+    baCounters->set_epskc_deactivation_timeouts(otBorderAgentCounters.mEpskcDeactivationTimeouts);
+    baCounters->set_epskc_deactivation_max_attempts(otBorderAgentCounters.mEpskcDeactivationMaxAttempts);
+    baCounters->set_epskc_deactivation_disconnects(otBorderAgentCounters.mEpskcDeactivationDisconnects);
+    baCounters->set_epskc_invalid_ba_state_errors(otBorderAgentCounters.mEpskcInvalidBaStateErrors);
+    baCounters->set_epskc_invalid_args_errors(otBorderAgentCounters.mEpskcInvalidArgsErrors);
+    baCounters->set_epskc_start_secure_session_errors(otBorderAgentCounters.mEpskcStartSecureSessionErrors);
+    baCounters->set_epskc_secure_session_successes(otBorderAgentCounters.mEpskcSecureSessionSuccesses);
+    baCounters->set_epskc_secure_session_failures(otBorderAgentCounters.mEpskcSecureSessionFailures);
+    baCounters->set_epskc_commissioner_petitions(otBorderAgentCounters.mEpskcCommissionerPetitions);
+
+    baCounters->set_pskc_secure_session_successes(otBorderAgentCounters.mPskcSecureSessionSuccesses);
+    baCounters->set_pskc_secure_session_failures(otBorderAgentCounters.mPskcSecureSessionFailures);
+    baCounters->set_pskc_commissioner_petitions(otBorderAgentCounters.mPskcCommissionerPetitions);
+
+    baCounters->set_mgmt_active_get_reqs(otBorderAgentCounters.mMgmtActiveGets);
+    baCounters->set_mgmt_pending_get_reqs(otBorderAgentCounters.mMgmtPendingGets);
 }
 
 otError RetrieveTelemetryAtom(otInstance                         *otInstance,
@@ -712,6 +738,7 @@ otError RetrieveTelemetryAtom(otInstance                         *otInstance,
         // End of CoexMetrics section.
 
         RetrieveNat64State(otInstance, wpanBorderRouter);
+        RetrieveBorderAgentInfo(otInstance, wpanBorderRouter->mutable_border_agent_info());
     }
 
     return error;
