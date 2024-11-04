@@ -1513,18 +1513,22 @@ void OtDaemonServer::setNat64CidrInternal(const std::optional<std::string>      
 {
     otError     error = OT_ERROR_NONE;
     std::string message;
-    otIp4Cidr   nat64Cidr{};
-    // TODO: Currently we're using the minimal CIDR to clear the NAT64 CIDR, but it's the logic in nat64_translator.cpp
-    // still allows one host in this case. Instead, we should introduce an API otNat64ClearIp4Cidr() to clear the NAT64
-    // CIDR.
-    std::string cidrStr = aCidr.value_or("0.0.0.0/32");
-
-    otbrLogInfo("Setting NAT64 CIDR: %s", cidrStr.c_str());
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
 
-    SuccessOrExit(error = otIp4CidrFromString(cidrStr.c_str(), &nat64Cidr), message = "Failed to parse NAT64 CIDR");
-    SuccessOrExit(error = otNat64SetIp4Cidr(GetOtInstance(), &nat64Cidr), message = "Failed to set NAT64 CIDR");
+    if (aCidr.has_value())
+    {
+        otIp4Cidr nat64Cidr{};
+
+        otbrLogInfo("Setting NAT64 CIDR: %s", aCidr->c_str());
+        SuccessOrExit(error = otIp4CidrFromString(aCidr->c_str(), &nat64Cidr), message = "Failed to parse NAT64 CIDR");
+        SuccessOrExit(error = otNat64SetIp4Cidr(GetOtInstance(), &nat64Cidr), message = "Failed to set NAT64 CIDR");
+    }
+    else
+    {
+        otbrLogInfo("Clearing NAT64 CIDR");
+        otNat64ClearIp4Cidr(GetOtInstance());
+    }
 
 exit:
     PropagateResult(error, message, aReceiver);
