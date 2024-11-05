@@ -81,24 +81,6 @@ namespace Android {
 static const char       OTBR_SERVICE_NAME[] = "ot_daemon";
 static constexpr size_t kMaxIp6Size         = 1280;
 
-static void PropagateResult(int                                       aError,
-                            const std::string                        &aMessage,
-                            const std::shared_ptr<IOtStatusReceiver> &aReceiver)
-{
-    if (aReceiver != nullptr)
-    {
-        // If an operation has already been requested or accepted, consider it succeeded
-        if (aError == OT_ERROR_NONE || aError == OT_ERROR_ALREADY)
-        {
-            aReceiver->onSuccess();
-        }
-        else
-        {
-            aReceiver->onError(aError, aMessage);
-        }
-    }
-}
-
 static const char *ThreadEnabledStateToString(int enabledState)
 {
     switch (enabledState)
