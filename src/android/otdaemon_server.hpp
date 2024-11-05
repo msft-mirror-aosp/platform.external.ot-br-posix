@@ -33,14 +33,11 @@
 #include <memory>
 #include <vector>
 
-#include <aidl/com/android/server/thread/openthread/BnOtDaemon.h>
-#include <aidl/com/android/server/thread/openthread/INsdPublisher.h>
-#include <aidl/com/android/server/thread/openthread/IOtDaemon.h>
-#include <aidl/com/android/server/thread/openthread/InfraLinkState.h>
 #include <openthread/instance.h>
 #include <openthread/ip6.h>
 
 #include "agent/vendor.hpp"
+#include "android/common_utils.hpp"
 #include "android/mdns_publisher.hpp"
 #include "common/mainloop.hpp"
 #include "common/time.hpp"
@@ -48,25 +45,6 @@
 
 namespace otbr {
 namespace Android {
-
-using BinderDeathRecipient = ::ndk::ScopedAIBinder_DeathRecipient;
-using ScopedFileDescriptor = ::ndk::ScopedFileDescriptor;
-using Status               = ::ndk::ScopedAStatus;
-using aidl::android::net::thread::ChannelMaxPower;
-using aidl::com::android::server::thread::openthread::BackboneRouterState;
-using aidl::com::android::server::thread::openthread::BnOtDaemon;
-using aidl::com::android::server::thread::openthread::IChannelMasksReceiver;
-using aidl::com::android::server::thread::openthread::InfraLinkState;
-using aidl::com::android::server::thread::openthread::INsdPublisher;
-using aidl::com::android::server::thread::openthread::IOtDaemon;
-using aidl::com::android::server::thread::openthread::IOtDaemonCallback;
-using aidl::com::android::server::thread::openthread::IOtOutputReceiver;
-using aidl::com::android::server::thread::openthread::IOtStatusReceiver;
-using aidl::com::android::server::thread::openthread::Ipv6AddressInfo;
-using aidl::com::android::server::thread::openthread::MeshcopTxtAttributes;
-using aidl::com::android::server::thread::openthread::OnMeshPrefixConfig;
-using aidl::com::android::server::thread::openthread::OtDaemonConfiguration;
-using aidl::com::android::server::thread::openthread::OtDaemonState;
 
 class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendor::VendorServer
 {
