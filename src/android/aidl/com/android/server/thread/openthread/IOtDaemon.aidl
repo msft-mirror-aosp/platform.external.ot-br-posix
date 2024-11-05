@@ -97,6 +97,7 @@ oneway interface IOtDaemon {
      * @param tunFd the Thread tunnel interface FD which can be used to transmit/receive
      *              packets to/from Thread PAN
      * @param enabled the Thead enabled state from Persistent Settings
+     * @param configuration the Thread configuration from Persistent Settings
      * @param nsdPublisher the INsdPublisher which can be used for mDNS advertisement/discovery
      *                     on AIL by {@link NsdManager}
      * @param meshcopTxts the MeshCoP TXT values set by the system_server to override the default
@@ -105,8 +106,9 @@ oneway interface IOtDaemon {
      * @param countryCode 2 bytes country code (as defined in ISO 3166) to set
      */
     void initialize(in ParcelFileDescriptor tunFd, in boolean enabled,
-            in INsdPublisher nsdPublisher, in MeshcopTxtAttributes meshcopTxts,
-            in IOtDaemonCallback callback, in String countryCode);
+            in OtDaemonConfiguration configuration, in INsdPublisher nsdPublisher,
+            in MeshcopTxtAttributes meshcopTxts, in IOtDaemonCallback callback,
+            in String countryCode);
 
     /** Terminates the ot-daemon process. */
     void terminate();
@@ -148,11 +150,12 @@ oneway interface IOtDaemon {
      *    the {@code receiver} will be invoked after the previous request is completed
      * 3. Otherwise, OTBR sends Address Release Notification (i.e. ADDR_REL.ntf) to gracefully
      *    detach from the current network and it takes 1 second to finish
-     * 4. The Operational Dataset will be removed from persistent storage
+     * 4. The Operational Dataset will be removed from persistent storage if {@code eraseDataset}
+     *    is {@code true}
      *
      * @sa android.net.thread.ThreadNetworkController#leave
      */
-    void leave(in IOtStatusReceiver receiver);
+    void leave(boolean eraseDataset, in IOtStatusReceiver receiver);
 
     /**
      * Migrates to the new network specified by {@code pendingOpDatasetTlvs}.
@@ -198,6 +201,24 @@ oneway interface IOtDaemon {
      */
     oneway void setInfraLinkNat64Prefix(
             in @nullable String nat64Prefix, in IOtStatusReceiver receiver);
+
+    /**
+     * Sets the NAT64 CIDR.
+     *
+     * @param nat64Cidr the NAT64 CIDR
+     * @param receiver the status receiver
+     *
+     */
+    oneway void setNat64Cidr(in @nullable String nat64Cidr, in IOtStatusReceiver receiver);
+
+    /**
+     * Sets the infrastructure link DNS servers.
+     *
+     * @param dnsServers the DNS server IP addresses represented by strings
+     * @param receiver the status receiver
+     *
+     */
+    oneway void setInfraLinkDnsServers(in List<String> dnsServers, in IOtStatusReceiver receiver);
 
     /**
      * Gets the supported and preferred channel masks.

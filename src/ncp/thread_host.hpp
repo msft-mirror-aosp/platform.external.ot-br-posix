@@ -82,7 +82,15 @@ class ThreadHost : virtual public NetworkProperties
 {
 public:
     using AsyncResultReceiver = std::function<void(otError, const std::string &)>;
-    using DeviceRoleHandler   = std::function<void(otError, otDeviceRole)>;
+    using ChannelMasksReceiver =
+        std::function<void(uint32_t /*aSupportedChannelMask*/, uint32_t /*aPreferredChannelMask*/)>;
+    using DeviceRoleHandler = std::function<void(otError, otDeviceRole)>;
+
+    struct ChannelMaxPower
+    {
+        uint16_t mChannel;
+        int16_t  mMaxPower; // INT16_MAX indicates that the corresponding channel is disabled.
+    };
 
     /**
      * Create a Thread Controller Instance.
@@ -144,6 +152,56 @@ public:
                                    const AsyncResultReceiver       aReceiver) = 0;
 
     /**
+     * This method enables/disables the Thread network.
+     *
+     * 1. If there is an ongoing 'SetThreadEnabled' operation, no action will be taken and @p aReceiver
+     *    will be invoked with error OT_ERROR_BUSY.
+     * 2. If the host hasn't been initialized, @p aReceiver will be invoked with error OT_ERROR_INVALID_STATE.
+     * 3. When @p aEnabled is false, this method will first trigger a graceful detach and then disable Thread
+     *    network interface and the stack.
+     *
+     * @param[in] aEnabled  true to enable and false to disable.
+     * @param[in] aReceiver  A receiver to get the async result of this operation.
+     */
+    virtual void SetThreadEnabled(bool aEnabled, const AsyncResultReceiver aReceiver) = 0;
+
+    /**
+     * This method sets the country code.
+     *
+     * The country code refers to the 2-alpha code defined in ISO-3166.
+     *
+     * 1. If @p aCountryCode isn't valid, @p aReceiver will be invoked with error OT_ERROR_INVALID_ARGS.
+     * 2. If the host hasn't been initialized, @p aReceiver will be invoked with error OT_ERROR_INVALID_STATE.
+     *
+     * @param[in] aCountryCode  The country code.
+     */
+    virtual void SetCountryCode(const std::string &aCountryCode, const AsyncResultReceiver &aReceiver) = 0;
+
+    /**
+     * Gets the supported and preferred channel masks.
+     *
+     * If the operation succeeded, @p aReceiver will be invoked with the supported and preferred channel masks.
+     * Otherwise, @p aErrReceiver will be invoked with the error and @p aReceiver won't be invoked in this case.
+     *
+     * @param aReceiver     A receiver to get the channel masks.
+     * @param aErrReceiver  A receiver to get the error if the operation fails.
+     */
+    virtual void GetChannelMasks(const ChannelMasksReceiver &aReceiver, const AsyncResultReceiver &aErrReceiver) = 0;
+
+    /**
+     * Sets the max power of each channel.
+     *
+     * 1. If the host hasn't been initialized, @p aReceiver will be invoked with error OT_ERROR_INVALID_STATE.
+     * 2. If any value in @p aChannelMaxPowers is invalid, @p aReceiver will be invoked with error
+     * OT_ERROR_INVALID_ARGS.
+     *
+     * @param[in] aChannelMaxPowers  A vector of ChannelMaxPower.
+     * @param[in] aReceiver          A receiver to get the async result of this operation.
+     */
+    virtual void SetChannelMaxPowers(const std::vector<ChannelMaxPower> &aChannelMaxPowers,
+                                     const AsyncResultReceiver          &aReceiver) = 0;
+
+    /**
      * Returns the co-processor type.
      *
      */
@@ -180,9 +238,6 @@ public:
      *
      */
     virtual ~ThreadHost(void) = default;
-
-protected:
-    static otLogLevel ConvertToOtLogLevel(otbrLogLevel aLevel);
 };
 
 } // namespace Ncp
