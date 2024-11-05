@@ -54,6 +54,7 @@
 #include <openthread/platform/radio.h>
 
 #include "agent/vendor.hpp"
+#include "android/android_rcp_host.hpp"
 #include "android/otdaemon_telemetry.hpp"
 #include "common/code_utils.hpp"
 #include "ncp/thread_host.hpp"
@@ -103,9 +104,9 @@ OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &rcpHost,
                                otbr::Mdns::Publisher &mdnsPublisher,
                                otbr::BorderAgent     &borderAgent)
     : mHost(rcpHost)
+    , mAndroidHost(CreateAospHost())
     , mMdnsPublisher(static_cast<MdnsPublisher &>(mdnsPublisher))
     , mBorderAgent(borderAgent)
-    , mConfiguration()
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
@@ -557,6 +558,25 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
     }
 }
 
+std::unique_ptr<AndroidThreadHost> OtDaemonServer::CreateAospHost(void)
+{
+    std::unique_ptr<AndroidThreadHost> host;
+
+    switch (mHost.GetCoprocessorType())
+    {
+    case OT_COPROCESSOR_RCP:
+        host = std::make_unique<AndroidRcpHost>(static_cast<otbr::Ncp::RcpHost &>(mHost));
+        break;
+
+    case OT_COPROCESSOR_NCP:
+    default:
+        DieNow("Unknown coprocessor type!");
+        break;
+    }
+
+    return host;
+}
+
 Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTunFd,
                                   const bool                                aEnabled,
                                   const OtDaemonConfiguration              &aConfiguration,
@@ -594,7 +614,7 @@ void OtDaemonServer::initializeInternal(const bool                              
     Mdns::Publisher::TxtList nonStandardTxts;
     otbrError                error;
 
-    setConfigurationInternal(aConfiguration, nullptr /* aReceiver */);
+    mAndroidHost->SetConfiguration(aConfiguration, nullptr /* aReceiver */);
     setCountryCodeInternal(aCountryCode, nullptr /* aReceiver */);
     registerStateCallbackInternal(aCallback, -1 /* listenerId */);
 
@@ -648,7 +668,7 @@ void OtDaemonServer::UpdateThreadEnabledState(const int enabled, const std::shar
     // Enables the BorderAgent module only when Thread is enabled and configured a Border Router,
     // so that it won't publish the MeshCoP mDNS service when unnecessary
     // TODO: b/376217403 - enables / disables OT Border Agent at runtime
-    mBorderAgent.SetEnabled(enabled == OT_STATE_ENABLED && mConfiguration.borderRouterEnabled);
+    mBorderAgent.SetEnabled(enabled == OT_STATE_ENABLED && mAndroidHost->GetConfiguration().borderRouterEnabled);
 
     NotifyStateChanged(/* aListenerId*/ -1);
 
@@ -1161,46 +1181,10 @@ Status OtDaemonServer::setChannelMaxPowersInternal(const std::vector<ChannelMaxP
 Status OtDaemonServer::setConfiguration(const OtDaemonConfiguration              &aConfiguration,
                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    mTaskRunner.Post([aConfiguration, aReceiver, this]() { setConfigurationInternal(aConfiguration, aReceiver); });
+    mTaskRunner.Post(
+        [aConfiguration, aReceiver, this]() { mAndroidHost->SetConfiguration(aConfiguration, aReceiver); });
 
     return Status::ok();
-}
-
-void OtDaemonServer::setConfigurationInternal(const OtDaemonConfiguration              &aConfiguration,
-                                              const std::shared_ptr<IOtStatusReceiver> &aReceiver)
-{
-    otError          error = OT_ERROR_NONE;
-    std::string      message;
-    otLinkModeConfig linkModeConfig;
-
-    otbrLogInfo("Set configuration: %s", aConfiguration.toString().c_str());
-
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(aConfiguration != mConfiguration);
-
-    // TODO: b/343814054 - Support enabling/disabling DHCPv6-PD.
-    VerifyOrExit(!aConfiguration.dhcpv6PdEnabled, error = OT_ERROR_NOT_IMPLEMENTED,
-                 message = "DHCPv6-PD is not supported");
-    otNat64SetEnabled(GetOtInstance(), aConfiguration.nat64Enabled);
-    // DNS upstream query is enabled if and only if NAT64 is enabled.
-    otDnssdUpstreamQuerySetEnabled(GetOtInstance(), aConfiguration.nat64Enabled);
-
-    linkModeConfig = GetLinkModeConfig(aConfiguration.borderRouterEnabled);
-    SuccessOrExit(error = otThreadSetLinkMode(GetOtInstance(), linkModeConfig), message = "Failed to set link mode");
-    if (aConfiguration.borderRouterEnabled)
-    {
-        otSrpServerSetAutoEnableMode(GetOtInstance(), true);
-    }
-    else
-    {
-        // This automatically disables the auto-enable mode which is designed for border router
-        otSrpServerSetEnabled(GetOtInstance(), true);
-    }
-
-    mConfiguration = aConfiguration;
-
-exit:
-    PropagateResult(error, message, aReceiver);
 }
 
 Status OtDaemonServer::setInfraLinkInterfaceName(const std::optional<std::string>         &aInterfaceName,
@@ -1228,7 +1212,7 @@ void OtDaemonServer::setInfraLinkInterfaceNameInternal(const std::string        
     otbrLogInfo("Setting infra link state: %s", aInterfaceName.c_str());
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(mConfiguration.borderRouterEnabled, error = OT_ERROR_INVALID_STATE,
+    VerifyOrExit(mAndroidHost->GetConfiguration().borderRouterEnabled, error = OT_ERROR_INVALID_STATE,
                  message = "Set infra link state when border router is disabled");
     VerifyOrExit(mInfraLinkState.interfaceName != aInterfaceName || aIcmp6Socket != mInfraIcmp6Socket);
 
@@ -1364,26 +1348,6 @@ void OtDaemonServer::setInfraLinkDnsServersInternal(const std::vector<std::strin
 
 exit:
     PropagateResult(error, message, aReceiver);
-}
-
-otLinkModeConfig OtDaemonServer::GetLinkModeConfig(bool aIsRouter)
-{
-    otLinkModeConfig linkModeConfig{};
-
-    if (aIsRouter)
-    {
-        linkModeConfig.mRxOnWhenIdle = true;
-        linkModeConfig.mDeviceType   = true;
-        linkModeConfig.mNetworkData  = true;
-    }
-    else
-    {
-        linkModeConfig.mRxOnWhenIdle = false;
-        linkModeConfig.mDeviceType   = false;
-        linkModeConfig.mNetworkData  = true;
-    }
-
-    return linkModeConfig;
 }
 
 static int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)

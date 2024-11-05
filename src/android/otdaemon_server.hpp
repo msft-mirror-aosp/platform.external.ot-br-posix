@@ -37,6 +37,7 @@
 #include <openthread/ip6.h>
 
 #include "agent/vendor.hpp"
+#include "android/android_thread_host.hpp"
 #include "android/common_utils.hpp"
 #include "android/mdns_publisher.hpp"
 #include "common/mainloop.hpp"
@@ -77,6 +78,9 @@ private:
     void Update(MainloopContext &aMainloop) override;
     void Process(const MainloopContext &aMainloop) override;
 
+    // Creates AndroidThreadHost instance
+    std::unique_ptr<AndroidThreadHost> CreateAospHost(void);
+
     // Implements IOtDaemon.aidl
 
     Status initialize(const ScopedFileDescriptor               &aTunFd,
@@ -116,8 +120,6 @@ private:
                                        const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setConfiguration(const OtDaemonConfiguration              &aConfiguration,
                             const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   setConfigurationInternal(const OtDaemonConfiguration              &aConfiguration,
-                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setInfraLinkInterfaceName(const std::optional<std::string>         &aInterfaceName,
                                      const ScopedFileDescriptor               &aIcmp6Socket,
                                      const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
@@ -150,7 +152,6 @@ private:
                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status deactivateEphemeralKeyMode(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   deactivateEphemeralKeyModeInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    static otLinkModeConfig GetLinkModeConfig(bool aBeRouter);
 
     bool        RefreshOtDaemonState(otChangedFlags aFlags);
     void        LeaveGracefully(const LeaveCallback &aReceiver);
@@ -185,6 +186,7 @@ private:
     static OtDaemonServer *sOtDaemonServer;
 
     otbr::Ncp::RcpHost                &mHost;
+    std::unique_ptr<AndroidThreadHost> mAndroidHost;
     MdnsPublisher                     &mMdnsPublisher;
     otbr::BorderAgent                 &mBorderAgent;
     std::shared_ptr<INsdPublisher>     mINsdPublisher;
@@ -200,7 +202,6 @@ private:
     bool                               mIsOtCtlInteractiveMode;
     bool                               mIsOtCtlOutputComplete;
     std::shared_ptr<IOtOutputReceiver> mOtCtlOutputReceiver;
-    OtDaemonConfiguration              mConfiguration;
     std::set<OnMeshPrefixConfig>       mOnMeshPrefixes;
     InfraLinkState                     mInfraLinkState;
     int                                mInfraIcmp6Socket;
