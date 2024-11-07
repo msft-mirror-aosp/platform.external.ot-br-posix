@@ -162,6 +162,7 @@ cc_defaults {
 
     srcs: [
         "src/agent/application.cpp",
+        "src/android/android_rcp_host.cpp",
         "src/android/common_utils.cpp",
         "src/android/mdns_publisher.cpp",
         "src/android/otdaemon_server.cpp",
