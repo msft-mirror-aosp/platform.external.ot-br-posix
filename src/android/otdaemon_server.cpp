@@ -875,6 +875,33 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
     return haveUpdates;
 }
 
+/**
+ * Returns `true` if the two TLV lists are representing the same Operational Dataset.
+ *
+ * Note this method works even if TLVs in `aLhs` and `aRhs` are not ordered.
+ */
+static bool areDatasetsEqual(const otOperationalDatasetTlvs &aLhs, const otOperationalDatasetTlvs &aRhs)
+{
+    bool result = false;
+
+    otOperationalDataset     lhsDataset;
+    otOperationalDataset     rhsDataset;
+    otOperationalDatasetTlvs lhsNormalizedTlvs;
+    otOperationalDatasetTlvs rhsNormalizedTlvs;
+
+    // Sort the TLVs in the TLV byte arrays by leveraging the deterministic nature of the two OT APIs
+    SuccessOrExit(otDatasetParseTlvs(&aLhs, &lhsDataset));
+    SuccessOrExit(otDatasetParseTlvs(&aRhs, &rhsDataset));
+    otDatasetConvertToTlvs(&lhsDataset, &lhsNormalizedTlvs);
+    otDatasetConvertToTlvs(&rhsDataset, &rhsNormalizedTlvs);
+
+    result = (lhsNormalizedTlvs.mLength == rhsNormalizedTlvs.mLength) &&
+             (memcmp(lhsNormalizedTlvs.mTlvs, rhsNormalizedTlvs.mTlvs, lhsNormalizedTlvs.mLength) == 0);
+
+exit:
+    return result;
+}
+
 Status OtDaemonServer::join(const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
                             const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
@@ -888,7 +915,8 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
 {
     int                      error = OT_ERROR_NONE;
     std::string              message;
-    otOperationalDatasetTlvs datasetTlvs;
+    otOperationalDatasetTlvs newDatasetTlvs;
+    otOperationalDatasetTlvs curDatasetTlvs;
 
     VerifyOrExit(mState.threadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
@@ -900,6 +928,19 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
 
+    std::copy(aActiveOpDatasetTlvs.begin(), aActiveOpDatasetTlvs.end(), newDatasetTlvs.mTlvs);
+    newDatasetTlvs.mLength = static_cast<uint8_t>(aActiveOpDatasetTlvs.size());
+
+    error = otDatasetGetActiveTlvs(GetOtInstance(), &curDatasetTlvs);
+    if (error == OT_ERROR_NONE && areDatasetsEqual(newDatasetTlvs, curDatasetTlvs) && isAttached())
+    {
+        // Do not leave and re-join if this device has already joined the same network. This can help elimilate
+        // unnecessary connectivity and topology disruption and save the time for re-joining. It's more useful for use
+        // cases where Thread networks are dynamically brought up and torn down (e.g. Thread on mobile phones).
+        aReceiver->onSuccess();
+        ExitNow();
+    }
+
     if (otThreadGetDeviceRole(GetOtInstance()) != OT_DEVICE_ROLE_DISABLED)
     {
         LeaveGracefully([aActiveOpDatasetTlvs, aReceiver, this]() {
@@ -909,9 +950,7 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
         ExitNow();
     }
 
-    std::copy(aActiveOpDatasetTlvs.begin(), aActiveOpDatasetTlvs.end(), datasetTlvs.mTlvs);
-    datasetTlvs.mLength = static_cast<uint8_t>(aActiveOpDatasetTlvs.size());
-    SuccessOrExit(error   = otDatasetSetActiveTlvs(GetOtInstance(), &datasetTlvs),
+    SuccessOrExit(error   = otDatasetSetActiveTlvs(GetOtInstance(), &newDatasetTlvs),
                   message = "Failed to set Active Operational Dataset");
 
     // TODO(b/273160198): check how we can implement join as a child
