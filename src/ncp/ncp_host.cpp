@@ -49,6 +49,7 @@ namespace Ncp {
 NcpNetworkProperties::NcpNetworkProperties(void)
     : mDeviceRole(OT_DEVICE_ROLE_DISABLED)
 {
+    memset(&mDatasetActiveTlvs, 0, sizeof(mDatasetActiveTlvs));
 }
 
 otDeviceRole NcpNetworkProperties::GetDeviceRole(void) const
@@ -59,6 +60,18 @@ otDeviceRole NcpNetworkProperties::GetDeviceRole(void) const
 void NcpNetworkProperties::SetDeviceRole(otDeviceRole aRole)
 {
     mDeviceRole = aRole;
+}
+
+void NcpNetworkProperties::SetDatasetActiveTlvs(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs)
+{
+    mDatasetActiveTlvs.mLength = aActiveOpDatasetTlvs.mLength;
+    memcpy(mDatasetActiveTlvs.mTlvs, aActiveOpDatasetTlvs.mTlvs, aActiveOpDatasetTlvs.mLength);
+}
+
+void NcpNetworkProperties::GetDatasetActiveTlvs(otOperationalDatasetTlvs &aDatasetTlvs) const
+{
+    aDatasetTlvs.mLength = mDatasetActiveTlvs.mLength;
+    memcpy(aDatasetTlvs.mTlvs, mDatasetActiveTlvs.mTlvs, mDatasetActiveTlvs.mLength);
 }
 
 // ===================================== NcpHost ======================================
@@ -175,6 +188,12 @@ void NcpHost::SetChannelMaxPowers(const std::vector<ChannelMaxPower> &aChannelMa
 
     // TODO: Implement SetChannelMaxPowers under NCP mode.
     mTaskRunner.Post([aReceiver](void) { aReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
+}
+
+void NcpHost::AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback)
+{
+    // TODO: Implement AddThreadStateChangedCallback under NCP mode.
+    OT_UNUSED_VARIABLE(aCallback);
 }
 
 void NcpHost::Process(const MainloopContext &aMainloop)
