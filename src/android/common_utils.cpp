@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, The OpenThread Authors.
+ *  Copyright (c) 2024, The OpenThread Authors.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -26,63 +26,31 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @file
- *   This file includes definitions for CRC16 computations.
- */
+#include "android/common_utils.hpp"
 
-#ifndef OTBR_UTILS_CRC16_HPP_
-#define OTBR_UTILS_CRC16_HPP_
+#include <memory>
+#include <string>
 
-#include "openthread-br/config.h"
-
-#include <stdint.h>
+#include <openthread/error.h>
 
 namespace otbr {
+namespace Android {
 
-/**
- * This class implements CRC16 computations.
- */
-class Crc16
+void PropagateResult(int aError, const std::string &aMessage, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-public:
-    enum Polynomial
+    if (aReceiver != nullptr)
     {
-        kCcitt = 0x1021, ///< CRC16_CCITT
-        kAnsi  = 0x8005, ///< CRC16-ANSI
-    };
+        // If an operation has already been requested or accepted, consider it succeeded
+        if (aError == OT_ERROR_NONE || aError == OT_ERROR_ALREADY)
+        {
+            aReceiver->onSuccess();
+        }
+        else
+        {
+            aReceiver->onError(aError, aMessage);
+        }
+    }
+}
 
-    /**
-     * This constructor initializes the object.
-     *
-     * @param[in] aPolynomial  The polynomial value.
-     */
-    Crc16(Polynomial aPolynomial);
-
-    /**
-     * This method initializes the CRC16 computation.
-     */
-    void Init(void) { mCrc = 0; }
-
-    /**
-     * This method feeds a byte value into the CRC16 computation.
-     *
-     * @param[in] aByte  The byte value.
-     */
-    void Update(uint8_t aByte);
-
-    /**
-     * This method gets the current CRC16 value.
-     *
-     * @returns The current CRC16 value.
-     */
-    uint16_t Get(void) const { return mCrc; }
-
-private:
-    uint16_t mPolynomial;
-    uint16_t mCrc;
-};
-
+} // namespace Android
 } // namespace otbr
-
-#endif // OTBR_UTILS_CRC16_HPP_

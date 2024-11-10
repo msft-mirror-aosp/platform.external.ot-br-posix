@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, The OpenThread Authors.
+ *  Copyright (c) 2024, The OpenThread Authors.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -26,63 +26,39 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @file
- *   This file includes definitions for CRC16 computations.
- */
+#ifndef OTBR_ANDROID_RCP_HOST_HPP_
+#define OTBR_ANDROID_RCP_HOST_HPP_
 
-#ifndef OTBR_UTILS_CRC16_HPP_
-#define OTBR_UTILS_CRC16_HPP_
+#include "android_thread_host.hpp"
 
-#include "openthread-br/config.h"
+#include <memory>
 
-#include <stdint.h>
+#include "common_utils.hpp"
+#include "ncp/rcp_host.hpp"
 
 namespace otbr {
+namespace Android {
 
-/**
- * This class implements CRC16 computations.
- */
-class Crc16
+class AndroidRcpHost : public AndroidThreadHost
 {
 public:
-    enum Polynomial
-    {
-        kCcitt = 0x1021, ///< CRC16_CCITT
-        kAnsi  = 0x8005, ///< CRC16-ANSI
-    };
+    AndroidRcpHost(Ncp::RcpHost &aRcpHost);
+    ~AndroidRcpHost(void) = default;
 
-    /**
-     * This constructor initializes the object.
-     *
-     * @param[in] aPolynomial  The polynomial value.
-     */
-    Crc16(Polynomial aPolynomial);
-
-    /**
-     * This method initializes the CRC16 computation.
-     */
-    void Init(void) { mCrc = 0; }
-
-    /**
-     * This method feeds a byte value into the CRC16 computation.
-     *
-     * @param[in] aByte  The byte value.
-     */
-    void Update(uint8_t aByte);
-
-    /**
-     * This method gets the current CRC16 value.
-     *
-     * @returns The current CRC16 value.
-     */
-    uint16_t Get(void) const { return mCrc; }
+    void                         SetConfiguration(const OtDaemonConfiguration              &aConfiguration,
+                                                  const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    const OtDaemonConfiguration &GetConfiguration(void) override { return mConfiguration; }
 
 private:
-    uint16_t mPolynomial;
-    uint16_t mCrc;
+    otInstance *GetOtInstance(void);
+
+    static otLinkModeConfig GetLinkModeConfig(bool aBeRouter);
+
+    Ncp::RcpHost         &mRcpHost;
+    OtDaemonConfiguration mConfiguration;
 };
 
+} // namespace Android
 } // namespace otbr
 
-#endif // OTBR_UTILS_CRC16_HPP_
+#endif // OTBR_ANDROID_RCP_HOST_HPP_
