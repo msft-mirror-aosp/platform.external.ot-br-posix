@@ -60,13 +60,11 @@ public:
      * Returns the device role.
      *
      * @returns the device role.
-     *
      */
     virtual otDeviceRole GetDeviceRole(void) const = 0;
 
     /**
      * The destructor.
-     *
      */
     virtual ~NetworkProperties(void) = default;
 };
@@ -76,7 +74,6 @@ public:
  * Thread network.
  *
  * The APIs are unified for both NCP and RCP cases.
- *
  */
 class ThreadHost : virtual public NetworkProperties
 {
@@ -85,6 +82,12 @@ public:
     using ChannelMasksReceiver =
         std::function<void(uint32_t /*aSupportedChannelMask*/, uint32_t /*aPreferredChannelMask*/)>;
     using DeviceRoleHandler = std::function<void(otError, otDeviceRole)>;
+
+    struct ChannelMaxPower
+    {
+        uint16_t mChannel;
+        int16_t  mMaxPower; // INT16_MAX indicates that the corresponding channel is disabled.
+    };
 
     /**
      * Create a Thread Controller Instance.
@@ -98,7 +101,6 @@ public:
      * @param[in]   aEnableAutoAttach       Whether or not to automatically attach to the saved network.
      *
      * @returns Non-null OpenThread Controller instance.
-     *
      */
     static std::unique_ptr<ThreadHost> Create(const char                      *aInterfaceName,
                                               const std::vector<const char *> &aRadioUrls,
@@ -114,7 +116,6 @@ public:
      *
      * @param[in] aActiveOpDatasetTlvs  A reference to the active operational dataset of the Thread network.
      * @param[in] aReceiver             A receiver to get the async result of this operation.
-     *
      */
     virtual void Join(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs, const AsyncResultReceiver &aRecevier) = 0;
 
@@ -131,7 +132,6 @@ public:
      *    will be passed to @p aReceiver when the error happens.
      *
      * @param[in] aReceiver  A receiver to get the async result of this operation.
-     *
      */
     virtual void Leave(const AsyncResultReceiver &aRecevier) = 0;
 
@@ -140,7 +140,6 @@ public:
      *
      * @param[in] aPendingOpDatasetTlvs  A reference to the pending operational dataset of the Thread network.
      * @param[in] aReceiver              A receiver to get the async result of this operation.
-     *
      */
     virtual void ScheduleMigration(const otOperationalDatasetTlvs &aPendingOpDatasetTlvs,
                                    const AsyncResultReceiver       aReceiver) = 0;
@@ -183,14 +182,25 @@ public:
     virtual void GetChannelMasks(const ChannelMasksReceiver &aReceiver, const AsyncResultReceiver &aErrReceiver) = 0;
 
     /**
-     * Returns the co-processor type.
+     * Sets the max power of each channel.
      *
+     * 1. If the host hasn't been initialized, @p aReceiver will be invoked with error OT_ERROR_INVALID_STATE.
+     * 2. If any value in @p aChannelMaxPowers is invalid, @p aReceiver will be invoked with error
+     * OT_ERROR_INVALID_ARGS.
+     *
+     * @param[in] aChannelMaxPowers  A vector of ChannelMaxPower.
+     * @param[in] aReceiver          A receiver to get the async result of this operation.
+     */
+    virtual void SetChannelMaxPowers(const std::vector<ChannelMaxPower> &aChannelMaxPowers,
+                                     const AsyncResultReceiver          &aReceiver) = 0;
+
+    /**
+     * Returns the co-processor type.
      */
     virtual CoprocessorType GetCoprocessorType(void) = 0;
 
     /**
      * Returns the co-processor version string.
-     *
      */
     virtual const char *GetCoprocessorVersion(void) = 0;
 
@@ -198,30 +208,23 @@ public:
      * This method returns the Thread network interface name.
      *
      * @returns A pointer to the Thread network interface name string.
-     *
      */
     virtual const char *GetInterfaceName(void) const = 0;
 
     /**
      * Initializes the Thread controller.
-     *
      */
     virtual void Init(void) = 0;
 
     /**
      * Deinitializes the Thread controller.
-     *
      */
     virtual void Deinit(void) = 0;
 
     /**
      * The destructor.
-     *
      */
     virtual ~ThreadHost(void) = default;
-
-protected:
-    static otLogLevel ConvertToOtLogLevel(otbrLogLevel aLevel);
 };
 
 } // namespace Ncp

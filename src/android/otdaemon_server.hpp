@@ -33,14 +33,11 @@
 #include <memory>
 #include <vector>
 
-#include <aidl/com/android/server/thread/openthread/BnOtDaemon.h>
-#include <aidl/com/android/server/thread/openthread/INsdPublisher.h>
-#include <aidl/com/android/server/thread/openthread/IOtDaemon.h>
-#include <aidl/com/android/server/thread/openthread/InfraLinkState.h>
 #include <openthread/instance.h>
 #include <openthread/ip6.h>
 
 #include "agent/vendor.hpp"
+#include "android/common_utils.hpp"
 #include "android/mdns_publisher.hpp"
 #include "common/mainloop.hpp"
 #include "common/time.hpp"
@@ -48,25 +45,6 @@
 
 namespace otbr {
 namespace Android {
-
-using BinderDeathRecipient = ::ndk::ScopedAIBinder_DeathRecipient;
-using ScopedFileDescriptor = ::ndk::ScopedFileDescriptor;
-using Status               = ::ndk::ScopedAStatus;
-using aidl::android::net::thread::ChannelMaxPower;
-using aidl::com::android::server::thread::openthread::BackboneRouterState;
-using aidl::com::android::server::thread::openthread::BnOtDaemon;
-using aidl::com::android::server::thread::openthread::IChannelMasksReceiver;
-using aidl::com::android::server::thread::openthread::InfraLinkState;
-using aidl::com::android::server::thread::openthread::INsdPublisher;
-using aidl::com::android::server::thread::openthread::IOtDaemon;
-using aidl::com::android::server::thread::openthread::IOtDaemonCallback;
-using aidl::com::android::server::thread::openthread::IOtOutputReceiver;
-using aidl::com::android::server::thread::openthread::IOtStatusReceiver;
-using aidl::com::android::server::thread::openthread::Ipv6AddressInfo;
-using aidl::com::android::server::thread::openthread::MeshcopTxtAttributes;
-using aidl::com::android::server::thread::openthread::OnMeshPrefixConfig;
-using aidl::com::android::server::thread::openthread::OtDaemonConfiguration;
-using aidl::com::android::server::thread::openthread::OtDaemonState;
 
 class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendor::VendorServer
 {
@@ -102,14 +80,14 @@ private:
     // Implements IOtDaemon.aidl
 
     Status initialize(const ScopedFileDescriptor               &aTunFd,
-                      const bool                                enabled,
-                      const OtDaemonConfiguration              &aConfig,
-                      const std::shared_ptr<INsdPublisher>     &aNsdPublisher,
+                      const bool                                aEnabled,
+                      const OtDaemonConfiguration              &aConfiguration,
+                      const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                       const MeshcopTxtAttributes               &aMeshcopTxts,
                       const std::shared_ptr<IOtDaemonCallback> &aCallback,
                       const std::string                        &aCountryCode) override;
-    void   initializeInternal(const bool                                enabled,
-                              const OtDaemonConfiguration              &aConfig,
+    void   initializeInternal(const bool                                aEnabled,
+                              const OtDaemonConfiguration              &aConfiguration,
                               const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                               const MeshcopTxtAttributes               &aMeshcopTxts,
                               const std::shared_ptr<IOtDaemonCallback> &aCallback,
@@ -124,8 +102,8 @@ private:
                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   joinInternal(const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
                         const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    Status leave(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   leaveInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status leave(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   leaveInternal(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status scheduleMigration(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
                              const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   scheduleMigrationInternal(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
@@ -172,10 +150,11 @@ private:
                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status deactivateEphemeralKeyMode(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   deactivateEphemeralKeyModeInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    static otLinkModeConfig GetLinkModeConfig(bool aBeRouter);
 
     bool        RefreshOtDaemonState(otChangedFlags aFlags);
     void        LeaveGracefully(const LeaveCallback &aReceiver);
-    void        FinishLeave(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void        FinishLeave(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     static void DetachGracefullyCallback(void *aBinderServer);
     void        DetachGracefullyCallback(void);
     static void SendMgmtPendingSetCallback(otError aResult, void *aBinderServer);
