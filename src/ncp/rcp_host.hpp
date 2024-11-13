@@ -73,6 +73,7 @@ public:
 
     // NetworkProperties methods
     otDeviceRole GetDeviceRole(void) const override;
+    void         GetDatasetActiveTlvs(otOperationalDatasetTlvs &aDatasetTlvs) const override;
 
     // Set the otInstance
     void SetInstance(otInstance *aInstance);
@@ -87,8 +88,6 @@ private:
 class RcpHost : public MainloopProcessor, public ThreadHost, public OtNetworkProperties
 {
 public:
-    using ThreadStateChangedCallback = std::function<void(otChangedFlags aFlags)>;
-
     /**
      * This constructor initializes this object.
      *
@@ -152,13 +151,6 @@ public:
     void RegisterResetHandler(std::function<void(void)> aHandler);
 
     /**
-     * This method adds a event listener for Thread state changes.
-     *
-     * @param[in] aCallback  The callback to receive Thread state changed events.
-     */
-    void AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback);
-
-    /**
      * This method resets the OpenThread instance.
      */
     void Reset(void);
@@ -212,6 +204,7 @@ public:
     void GetChannelMasks(const ChannelMasksReceiver &aReceiver, const AsyncResultReceiver &aErrReceiver) override;
     void SetChannelMaxPowers(const std::vector<ChannelMaxPower> &aChannelMaxPowers,
                              const AsyncResultReceiver          &aReceiver) override;
+    void AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback) override;
 
     CoprocessorType GetCoprocessorType(void) override
     {
