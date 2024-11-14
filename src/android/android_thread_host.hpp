@@ -44,6 +44,13 @@ public:
     virtual void                         SetConfiguration(const OtDaemonConfiguration              &aConfiguration,
                                                           const std::shared_ptr<IOtStatusReceiver> &aReceiver) = 0;
     virtual const OtDaemonConfiguration &GetConfiguration(void)                                                = 0;
+    virtual void                         SetInfraLinkInterfaceName(const std::string                        &aInterfaceName,
+                                                                   int                                       aIcmp6Socket,
+                                                                   const std::shared_ptr<IOtStatusReceiver> &aReceiver) = 0;
+    virtual void                         SetInfraLinkNat64Prefix(const std::string                        &aNat64Prefix,
+                                                                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) = 0;
+    virtual void                         SetInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
+                                                                const std::shared_ptr<IOtStatusReceiver> &aReceiver) = 0;
 };
 
 } // namespace Android
