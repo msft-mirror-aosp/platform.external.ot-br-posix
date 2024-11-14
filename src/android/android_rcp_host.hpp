@@ -48,14 +48,28 @@ public:
     void                         SetConfiguration(const OtDaemonConfiguration              &aConfiguration,
                                                   const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     const OtDaemonConfiguration &GetConfiguration(void) override { return mConfiguration; }
+    void                         SetInfraLinkInterfaceName(const std::string                        &aInterfaceName,
+                                                           int                                       aIcmp6Socket,
+                                                           const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void                         SetInfraLinkNat64Prefix(const std::string                        &aNat64Prefix,
+                                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void                         SetInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
+                                                        const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+
+    void                   NotifyNat64PrefixDiscoveryDone(void);
+    static AndroidRcpHost *Get(void) { return sAndroidRcpHost; }
 
 private:
     otInstance *GetOtInstance(void);
 
     static otLinkModeConfig GetLinkModeConfig(bool aBeRouter);
 
+    static AndroidRcpHost *sAndroidRcpHost;
+
     Ncp::RcpHost         &mRcpHost;
     OtDaemonConfiguration mConfiguration;
+    InfraLinkState        mInfraLinkState;
+    int                   mInfraIcmp6Socket;
 };
 
 } // namespace Android
