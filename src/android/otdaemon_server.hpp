@@ -36,6 +36,7 @@
 #include <openthread/instance.h>
 #include <openthread/ip6.h>
 
+#include "common_utils.hpp"
 #include "agent/vendor.hpp"
 #include "android/android_thread_host.hpp"
 #include "android/common_utils.hpp"
@@ -62,8 +63,6 @@ public:
 
     static OtDaemonServer *Get(void) { return sOtDaemonServer; }
 
-    void NotifyNat64PrefixDiscoveryDone(void);
-
 private:
     using LeaveCallback = std::function<void()>;
 
@@ -79,7 +78,7 @@ private:
     void Process(const MainloopContext &aMainloop) override;
 
     // Creates AndroidThreadHost instance
-    std::unique_ptr<AndroidThreadHost> CreateAospHost(void);
+    std::unique_ptr<AndroidThreadHost> CreateAndroidHost(void);
 
     // Implements IOtDaemon.aidl
 
@@ -123,9 +122,6 @@ private:
     Status setInfraLinkInterfaceName(const std::optional<std::string>         &aInterfaceName,
                                      const ScopedFileDescriptor               &aIcmp6Socket,
                                      const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   setInfraLinkInterfaceNameInternal(const std::string                        &aInterfaceName,
-                                             int                                       aIcmp6SocketFd,
-                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setInfraLinkNat64Prefix(const std::optional<std::string>         &aNat64Prefix,
                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setInfraLinkNat64PrefixInternal(const std::string                        &aNat64Prefix,
@@ -203,8 +199,6 @@ private:
     bool                               mIsOtCtlOutputComplete;
     std::shared_ptr<IOtOutputReceiver> mOtCtlOutputReceiver;
     std::set<OnMeshPrefixConfig>       mOnMeshPrefixes;
-    InfraLinkState                     mInfraLinkState;
-    int                                mInfraIcmp6Socket;
     int64_t                            mEphemeralKeyExpiryMillis;
 
     static constexpr Seconds kTelemetryCheckInterval           = Seconds(600);          // 600 seconds
