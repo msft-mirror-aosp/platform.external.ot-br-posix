@@ -62,9 +62,12 @@ Status MdnsPublisher::NsdDiscoverServiceCallback::onServiceDiscovered(const std:
                                                                       const std::string &aType,
                                                                       bool               aIsFound)
 {
-    VerifyOrExit(aIsFound, mSubscription.mPublisher.OnServiceRemoved(0, aType, aName));
+    std::shared_ptr<ServiceSubscription> subscription = mSubscription.lock();
 
-    mSubscription.Resolve(aName, aType);
+    VerifyOrExit(subscription != nullptr);
+    VerifyOrExit(aIsFound, subscription->mPublisher.OnServiceRemoved(0, aType, aName));
+
+    subscription->Resolve(aName, aType);
 
 exit:
     return Status::ok();
@@ -79,8 +82,11 @@ Status MdnsPublisher::NsdResolveServiceCallback::onServiceResolved(const std::st
                                                                    const std::vector<DnsTxtAttribute> &aTxt,
                                                                    int                                 aTtlSeconds)
 {
-    DiscoveredInstanceInfo info;
-    TxtList                txtList;
+    DiscoveredInstanceInfo               info;
+    TxtList                              txtList;
+    std::shared_ptr<ServiceSubscription> subscription = mSubscription.lock();
+
+    VerifyOrExit(subscription != nullptr);
 
     info.mHostName   = aHostname + ".local.";
     info.mName       = aName;
@@ -105,15 +111,19 @@ Status MdnsPublisher::NsdResolveServiceCallback::onServiceResolved(const std::st
     }
     EncodeTxtData(txtList, info.mTxtData);
 
-    mSubscription.mPublisher.OnServiceResolved(aType, info);
+    subscription->mPublisher.OnServiceResolved(aType, info);
 
+exit:
     return Status::ok();
 }
 
 Status MdnsPublisher::NsdResolveHostCallback::onHostResolved(const std::string              &aName,
                                                              const std::vector<std::string> &aAddresses)
 {
-    DiscoveredHostInfo info;
+    DiscoveredHostInfo                info;
+    std::shared_ptr<HostSubscription> subscription = mSubscription.lock();
+
+    VerifyOrExit(subscription != nullptr);
 
     info.mTtl = kDefaultResolvedTtl;
     for (const auto &addressStr : aAddresses)
@@ -129,8 +139,9 @@ Status MdnsPublisher::NsdResolveHostCallback::onHostResolved(const std::string  
         info.mAddresses.push_back(address);
     }
 
-    mSubscription.mPublisher.OnHostResolved(aName, info);
+    subscription->mPublisher.OnHostResolved(aName, info);
 
+exit:
     return Status::ok();
 }
 
@@ -166,19 +177,19 @@ std::shared_ptr<MdnsPublisher::NsdStatusReceiver> CreateReceiver(Mdns::Publisher
 }
 
 std::shared_ptr<MdnsPublisher::NsdDiscoverServiceCallback> CreateNsdDiscoverServiceCallback(
-    MdnsPublisher::ServiceSubscription &aServiceSubscription)
+    const std::shared_ptr<MdnsPublisher::ServiceSubscription> &aServiceSubscription)
 {
     return ndk::SharedRefBase::make<MdnsPublisher::NsdDiscoverServiceCallback>(aServiceSubscription);
 }
 
 std::shared_ptr<MdnsPublisher::NsdResolveServiceCallback> CreateNsdResolveServiceCallback(
-    MdnsPublisher::ServiceSubscription &aServiceSubscription)
+    const std::shared_ptr<MdnsPublisher::ServiceSubscription> &aServiceSubscription)
 {
     return ndk::SharedRefBase::make<MdnsPublisher::NsdResolveServiceCallback>(aServiceSubscription);
 }
 
 std::shared_ptr<MdnsPublisher::NsdResolveHostCallback> CreateNsdResolveHostCallback(
-    MdnsPublisher::HostSubscription &aHostSubscription)
+    const std::shared_ptr<MdnsPublisher::HostSubscription> &aHostSubscription)
 {
     return ndk::SharedRefBase::make<MdnsPublisher::NsdResolveHostCallback>(aHostSubscription);
 }
@@ -341,7 +352,7 @@ void MdnsPublisher::UnpublishKey(const std::string &aName, ResultCallback &&aCal
 
 void MdnsPublisher::SubscribeService(const std::string &aType, const std::string &aInstanceName)
 {
-    auto service = MakeUnique<ServiceSubscription>(aType, aInstanceName, *this, mNsdPublisher);
+    auto service = std::make_shared<ServiceSubscription>(aType, aInstanceName, *this, mNsdPublisher);
 
     VerifyOrExit(IsStarted(), otbrLogWarning("No platform mDNS implementation registered!"));
 
@@ -369,7 +380,7 @@ void MdnsPublisher::UnsubscribeService(const std::string &aType, const std::stri
     VerifyOrExit(IsStarted());
 
     it = std::find_if(mServiceSubscriptions.begin(), mServiceSubscriptions.end(),
-                      [&aType, &aInstanceName](const std::unique_ptr<ServiceSubscription> &aService) {
+                      [&aType, &aInstanceName](const std::shared_ptr<ServiceSubscription> &aService) {
                           return aService->mType == aType && aService->mName == aInstanceName;
                       });
 
@@ -377,7 +388,7 @@ void MdnsPublisher::UnsubscribeService(const std::string &aType, const std::stri
                  otbrLogWarning("The service %s.%s is already unsubscribed.", aInstanceName.c_str(), aType.c_str()));
 
     {
-        std::unique_ptr<ServiceSubscription> service = std::move(*it);
+        std::shared_ptr<ServiceSubscription> service = std::move(*it);
 
         mServiceSubscriptions.erase(it);
     }
@@ -391,11 +402,11 @@ exit:
 
 void MdnsPublisher::SubscribeHost(const std::string &aHostName)
 {
-    auto host = MakeUnique<HostSubscription>(aHostName, *this, mNsdPublisher, AllocateListenerId());
+    auto host = std::make_shared<HostSubscription>(aHostName, *this, mNsdPublisher, AllocateListenerId());
 
     VerifyOrExit(IsStarted(), otbrLogWarning("No platform mDNS implementation registered!"));
 
-    mNsdPublisher->resolveHost(aHostName, CreateNsdResolveHostCallback(*host), host->mListenerId);
+    mNsdPublisher->resolveHost(aHostName, CreateNsdResolveHostCallback(host), host->mListenerId);
     mHostSubscriptions.push_back(std::move(host));
 
     otbrLogInfo("Subscribe host %s (total %zu)", aHostName.c_str(), mHostSubscriptions.size());
@@ -412,13 +423,13 @@ void MdnsPublisher::UnsubscribeHost(const std::string &aHostName)
 
     it = std::find_if(
         mHostSubscriptions.begin(), mHostSubscriptions.end(),
-        [&aHostName](const std::unique_ptr<HostSubscription> &aHost) { return aHost->mName == aHostName; });
+        [&aHostName](const std::shared_ptr<HostSubscription> &aHost) { return aHost->mName == aHostName; });
 
     VerifyOrExit(it != mHostSubscriptions.end(),
                  otbrLogWarning("The host %s is already unsubscribed.", aHostName.c_str()));
 
     {
-        std::unique_ptr<HostSubscription> host = std::move(*it);
+        std::shared_ptr<HostSubscription> host = std::move(*it);
 
         mHostSubscriptions.erase(it);
     }
@@ -519,7 +530,7 @@ void MdnsPublisher::ServiceSubscription::Browse(void)
 
     otbrLogInfo("Browsing service type %s", mType.c_str());
 
-    mNsdPublisher->discoverService(mType, CreateNsdDiscoverServiceCallback(*this), mBrowseListenerId);
+    mNsdPublisher->discoverService(mType, CreateNsdDiscoverServiceCallback(shared_from_this()), mBrowseListenerId);
 
 exit:
     return;
@@ -534,7 +545,8 @@ void MdnsPublisher::ServiceSubscription::Resolve(const std::string &aName, const
     otbrLogInfo("Resolving service %s.%s", aName.c_str(), aType.c_str());
 
     AddServiceResolver(aName, resolver);
-    mNsdPublisher->resolveService(aName, aType, CreateNsdResolveServiceCallback(*this), resolver->mListenerId);
+    mNsdPublisher->resolveService(aName, aType, CreateNsdResolveServiceCallback(shared_from_this()),
+                                  resolver->mListenerId);
 
 exit:
     return;
