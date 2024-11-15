@@ -840,47 +840,37 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
 
     if (aFlags & OT_CHANGED_THREAD_NETIF_STATE)
     {
-        mState.isInterfaceUp = otIp6IsEnabled(GetOtInstance());
+        mState.isInterfaceUp = mHost.Ip6IsEnabled();
         haveUpdates          = true;
     }
 
     if (aFlags & OT_CHANGED_THREAD_ROLE)
     {
-        mState.deviceRole = otThreadGetDeviceRole(GetOtInstance());
+        mState.deviceRole = mHost.GetDeviceRole();
         haveUpdates       = true;
     }
 
     if (aFlags & OT_CHANGED_THREAD_PARTITION_ID)
     {
-        mState.partitionId = otThreadGetPartitionId(GetOtInstance());
+        mState.partitionId = mHost.GetPartitionId();
         haveUpdates        = true;
     }
 
     if (aFlags & OT_CHANGED_ACTIVE_DATASET)
     {
         otOperationalDatasetTlvs datasetTlvs;
-        if (otDatasetGetActiveTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
-        {
-            mState.activeDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
-        }
-        else
-        {
-            mState.activeDatasetTlvs.clear();
-        }
+        mHost.GetDatasetActiveTlvs(datasetTlvs);
+        mState.activeDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
+
         haveUpdates = true;
     }
 
     if (aFlags & OT_CHANGED_PENDING_DATASET)
     {
         otOperationalDatasetTlvs datasetTlvs;
-        if (otDatasetGetPendingTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
-        {
-            mState.pendingDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
-        }
-        else
-        {
-            mState.pendingDatasetTlvs.clear();
-        }
+        mHost.GetDatasetPendingTlvs(datasetTlvs);
+        mState.pendingDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
+
         haveUpdates = true;
     }
 
