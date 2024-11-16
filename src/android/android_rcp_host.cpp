@@ -240,7 +240,7 @@ extern "C" otError otPlatInfraIfDiscoverNat64Prefix(uint32_t aInfraIfIndex)
     OT_UNUSED_VARIABLE(aInfraIfIndex);
 
     AndroidRcpHost *androidRcpHost = AndroidRcpHost::Get();
-    otError         error       = OT_ERROR_NONE;
+    otError         error          = OT_ERROR_NONE;
 
     VerifyOrExit(androidRcpHost != nullptr, error = OT_ERROR_INVALID_STATE);
 
