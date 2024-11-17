@@ -128,7 +128,7 @@ public:
         std::shared_ptr<INsdPublisher> mNsdPublisher;
     };
 
-    struct ServiceSubscription : private ::NonCopyable
+    struct ServiceSubscription : public std::enable_shared_from_this<ServiceSubscription>, private ::NonCopyable
     {
         explicit ServiceSubscription(std::string                    aType,
                                      std::string                    aName,
@@ -185,22 +185,22 @@ public:
     class NsdDiscoverServiceCallback : public BnNsdDiscoverServiceCallback
     {
     public:
-        explicit NsdDiscoverServiceCallback(ServiceSubscription &aSubscription)
-            : mSubscription(aSubscription)
+        explicit NsdDiscoverServiceCallback(std::weak_ptr<ServiceSubscription> aSubscription)
+            : mSubscription(std::move(aSubscription))
         {
         }
 
         Status onServiceDiscovered(const std::string &aName, const std::string &aType, bool aIsFound);
 
     private:
-        ServiceSubscription &mSubscription;
+        std::weak_ptr<ServiceSubscription> mSubscription;
     };
 
     class NsdResolveServiceCallback : public BnNsdResolveServiceCallback
     {
     public:
-        explicit NsdResolveServiceCallback(ServiceSubscription &aSubscription)
-            : mSubscription(aSubscription)
+        explicit NsdResolveServiceCallback(std::weak_ptr<ServiceSubscription> aSubscription)
+            : mSubscription(std::move(aSubscription))
         {
         }
 
@@ -214,21 +214,21 @@ public:
                                  int                                 aTtlSeconds);
 
     private:
-        ServiceSubscription &mSubscription;
+        std::weak_ptr<ServiceSubscription> mSubscription;
     };
 
     class NsdResolveHostCallback : public BnNsdResolveHostCallback
     {
     public:
-        explicit NsdResolveHostCallback(HostSubscription &aSubscription)
-            : mSubscription(aSubscription)
+        explicit NsdResolveHostCallback(std::weak_ptr<HostSubscription> aSubscription)
+            : mSubscription(std::move(aSubscription))
         {
         }
 
         Status onHostResolved(const std::string &aName, const std::vector<std::string> &aAddresses);
 
     private:
-        HostSubscription &mSubscription;
+        std::weak_ptr<HostSubscription> mSubscription;
     };
 
 protected:
@@ -311,8 +311,8 @@ private:
         std::weak_ptr<INsdPublisher> mNsdPublisher;
     };
 
-    typedef std::vector<std::unique_ptr<ServiceSubscription>> ServiceSubscriptionList;
-    typedef std::vector<std::unique_ptr<HostSubscription>>    HostSubscriptionList;
+    typedef std::vector<std::shared_ptr<ServiceSubscription>> ServiceSubscriptionList;
+    typedef std::vector<std::shared_ptr<HostSubscription>>    HostSubscriptionList;
 
     static constexpr int kDefaultResolvedTtl = 10;
     static constexpr int kMinResolvedTtl     = 1;

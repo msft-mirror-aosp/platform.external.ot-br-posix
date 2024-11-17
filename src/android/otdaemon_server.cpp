@@ -55,6 +55,7 @@
 
 #include "agent/vendor.hpp"
 #include "android/android_rcp_host.hpp"
+#include "android/common_utils.hpp"
 #include "android/otdaemon_telemetry.hpp"
 #include "common/code_utils.hpp"
 #include "ncp/thread_host.hpp"
@@ -104,15 +105,13 @@ OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &rcpHost,
                                otbr::Mdns::Publisher &mdnsPublisher,
                                otbr::BorderAgent     &borderAgent)
     : mHost(rcpHost)
-    , mAndroidHost(CreateAospHost())
+    , mAndroidHost(CreateAndroidHost())
     , mMdnsPublisher(static_cast<MdnsPublisher &>(mdnsPublisher))
     , mBorderAgent(borderAgent)
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
-    mInfraLinkState.interfaceName = "";
-    mInfraIcmp6Socket             = -1;
-    sOtDaemonServer               = this;
+    sOtDaemonServer = this;
 }
 
 void OtDaemonServer::Init(void)
@@ -558,7 +557,7 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
     }
 }
 
-std::unique_ptr<AndroidThreadHost> OtDaemonServer::CreateAospHost(void)
+std::unique_ptr<AndroidThreadHost> OtDaemonServer::CreateAndroidHost(void)
 {
     std::unique_ptr<AndroidThreadHost> host;
 
@@ -841,47 +840,37 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
 
     if (aFlags & OT_CHANGED_THREAD_NETIF_STATE)
     {
-        mState.isInterfaceUp = otIp6IsEnabled(GetOtInstance());
+        mState.isInterfaceUp = mHost.Ip6IsEnabled();
         haveUpdates          = true;
     }
 
     if (aFlags & OT_CHANGED_THREAD_ROLE)
     {
-        mState.deviceRole = otThreadGetDeviceRole(GetOtInstance());
+        mState.deviceRole = mHost.GetDeviceRole();
         haveUpdates       = true;
     }
 
     if (aFlags & OT_CHANGED_THREAD_PARTITION_ID)
     {
-        mState.partitionId = otThreadGetPartitionId(GetOtInstance());
+        mState.partitionId = mHost.GetPartitionId();
         haveUpdates        = true;
     }
 
     if (aFlags & OT_CHANGED_ACTIVE_DATASET)
     {
         otOperationalDatasetTlvs datasetTlvs;
-        if (otDatasetGetActiveTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
-        {
-            mState.activeDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
-        }
-        else
-        {
-            mState.activeDatasetTlvs.clear();
-        }
+        mHost.GetDatasetActiveTlvs(datasetTlvs);
+        mState.activeDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
+
         haveUpdates = true;
     }
 
     if (aFlags & OT_CHANGED_PENDING_DATASET)
     {
         otOperationalDatasetTlvs datasetTlvs;
-        if (otDatasetGetPendingTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
-        {
-            mState.pendingDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
-        }
-        else
-        {
-            mState.pendingDatasetTlvs.clear();
-        }
+        mHost.GetDatasetPendingTlvs(datasetTlvs);
+        mState.pendingDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
+
         haveUpdates = true;
     }
 
@@ -1233,57 +1222,10 @@ Status OtDaemonServer::setInfraLinkInterfaceName(const std::optional<std::string
     int icmp6Socket = aIcmp6Socket.dup().release();
 
     mTaskRunner.Post([interfaceName = aInterfaceName.value_or(""), icmp6Socket, aReceiver, this]() {
-        setInfraLinkInterfaceNameInternal(interfaceName, icmp6Socket, aReceiver);
+        mAndroidHost->SetInfraLinkInterfaceName(interfaceName, icmp6Socket, aReceiver);
     });
 
     return Status::ok();
-}
-
-void OtDaemonServer::setInfraLinkInterfaceNameInternal(const std::string                        &aInterfaceName,
-                                                       int                                       aIcmp6Socket,
-                                                       const std::shared_ptr<IOtStatusReceiver> &aReceiver)
-{
-    otError           error = OT_ERROR_NONE;
-    std::string       message;
-    const std::string infraIfName  = aInterfaceName;
-    unsigned int      infraIfIndex = if_nametoindex(infraIfName.c_str());
-
-    otbrLogInfo("Setting infra link state: %s", aInterfaceName.c_str());
-
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(mAndroidHost->GetConfiguration().borderRouterEnabled, error = OT_ERROR_INVALID_STATE,
-                 message = "Set infra link state when border router is disabled");
-    VerifyOrExit(mInfraLinkState.interfaceName != aInterfaceName || aIcmp6Socket != mInfraIcmp6Socket);
-
-    if (infraIfIndex != 0 && aIcmp6Socket > 0)
-    {
-        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
-                      message = "failed to disable border routing");
-        otSysSetInfraNetif(infraIfName.c_str(), aIcmp6Socket);
-        aIcmp6Socket = -1;
-        SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
-                      message = "failed to initialize border routing");
-        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
-                      message = "failed to enable border routing");
-        // TODO: b/320836258 - Make BBR independently configurable
-        otBackboneRouterSetEnabled(GetOtInstance(), true /* aEnabled */);
-    }
-    else
-    {
-        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
-                      message = "failed to disable border routing");
-        otBackboneRouterSetEnabled(GetOtInstance(), false /* aEnabled */);
-    }
-
-    mInfraLinkState.interfaceName = aInterfaceName;
-    mInfraIcmp6Socket             = aIcmp6Socket;
-
-exit:
-    if (error != OT_ERROR_NONE)
-    {
-        close(aIcmp6Socket);
-    }
-    PropagateResult(error, message, aReceiver);
 }
 
 Status OtDaemonServer::runOtCtlCommand(const std::string                        &aCommand,
@@ -1301,7 +1243,7 @@ Status OtDaemonServer::setInfraLinkNat64Prefix(const std::optional<std::string> 
                                                const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     mTaskRunner.Post([nat64Prefix = aNat64Prefix.value_or(""), aReceiver, this]() {
-        setInfraLinkNat64PrefixInternal(nat64Prefix, aReceiver);
+        mAndroidHost->SetInfraLinkNat64Prefix(nat64Prefix, aReceiver);
     });
 
     return Status::ok();
@@ -1325,68 +1267,13 @@ void OtDaemonServer::runOtCtlCommandInternal(const std::string                  
     }
 }
 
-void OtDaemonServer::setInfraLinkNat64PrefixInternal(const std::string                        &aNat64Prefix,
-                                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver)
-{
-    otError     error = OT_ERROR_NONE;
-    std::string message;
-
-    otbrLogInfo("Setting infra link NAT64 prefix: %s", aNat64Prefix.c_str());
-
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-
-    mInfraLinkState.nat64Prefix = aNat64Prefix;
-    NotifyNat64PrefixDiscoveryDone();
-
-exit:
-    PropagateResult(error, message, aReceiver);
-}
-
-std::vector<otIp6Address> ToOtUpstreamDnsServerAddresses(const std::vector<std::string> &aAddresses)
-{
-    std::vector<otIp6Address> addresses;
-
-    // TODO: b/363738575 - support IPv6
-    for (const auto &addressString : aAddresses)
-    {
-        otIp6Address ip6Address;
-        otIp4Address ip4Address;
-
-        if (otIp4AddressFromString(addressString.c_str(), &ip4Address) != OT_ERROR_NONE)
-        {
-            continue;
-        }
-        otIp4ToIp4MappedIp6Address(&ip4Address, &ip6Address);
-        addresses.push_back(ip6Address);
-    }
-
-    return addresses;
-}
-
 Status OtDaemonServer::setInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
                                               const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    mTaskRunner.Post([aDnsServers, aReceiver, this]() { setInfraLinkDnsServersInternal(aDnsServers, aReceiver); });
+    mTaskRunner.Post(
+        [aDnsServers, aReceiver, this]() { mAndroidHost->SetInfraLinkDnsServers(aDnsServers, aReceiver); });
 
     return Status::ok();
-}
-
-void OtDaemonServer::setInfraLinkDnsServersInternal(const std::vector<std::string>           &aDnsServers,
-                                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver)
-{
-    otError     error = OT_ERROR_NONE;
-    std::string message;
-    auto        dnsServers = ToOtUpstreamDnsServerAddresses(aDnsServers);
-
-    otbrLogInfo("Setting infra link DNS servers: %d servers", aDnsServers.size());
-
-    VerifyOrExit(aDnsServers != mInfraLinkState.dnsServers);
-
-    mInfraLinkState.dnsServers = aDnsServers;
-    otSysUpstreamDnsSetServerList(dnsServers.data(), dnsServers.size());
-
-exit:
-    PropagateResult(error, message, aReceiver);
 }
 
 static int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)
@@ -1456,33 +1343,6 @@ void OtDaemonServer::PushTelemetryIfConditionMatch()
 
 exit:
     return;
-}
-
-void OtDaemonServer::NotifyNat64PrefixDiscoveryDone(void)
-{
-    otIp6Prefix nat64Prefix{};
-    uint32_t    infraIfIndex = if_nametoindex(mInfraLinkState.interfaceName.value_or("").c_str());
-
-    otIp6PrefixFromString(mInfraLinkState.nat64Prefix.value_or("").c_str(), &nat64Prefix);
-    otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &nat64Prefix);
-
-exit:
-    return;
-}
-
-extern "C" otError otPlatInfraIfDiscoverNat64Prefix(uint32_t aInfraIfIndex)
-{
-    OT_UNUSED_VARIABLE(aInfraIfIndex);
-
-    OtDaemonServer *otDaemonServer = OtDaemonServer::Get();
-    otError         error          = OT_ERROR_NONE;
-
-    VerifyOrExit(otDaemonServer != nullptr, error = OT_ERROR_INVALID_STATE);
-
-    otDaemonServer->NotifyNat64PrefixDiscoveryDone();
-
-exit:
-    return error;
 }
 
 Status OtDaemonServer::setNat64Cidr(const std::optional<std::string>         &aCidr,
