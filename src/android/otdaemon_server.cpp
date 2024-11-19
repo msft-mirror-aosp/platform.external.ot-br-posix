@@ -582,7 +582,8 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
                                   const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                   const MeshcopTxtAttributes               &aMeshcopTxts,
                                   const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                                  const std::string                        &aCountryCode)
+                                  const std::string                        &aCountryCode,
+                                  const bool                                aTrelEnabled)
 {
     otbrLogInfo("OT daemon is initialized by system server (enabled=%s, tunFd=%d)", (aEnabled ? "true" : "false"),
                 aTunFd.get());
@@ -595,9 +596,11 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
     mINsdPublisher = aINsdPublisher;
     mMeshcopTxts   = aMeshcopTxts;
 
-    mTaskRunner.Post([aEnabled, aConfiguration, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, this]() {
-        initializeInternal(aEnabled, aConfiguration, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode);
-    });
+    mTaskRunner.Post(
+        [aEnabled, aConfiguration, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, aTrelEnabled, this]() {
+            initializeInternal(aEnabled, aConfiguration, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode,
+                               aTrelEnabled);
+        });
 
     return Status::ok();
 }
@@ -607,7 +610,8 @@ void OtDaemonServer::initializeInternal(const bool                              
                                         const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                         const MeshcopTxtAttributes               &aMeshcopTxts,
                                         const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                                        const std::string                        &aCountryCode)
+                                        const std::string                        &aCountryCode,
+                                        const bool                                aTrelEnabled)
 {
     std::string              instanceName = aMeshcopTxts.vendorName + " " + aMeshcopTxts.modelName;
     Mdns::Publisher::TxtList nonStandardTxts;
@@ -631,6 +635,7 @@ void OtDaemonServer::initializeInternal(const bool                              
     }
 
     mBorderAgent.SetEnabled(aEnabled && aConfiguration.borderRouterEnabled);
+    mAndroidHost->SetTrelEnabled(aTrelEnabled);
 
     if (aEnabled)
     {

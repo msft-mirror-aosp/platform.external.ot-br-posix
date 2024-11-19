@@ -149,7 +149,8 @@ public final class FakeOtDaemonTest {
                 mMockNsdPublisher,
                 mOverriddenMeshcopTxts,
                 mMockCallback,
-                TEST_DEFAULT_COUNTRY_CODE);
+                TEST_DEFAULT_COUNTRY_CODE,
+                true /* trelEnabled */);
         mTestLooper.dispatchAll();
 
         MeshcopTxtAttributes meshcopTxts = mFakeOtDaemon.getOverriddenMeshcopTxtAttributes();
@@ -165,6 +166,7 @@ public final class FakeOtDaemonTest {
         assertThat(mFakeOtDaemon.getStateCallback()).isEqualTo(mMockCallback);
         assertThat(mFakeOtDaemon.getCountryCode()).isEqualTo(TEST_DEFAULT_COUNTRY_CODE);
         assertThat(mFakeOtDaemon.isInitialized()).isTrue();
+        assertThat(mFakeOtDaemon.isTrelEnabled()).isTrue();
         verify(mMockCallback, times(1)).onStateChanged(any(), anyLong());
         verify(mMockCallback, times(1)).onBackboneRouterStateChanged(any());
     }
@@ -178,7 +180,8 @@ public final class FakeOtDaemonTest {
                 mMockNsdPublisher,
                 mOverriddenMeshcopTxts,
                 mMockCallback,
-                TEST_DEFAULT_COUNTRY_CODE);
+                TEST_DEFAULT_COUNTRY_CODE,
+                true /* trelEnabled */);
         final AtomicReference<OtDaemonState> stateRef = new AtomicReference<>();
         final AtomicLong listenerIdRef = new AtomicLong();
         final AtomicReference<BackboneRouterState> bbrStateRef = new AtomicReference<>();
@@ -405,7 +408,8 @@ public final class FakeOtDaemonTest {
                 mMockNsdPublisher,
                 mOverriddenMeshcopTxts,
                 mMockCallback,
-                TEST_DEFAULT_COUNTRY_CODE);
+                TEST_DEFAULT_COUNTRY_CODE,
+                true /* trelEnabled */);
 
         mFakeOtDaemon.terminate();
         mTestLooper.dispatchAll();
@@ -426,5 +430,37 @@ public final class FakeOtDaemonTest {
         assertThat(mFakeOtDaemon.getNsdPublisher()).isNull();
         assertThat(mFakeOtDaemon.getEnabledState()).isEqualTo(OT_STATE_DISABLED);
         verify(mockDeathRecipient, times(1)).binderDied();
+    }
+
+    @Test
+    public void initialize_trelEnabled_trelIsEnabled() throws Exception {
+        mFakeOtDaemon.initialize(
+                mMockTunFd,
+                true /* enabled */,
+                mConfig,
+                mMockNsdPublisher,
+                mOverriddenMeshcopTxts,
+                mMockCallback,
+                TEST_DEFAULT_COUNTRY_CODE,
+                true /* trelEnabled */);
+        mTestLooper.dispatchAll();
+
+        assertThat(mFakeOtDaemon.isTrelEnabled()).isTrue();
+    }
+
+    @Test
+    public void initialize_trelDisabled_trelIsDisabled() throws Exception {
+        mFakeOtDaemon.initialize(
+                mMockTunFd,
+                true /* enabled */,
+                mConfig,
+                mMockNsdPublisher,
+                mOverriddenMeshcopTxts,
+                mMockCallback,
+                TEST_DEFAULT_COUNTRY_CODE,
+                false /* trelEnabled */);
+        mTestLooper.dispatchAll();
+
+        assertThat(mFakeOtDaemon.isTrelEnabled()).isFalse();
     }
 }
