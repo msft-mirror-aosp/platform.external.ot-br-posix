@@ -55,6 +55,7 @@ public:
                                                          const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void                         SetInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
                                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void                         SetTrelEnabled(bool aEnabled);
 
     void                   NotifyNat64PrefixDiscoveryDone(void);
     static AndroidRcpHost *Get(void) { return sAndroidRcpHost; }
@@ -70,6 +71,7 @@ private:
     OtDaemonConfiguration mConfiguration;
     InfraLinkState        mInfraLinkState;
     int                   mInfraIcmp6Socket;
+    bool                  mTrelEnabled;
 };
 
 } // namespace Android

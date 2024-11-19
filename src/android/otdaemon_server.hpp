@@ -88,13 +88,15 @@ private:
                       const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                       const MeshcopTxtAttributes               &aMeshcopTxts,
                       const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                      const std::string                        &aCountryCode) override;
+                      const std::string                        &aCountryCode,
+                      const bool                                aTrelEnabled) override;
     void   initializeInternal(const bool                                aEnabled,
                               const OtDaemonConfiguration              &aConfiguration,
                               const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                               const MeshcopTxtAttributes               &aMeshcopTxts,
                               const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                              const std::string                        &aCountryCode);
+                              const std::string                        &aCountryCode,
+                              const bool                                aTrelEnabled);
     Status terminate(void) override;
     Status setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
