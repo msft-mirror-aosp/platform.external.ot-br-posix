@@ -104,11 +104,12 @@ oneway interface IOtDaemon {
      *                    ones
      * @param callback the callback for receiving OtDaemonState changes
      * @param countryCode 2 bytes country code (as defined in ISO 3166) to set
+     * @param trelEnabled the TREL enabled state
      */
     void initialize(in ParcelFileDescriptor tunFd, in boolean enabled,
             in OtDaemonConfiguration configuration, in INsdPublisher nsdPublisher,
             in MeshcopTxtAttributes meshcopTxts, in IOtDaemonCallback callback,
-            in String countryCode);
+            in String countryCode, in boolean trelEnabled);
 
     /** Terminates the ot-daemon process. */
     void terminate();
