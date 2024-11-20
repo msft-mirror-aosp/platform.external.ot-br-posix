@@ -51,6 +51,7 @@ public:
                                                                  const std::shared_ptr<IOtStatusReceiver> &aReceiver) = 0;
     virtual void                         SetInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
                                                                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) = 0;
+    virtual void                         SetTrelEnabled(bool aEnabled) = 0;
 };
 
 } // namespace Android
