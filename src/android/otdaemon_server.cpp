@@ -582,7 +582,8 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
                                   const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                   const MeshcopTxtAttributes               &aMeshcopTxts,
                                   const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                                  const std::string                        &aCountryCode)
+                                  const std::string                        &aCountryCode,
+                                  const bool                                aTrelEnabled)
 {
     otbrLogInfo("OT daemon is initialized by system server (enabled=%s, tunFd=%d)", (aEnabled ? "true" : "false"),
                 aTunFd.get());
@@ -595,9 +596,11 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
     mINsdPublisher = aINsdPublisher;
     mMeshcopTxts   = aMeshcopTxts;
 
-    mTaskRunner.Post([aEnabled, aConfiguration, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, this]() {
-        initializeInternal(aEnabled, aConfiguration, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode);
-    });
+    mTaskRunner.Post(
+        [aEnabled, aConfiguration, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, aTrelEnabled, this]() {
+            initializeInternal(aEnabled, aConfiguration, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode,
+                               aTrelEnabled);
+        });
 
     return Status::ok();
 }
@@ -607,7 +610,8 @@ void OtDaemonServer::initializeInternal(const bool                              
                                         const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                         const MeshcopTxtAttributes               &aMeshcopTxts,
                                         const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                                        const std::string                        &aCountryCode)
+                                        const std::string                        &aCountryCode,
+                                        const bool                                aTrelEnabled)
 {
     std::string              instanceName = aMeshcopTxts.vendorName + " " + aMeshcopTxts.modelName;
     Mdns::Publisher::TxtList nonStandardTxts;
@@ -631,6 +635,7 @@ void OtDaemonServer::initializeInternal(const bool                              
     }
 
     mBorderAgent.SetEnabled(aEnabled && aConfiguration.borderRouterEnabled);
+    mAndroidHost->SetTrelEnabled(aTrelEnabled);
 
     if (aEnabled)
     {
@@ -840,47 +845,37 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
 
     if (aFlags & OT_CHANGED_THREAD_NETIF_STATE)
     {
-        mState.isInterfaceUp = otIp6IsEnabled(GetOtInstance());
+        mState.isInterfaceUp = mHost.Ip6IsEnabled();
         haveUpdates          = true;
     }
 
     if (aFlags & OT_CHANGED_THREAD_ROLE)
     {
-        mState.deviceRole = otThreadGetDeviceRole(GetOtInstance());
+        mState.deviceRole = mHost.GetDeviceRole();
         haveUpdates       = true;
     }
 
     if (aFlags & OT_CHANGED_THREAD_PARTITION_ID)
     {
-        mState.partitionId = otThreadGetPartitionId(GetOtInstance());
+        mState.partitionId = mHost.GetPartitionId();
         haveUpdates        = true;
     }
 
     if (aFlags & OT_CHANGED_ACTIVE_DATASET)
     {
         otOperationalDatasetTlvs datasetTlvs;
-        if (otDatasetGetActiveTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
-        {
-            mState.activeDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
-        }
-        else
-        {
-            mState.activeDatasetTlvs.clear();
-        }
+        mHost.GetDatasetActiveTlvs(datasetTlvs);
+        mState.activeDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
+
         haveUpdates = true;
     }
 
     if (aFlags & OT_CHANGED_PENDING_DATASET)
     {
         otOperationalDatasetTlvs datasetTlvs;
-        if (otDatasetGetPendingTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
-        {
-            mState.pendingDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
-        }
-        else
-        {
-            mState.pendingDatasetTlvs.clear();
-        }
+        mHost.GetDatasetPendingTlvs(datasetTlvs);
+        mState.pendingDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
+
         haveUpdates = true;
     }
 
