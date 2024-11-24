@@ -41,7 +41,9 @@
 #include <openthread/openthread-system.h>
 #include <openthread/srp_server.h>
 #include <openthread/thread.h>
+#include <openthread/trel.h>
 #include <openthread/platform/infra_if.h>
+#include <openthread/platform/trel.h>
 
 #include "android/common_utils.hpp"
 #include "common/code_utils.hpp"
@@ -137,12 +139,31 @@ void AndroidRcpHost::SetInfraLinkInterfaceName(const std::string                
     mInfraLinkState.interfaceName = aInterfaceName;
     mInfraIcmp6Socket             = aIcmp6Socket;
 
+    SetTrelEnabled(mTrelEnabled);
+
 exit:
     if (error != OT_ERROR_NONE)
     {
         close(aIcmp6Socket);
     }
     PropagateResult(error, message, aReceiver);
+}
+
+void AndroidRcpHost::SetTrelEnabled(bool aEnabled)
+{
+    mTrelEnabled = aEnabled;
+
+    otbrLogInfo("%s TREL", aEnabled ? "Enabling" : "Disabling");
+
+    // Tear down TREL if it's been initialized/enabled already.
+    otTrelSetEnabled(GetOtInstance(), false);
+    otSysTrelDeinit();
+
+    if (mTrelEnabled && mInfraLinkState.interfaceName != "")
+    {
+        otSysTrelInit(mInfraLinkState.interfaceName.value_or("").c_str());
+        otTrelSetEnabled(GetOtInstance(), true);
+    }
 }
 
 void AndroidRcpHost::SetInfraLinkNat64Prefix(const std::string                        &aNat64Prefix,
@@ -240,7 +261,7 @@ extern "C" otError otPlatInfraIfDiscoverNat64Prefix(uint32_t aInfraIfIndex)
     OT_UNUSED_VARIABLE(aInfraIfIndex);
 
     AndroidRcpHost *androidRcpHost = AndroidRcpHost::Get();
-    otError         error       = OT_ERROR_NONE;
+    otError         error          = OT_ERROR_NONE;
 
     VerifyOrExit(androidRcpHost != nullptr, error = OT_ERROR_INVALID_STATE);
 
