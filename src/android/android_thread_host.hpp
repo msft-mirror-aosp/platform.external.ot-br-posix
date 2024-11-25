@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2020, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,41 +26,35 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @file
- *   This file includes definition for Thread Backbone constants.
- */
+#ifndef OTBR_ANDROID_THREAD_HOST_HPP_
+#define OTBR_ANDROID_THREAD_HOST_HPP_
 
-#ifndef BACKBONE_CONSTANTS_HPP_
-#define BACKBONE_CONSTANTS_HPP_
+#include <memory>
 
-#include "openthread-br/config.h"
+#include "common_utils.hpp"
 
 namespace otbr {
-namespace BackboneRouter {
+namespace Android {
 
-/**
- * @addtogroup border-router-bbr
- *
- * @brief
- *   This module includes definition for Thread Backbone constants.
- *
- * @{
- */
-
-/**
- * Backbone configurations.
- */
-enum
+class AndroidThreadHost
 {
-    kDuaRecentTime = 20, ///< Time period (in seconds) during which a DUA registration is considered 'recent' at a BBR.
+public:
+    virtual ~AndroidThreadHost(void) = default;
+
+    virtual void                         SetConfiguration(const OtDaemonConfiguration              &aConfiguration,
+                                                          const std::shared_ptr<IOtStatusReceiver> &aReceiver) = 0;
+    virtual const OtDaemonConfiguration &GetConfiguration(void)                                                = 0;
+    virtual void                         SetInfraLinkInterfaceName(const std::string                        &aInterfaceName,
+                                                                   int                                       aIcmp6Socket,
+                                                                   const std::shared_ptr<IOtStatusReceiver> &aReceiver) = 0;
+    virtual void                         SetInfraLinkNat64Prefix(const std::string                        &aNat64Prefix,
+                                                                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) = 0;
+    virtual void                         SetInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
+                                                                const std::shared_ptr<IOtStatusReceiver> &aReceiver) = 0;
+    virtual void                         SetTrelEnabled(bool aEnabled) = 0;
 };
 
-/**
- * @}
- */
-
-} // namespace BackboneRouter
+} // namespace Android
 } // namespace otbr
 
-#endif // BACKBONE_CONSTANTS_HPP_
+#endif // OTBR_ANDROID_THREAD_HOST_HPP_

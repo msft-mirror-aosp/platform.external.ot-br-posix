@@ -54,6 +54,8 @@
 #include <openthread/platform/radio.h>
 
 #include "agent/vendor.hpp"
+#include "android/android_rcp_host.hpp"
+#include "android/common_utils.hpp"
 #include "android/otdaemon_telemetry.hpp"
 #include "common/code_utils.hpp"
 #include "ncp/thread_host.hpp"
@@ -81,24 +83,6 @@ namespace Android {
 static const char       OTBR_SERVICE_NAME[] = "ot_daemon";
 static constexpr size_t kMaxIp6Size         = 1280;
 
-static void PropagateResult(int                                       aError,
-                            const std::string                        &aMessage,
-                            const std::shared_ptr<IOtStatusReceiver> &aReceiver)
-{
-    if (aReceiver != nullptr)
-    {
-        // If an operation has already been requested or accepted, consider it succeeded
-        if (aError == OT_ERROR_NONE || aError == OT_ERROR_ALREADY)
-        {
-            aReceiver->onSuccess();
-        }
-        else
-        {
-            aReceiver->onError(aError, aMessage);
-        }
-    }
-}
-
 static const char *ThreadEnabledStateToString(int enabledState)
 {
     switch (enabledState)
@@ -121,15 +105,13 @@ OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &rcpHost,
                                otbr::Mdns::Publisher &mdnsPublisher,
                                otbr::BorderAgent     &borderAgent)
     : mHost(rcpHost)
+    , mAndroidHost(CreateAndroidHost())
     , mMdnsPublisher(static_cast<MdnsPublisher &>(mdnsPublisher))
     , mBorderAgent(borderAgent)
-    , mConfiguration()
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
-    mInfraLinkState.interfaceName = "";
-    mInfraIcmp6Socket             = -1;
-    sOtDaemonServer               = this;
+    sOtDaemonServer = this;
 }
 
 void OtDaemonServer::Init(void)
@@ -575,13 +557,33 @@ void OtDaemonServer::Process(const MainloopContext &aMainloop)
     }
 }
 
+std::unique_ptr<AndroidThreadHost> OtDaemonServer::CreateAndroidHost(void)
+{
+    std::unique_ptr<AndroidThreadHost> host;
+
+    switch (mHost.GetCoprocessorType())
+    {
+    case OT_COPROCESSOR_RCP:
+        host = std::make_unique<AndroidRcpHost>(static_cast<otbr::Ncp::RcpHost &>(mHost));
+        break;
+
+    case OT_COPROCESSOR_NCP:
+    default:
+        DieNow("Unknown coprocessor type!");
+        break;
+    }
+
+    return host;
+}
+
 Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTunFd,
                                   const bool                                aEnabled,
                                   const OtDaemonConfiguration              &aConfiguration,
                                   const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                   const MeshcopTxtAttributes               &aMeshcopTxts,
                                   const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                                  const std::string                        &aCountryCode)
+                                  const std::string                        &aCountryCode,
+                                  const bool                                aTrelEnabled)
 {
     otbrLogInfo("OT daemon is initialized by system server (enabled=%s, tunFd=%d)", (aEnabled ? "true" : "false"),
                 aTunFd.get());
@@ -594,9 +596,11 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
     mINsdPublisher = aINsdPublisher;
     mMeshcopTxts   = aMeshcopTxts;
 
-    mTaskRunner.Post([aEnabled, aConfiguration, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, this]() {
-        initializeInternal(aEnabled, aConfiguration, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode);
-    });
+    mTaskRunner.Post(
+        [aEnabled, aConfiguration, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, aTrelEnabled, this]() {
+            initializeInternal(aEnabled, aConfiguration, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode,
+                               aTrelEnabled);
+        });
 
     return Status::ok();
 }
@@ -606,13 +610,14 @@ void OtDaemonServer::initializeInternal(const bool                              
                                         const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                         const MeshcopTxtAttributes               &aMeshcopTxts,
                                         const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                                        const std::string                        &aCountryCode)
+                                        const std::string                        &aCountryCode,
+                                        const bool                                aTrelEnabled)
 {
     std::string              instanceName = aMeshcopTxts.vendorName + " " + aMeshcopTxts.modelName;
     Mdns::Publisher::TxtList nonStandardTxts;
     otbrError                error;
 
-    setConfigurationInternal(aConfiguration, nullptr /* aReceiver */);
+    mAndroidHost->SetConfiguration(aConfiguration, nullptr /* aReceiver */);
     setCountryCodeInternal(aCountryCode, nullptr /* aReceiver */);
     registerStateCallbackInternal(aCallback, -1 /* listenerId */);
 
@@ -630,6 +635,7 @@ void OtDaemonServer::initializeInternal(const bool                              
     }
 
     mBorderAgent.SetEnabled(aEnabled && aConfiguration.borderRouterEnabled);
+    mAndroidHost->SetTrelEnabled(aTrelEnabled);
 
     if (aEnabled)
     {
@@ -666,7 +672,7 @@ void OtDaemonServer::UpdateThreadEnabledState(const int enabled, const std::shar
     // Enables the BorderAgent module only when Thread is enabled and configured a Border Router,
     // so that it won't publish the MeshCoP mDNS service when unnecessary
     // TODO: b/376217403 - enables / disables OT Border Agent at runtime
-    mBorderAgent.SetEnabled(enabled == OT_STATE_ENABLED && mConfiguration.borderRouterEnabled);
+    mBorderAgent.SetEnabled(enabled == OT_STATE_ENABLED && mAndroidHost->GetConfiguration().borderRouterEnabled);
 
     NotifyStateChanged(/* aListenerId*/ -1);
 
@@ -839,47 +845,37 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
 
     if (aFlags & OT_CHANGED_THREAD_NETIF_STATE)
     {
-        mState.isInterfaceUp = otIp6IsEnabled(GetOtInstance());
+        mState.isInterfaceUp = mHost.Ip6IsEnabled();
         haveUpdates          = true;
     }
 
     if (aFlags & OT_CHANGED_THREAD_ROLE)
     {
-        mState.deviceRole = otThreadGetDeviceRole(GetOtInstance());
+        mState.deviceRole = mHost.GetDeviceRole();
         haveUpdates       = true;
     }
 
     if (aFlags & OT_CHANGED_THREAD_PARTITION_ID)
     {
-        mState.partitionId = otThreadGetPartitionId(GetOtInstance());
+        mState.partitionId = mHost.GetPartitionId();
         haveUpdates        = true;
     }
 
     if (aFlags & OT_CHANGED_ACTIVE_DATASET)
     {
         otOperationalDatasetTlvs datasetTlvs;
-        if (otDatasetGetActiveTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
-        {
-            mState.activeDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
-        }
-        else
-        {
-            mState.activeDatasetTlvs.clear();
-        }
+        mHost.GetDatasetActiveTlvs(datasetTlvs);
+        mState.activeDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
+
         haveUpdates = true;
     }
 
     if (aFlags & OT_CHANGED_PENDING_DATASET)
     {
         otOperationalDatasetTlvs datasetTlvs;
-        if (otDatasetGetPendingTlvs(GetOtInstance(), &datasetTlvs) == OT_ERROR_NONE)
-        {
-            mState.pendingDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
-        }
-        else
-        {
-            mState.pendingDatasetTlvs.clear();
-        }
+        mHost.GetDatasetPendingTlvs(datasetTlvs);
+        mState.pendingDatasetTlvs.assign(datasetTlvs.mTlvs, datasetTlvs.mTlvs + datasetTlvs.mLength);
+
         haveUpdates = true;
     }
 
@@ -891,6 +887,33 @@ bool OtDaemonServer::RefreshOtDaemonState(otChangedFlags aFlags)
     }
 
     return haveUpdates;
+}
+
+/**
+ * Returns `true` if the two TLV lists are representing the same Operational Dataset.
+ *
+ * Note this method works even if TLVs in `aLhs` and `aRhs` are not ordered.
+ */
+static bool areDatasetsEqual(const otOperationalDatasetTlvs &aLhs, const otOperationalDatasetTlvs &aRhs)
+{
+    bool result = false;
+
+    otOperationalDataset     lhsDataset;
+    otOperationalDataset     rhsDataset;
+    otOperationalDatasetTlvs lhsNormalizedTlvs;
+    otOperationalDatasetTlvs rhsNormalizedTlvs;
+
+    // Sort the TLVs in the TLV byte arrays by leveraging the deterministic nature of the two OT APIs
+    SuccessOrExit(otDatasetParseTlvs(&aLhs, &lhsDataset));
+    SuccessOrExit(otDatasetParseTlvs(&aRhs, &rhsDataset));
+    otDatasetConvertToTlvs(&lhsDataset, &lhsNormalizedTlvs);
+    otDatasetConvertToTlvs(&rhsDataset, &rhsNormalizedTlvs);
+
+    result = (lhsNormalizedTlvs.mLength == rhsNormalizedTlvs.mLength) &&
+             (memcmp(lhsNormalizedTlvs.mTlvs, rhsNormalizedTlvs.mTlvs, lhsNormalizedTlvs.mLength) == 0);
+
+exit:
+    return result;
 }
 
 Status OtDaemonServer::join(const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
@@ -906,7 +929,8 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
 {
     int                      error = OT_ERROR_NONE;
     std::string              message;
-    otOperationalDatasetTlvs datasetTlvs;
+    otOperationalDatasetTlvs newDatasetTlvs;
+    otOperationalDatasetTlvs curDatasetTlvs;
 
     VerifyOrExit(mState.threadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
@@ -918,6 +942,19 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
 
+    std::copy(aActiveOpDatasetTlvs.begin(), aActiveOpDatasetTlvs.end(), newDatasetTlvs.mTlvs);
+    newDatasetTlvs.mLength = static_cast<uint8_t>(aActiveOpDatasetTlvs.size());
+
+    error = otDatasetGetActiveTlvs(GetOtInstance(), &curDatasetTlvs);
+    if (error == OT_ERROR_NONE && areDatasetsEqual(newDatasetTlvs, curDatasetTlvs) && isAttached())
+    {
+        // Do not leave and re-join if this device has already joined the same network. This can help elimilate
+        // unnecessary connectivity and topology disruption and save the time for re-joining. It's more useful for use
+        // cases where Thread networks are dynamically brought up and torn down (e.g. Thread on mobile phones).
+        aReceiver->onSuccess();
+        ExitNow();
+    }
+
     if (otThreadGetDeviceRole(GetOtInstance()) != OT_DEVICE_ROLE_DISABLED)
     {
         LeaveGracefully([aActiveOpDatasetTlvs, aReceiver, this]() {
@@ -927,9 +964,7 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
         ExitNow();
     }
 
-    std::copy(aActiveOpDatasetTlvs.begin(), aActiveOpDatasetTlvs.end(), datasetTlvs.mTlvs);
-    datasetTlvs.mLength = static_cast<uint8_t>(aActiveOpDatasetTlvs.size());
-    SuccessOrExit(error   = otDatasetSetActiveTlvs(GetOtInstance(), &datasetTlvs),
+    SuccessOrExit(error   = otDatasetSetActiveTlvs(GetOtInstance(), &newDatasetTlvs),
                   message = "Failed to set Active Operational Dataset");
 
     // TODO(b/273160198): check how we can implement join as a child
@@ -1179,46 +1214,10 @@ Status OtDaemonServer::setChannelMaxPowersInternal(const std::vector<ChannelMaxP
 Status OtDaemonServer::setConfiguration(const OtDaemonConfiguration              &aConfiguration,
                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    mTaskRunner.Post([aConfiguration, aReceiver, this]() { setConfigurationInternal(aConfiguration, aReceiver); });
+    mTaskRunner.Post(
+        [aConfiguration, aReceiver, this]() { mAndroidHost->SetConfiguration(aConfiguration, aReceiver); });
 
     return Status::ok();
-}
-
-void OtDaemonServer::setConfigurationInternal(const OtDaemonConfiguration              &aConfiguration,
-                                              const std::shared_ptr<IOtStatusReceiver> &aReceiver)
-{
-    otError          error = OT_ERROR_NONE;
-    std::string      message;
-    otLinkModeConfig linkModeConfig;
-
-    otbrLogInfo("Set configuration: %s", aConfiguration.toString().c_str());
-
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(aConfiguration != mConfiguration);
-
-    // TODO: b/343814054 - Support enabling/disabling DHCPv6-PD.
-    VerifyOrExit(!aConfiguration.dhcpv6PdEnabled, error = OT_ERROR_NOT_IMPLEMENTED,
-                 message = "DHCPv6-PD is not supported");
-    otNat64SetEnabled(GetOtInstance(), aConfiguration.nat64Enabled);
-    // DNS upstream query is enabled if and only if NAT64 is enabled.
-    otDnssdUpstreamQuerySetEnabled(GetOtInstance(), aConfiguration.nat64Enabled);
-
-    linkModeConfig = GetLinkModeConfig(aConfiguration.borderRouterEnabled);
-    SuccessOrExit(error = otThreadSetLinkMode(GetOtInstance(), linkModeConfig), message = "Failed to set link mode");
-    if (aConfiguration.borderRouterEnabled)
-    {
-        otSrpServerSetAutoEnableMode(GetOtInstance(), true);
-    }
-    else
-    {
-        // This automatically disables the auto-enable mode which is designed for border router
-        otSrpServerSetEnabled(GetOtInstance(), true);
-    }
-
-    mConfiguration = aConfiguration;
-
-exit:
-    PropagateResult(error, message, aReceiver);
 }
 
 Status OtDaemonServer::setInfraLinkInterfaceName(const std::optional<std::string>         &aInterfaceName,
@@ -1228,57 +1227,10 @@ Status OtDaemonServer::setInfraLinkInterfaceName(const std::optional<std::string
     int icmp6Socket = aIcmp6Socket.dup().release();
 
     mTaskRunner.Post([interfaceName = aInterfaceName.value_or(""), icmp6Socket, aReceiver, this]() {
-        setInfraLinkInterfaceNameInternal(interfaceName, icmp6Socket, aReceiver);
+        mAndroidHost->SetInfraLinkInterfaceName(interfaceName, icmp6Socket, aReceiver);
     });
 
     return Status::ok();
-}
-
-void OtDaemonServer::setInfraLinkInterfaceNameInternal(const std::string                        &aInterfaceName,
-                                                       int                                       aIcmp6Socket,
-                                                       const std::shared_ptr<IOtStatusReceiver> &aReceiver)
-{
-    otError           error = OT_ERROR_NONE;
-    std::string       message;
-    const std::string infraIfName  = aInterfaceName;
-    unsigned int      infraIfIndex = if_nametoindex(infraIfName.c_str());
-
-    otbrLogInfo("Setting infra link state: %s", aInterfaceName.c_str());
-
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(mConfiguration.borderRouterEnabled, error = OT_ERROR_INVALID_STATE,
-                 message = "Set infra link state when border router is disabled");
-    VerifyOrExit(mInfraLinkState.interfaceName != aInterfaceName || aIcmp6Socket != mInfraIcmp6Socket);
-
-    if (infraIfIndex != 0 && aIcmp6Socket > 0)
-    {
-        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
-                      message = "failed to disable border routing");
-        otSysSetInfraNetif(infraIfName.c_str(), aIcmp6Socket);
-        aIcmp6Socket = -1;
-        SuccessOrExit(error   = otBorderRoutingInit(GetOtInstance(), infraIfIndex, otSysInfraIfIsRunning()),
-                      message = "failed to initialize border routing");
-        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), true /* aEnabled */),
-                      message = "failed to enable border routing");
-        // TODO: b/320836258 - Make BBR independently configurable
-        otBackboneRouterSetEnabled(GetOtInstance(), true /* aEnabled */);
-    }
-    else
-    {
-        SuccessOrExit(error   = otBorderRoutingSetEnabled(GetOtInstance(), false /* aEnabled */),
-                      message = "failed to disable border routing");
-        otBackboneRouterSetEnabled(GetOtInstance(), false /* aEnabled */);
-    }
-
-    mInfraLinkState.interfaceName = aInterfaceName;
-    mInfraIcmp6Socket             = aIcmp6Socket;
-
-exit:
-    if (error != OT_ERROR_NONE)
-    {
-        close(aIcmp6Socket);
-    }
-    PropagateResult(error, message, aReceiver);
 }
 
 Status OtDaemonServer::runOtCtlCommand(const std::string                        &aCommand,
@@ -1296,7 +1248,7 @@ Status OtDaemonServer::setInfraLinkNat64Prefix(const std::optional<std::string> 
                                                const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     mTaskRunner.Post([nat64Prefix = aNat64Prefix.value_or(""), aReceiver, this]() {
-        setInfraLinkNat64PrefixInternal(nat64Prefix, aReceiver);
+        mAndroidHost->SetInfraLinkNat64Prefix(nat64Prefix, aReceiver);
     });
 
     return Status::ok();
@@ -1320,88 +1272,13 @@ void OtDaemonServer::runOtCtlCommandInternal(const std::string                  
     }
 }
 
-void OtDaemonServer::setInfraLinkNat64PrefixInternal(const std::string                        &aNat64Prefix,
-                                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver)
-{
-    otError     error = OT_ERROR_NONE;
-    std::string message;
-
-    otbrLogInfo("Setting infra link NAT64 prefix: %s", aNat64Prefix.c_str());
-
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-
-    mInfraLinkState.nat64Prefix = aNat64Prefix;
-    NotifyNat64PrefixDiscoveryDone();
-
-exit:
-    PropagateResult(error, message, aReceiver);
-}
-
-std::vector<otIp6Address> ToOtUpstreamDnsServerAddresses(const std::vector<std::string> &aAddresses)
-{
-    std::vector<otIp6Address> addresses;
-
-    // TODO: b/363738575 - support IPv6
-    for (const auto &addressString : aAddresses)
-    {
-        otIp6Address ip6Address;
-        otIp4Address ip4Address;
-
-        if (otIp4AddressFromString(addressString.c_str(), &ip4Address) != OT_ERROR_NONE)
-        {
-            continue;
-        }
-        otIp4ToIp4MappedIp6Address(&ip4Address, &ip6Address);
-        addresses.push_back(ip6Address);
-    }
-
-    return addresses;
-}
-
 Status OtDaemonServer::setInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
                                               const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    mTaskRunner.Post([aDnsServers, aReceiver, this]() { setInfraLinkDnsServersInternal(aDnsServers, aReceiver); });
+    mTaskRunner.Post(
+        [aDnsServers, aReceiver, this]() { mAndroidHost->SetInfraLinkDnsServers(aDnsServers, aReceiver); });
 
     return Status::ok();
-}
-
-void OtDaemonServer::setInfraLinkDnsServersInternal(const std::vector<std::string>           &aDnsServers,
-                                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver)
-{
-    otError     error = OT_ERROR_NONE;
-    std::string message;
-    auto        dnsServers = ToOtUpstreamDnsServerAddresses(aDnsServers);
-
-    otbrLogInfo("Setting infra link DNS servers: %d servers", aDnsServers.size());
-
-    VerifyOrExit(aDnsServers != mInfraLinkState.dnsServers);
-
-    mInfraLinkState.dnsServers = aDnsServers;
-    otSysUpstreamDnsSetServerList(dnsServers.data(), dnsServers.size());
-
-exit:
-    PropagateResult(error, message, aReceiver);
-}
-
-otLinkModeConfig OtDaemonServer::GetLinkModeConfig(bool aIsRouter)
-{
-    otLinkModeConfig linkModeConfig{};
-
-    if (aIsRouter)
-    {
-        linkModeConfig.mRxOnWhenIdle = true;
-        linkModeConfig.mDeviceType   = true;
-        linkModeConfig.mNetworkData  = true;
-    }
-    else
-    {
-        linkModeConfig.mRxOnWhenIdle = false;
-        linkModeConfig.mDeviceType   = false;
-        linkModeConfig.mNetworkData  = true;
-    }
-
-    return linkModeConfig;
 }
 
 static int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)
@@ -1473,33 +1350,6 @@ exit:
     return;
 }
 
-void OtDaemonServer::NotifyNat64PrefixDiscoveryDone(void)
-{
-    otIp6Prefix nat64Prefix{};
-    uint32_t    infraIfIndex = if_nametoindex(mInfraLinkState.interfaceName.value_or("").c_str());
-
-    otIp6PrefixFromString(mInfraLinkState.nat64Prefix.value_or("").c_str(), &nat64Prefix);
-    otPlatInfraIfDiscoverNat64PrefixDone(GetOtInstance(), infraIfIndex, &nat64Prefix);
-
-exit:
-    return;
-}
-
-extern "C" otError otPlatInfraIfDiscoverNat64Prefix(uint32_t aInfraIfIndex)
-{
-    OT_UNUSED_VARIABLE(aInfraIfIndex);
-
-    OtDaemonServer *otDaemonServer = OtDaemonServer::Get();
-    otError         error          = OT_ERROR_NONE;
-
-    VerifyOrExit(otDaemonServer != nullptr, error = OT_ERROR_INVALID_STATE);
-
-    otDaemonServer->NotifyNat64PrefixDiscoveryDone();
-
-exit:
-    return error;
-}
-
 Status OtDaemonServer::setNat64Cidr(const std::optional<std::string>         &aCidr,
                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
@@ -1513,18 +1363,22 @@ void OtDaemonServer::setNat64CidrInternal(const std::optional<std::string>      
 {
     otError     error = OT_ERROR_NONE;
     std::string message;
-    otIp4Cidr   nat64Cidr{};
-    // TODO: Currently we're using the minimal CIDR to clear the NAT64 CIDR, but it's the logic in nat64_translator.cpp
-    // still allows one host in this case. Instead, we should introduce an API otNat64ClearIp4Cidr() to clear the NAT64
-    // CIDR.
-    std::string cidrStr = aCidr.value_or("0.0.0.0/32");
-
-    otbrLogInfo("Setting NAT64 CIDR: %s", cidrStr.c_str());
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
 
-    SuccessOrExit(error = otIp4CidrFromString(cidrStr.c_str(), &nat64Cidr), message = "Failed to parse NAT64 CIDR");
-    SuccessOrExit(error = otNat64SetIp4Cidr(GetOtInstance(), &nat64Cidr), message = "Failed to set NAT64 CIDR");
+    if (aCidr.has_value())
+    {
+        otIp4Cidr nat64Cidr{};
+
+        otbrLogInfo("Setting NAT64 CIDR: %s", aCidr->c_str());
+        SuccessOrExit(error = otIp4CidrFromString(aCidr->c_str(), &nat64Cidr), message = "Failed to parse NAT64 CIDR");
+        SuccessOrExit(error = otNat64SetIp4Cidr(GetOtInstance(), &nat64Cidr), message = "Failed to set NAT64 CIDR");
+    }
+    else
+    {
+        otbrLogInfo("Clearing NAT64 CIDR");
+        otNat64ClearIp4Cidr(GetOtInstance());
+    }
 
 exit:
     PropagateResult(error, message, aReceiver);

@@ -60,13 +60,40 @@ public:
      * Returns the device role.
      *
      * @returns the device role.
-     *
      */
     virtual otDeviceRole GetDeviceRole(void) const = 0;
 
     /**
-     * The destructor.
+     * Returns whether or not the IPv6 interface is up.
      *
+     * @retval TRUE   The IPv6 interface is enabled.
+     * @retval FALSE  The IPv6 interface is disabled.
+     */
+    virtual bool Ip6IsEnabled(void) const = 0;
+
+    /**
+     * Returns the Partition ID.
+     *
+     * @returns The Partition ID.
+     */
+    virtual uint32_t GetPartitionId(void) const = 0;
+
+    /**
+     * Returns the active operational dataset tlvs.
+     *
+     * @param[out] aDatasetTlvs  A reference to where the Active Operational Dataset will be placed.
+     */
+    virtual void GetDatasetActiveTlvs(otOperationalDatasetTlvs &aDatasetTlvs) const = 0;
+
+    /**
+     * Returns the pending operational dataset tlvs.
+     *
+     * @param[out] aDatasetTlvs  A reference to where the Pending Operational Dataset will be placed.
+     */
+    virtual void GetDatasetPendingTlvs(otOperationalDatasetTlvs &aDatasetTlvs) const = 0;
+
+    /**
+     * The destructor.
      */
     virtual ~NetworkProperties(void) = default;
 };
@@ -76,7 +103,6 @@ public:
  * Thread network.
  *
  * The APIs are unified for both NCP and RCP cases.
- *
  */
 class ThreadHost : virtual public NetworkProperties
 {
@@ -84,7 +110,8 @@ public:
     using AsyncResultReceiver = std::function<void(otError, const std::string &)>;
     using ChannelMasksReceiver =
         std::function<void(uint32_t /*aSupportedChannelMask*/, uint32_t /*aPreferredChannelMask*/)>;
-    using DeviceRoleHandler = std::function<void(otError, otDeviceRole)>;
+    using DeviceRoleHandler          = std::function<void(otError, otDeviceRole)>;
+    using ThreadStateChangedCallback = std::function<void(otChangedFlags aFlags)>;
 
     struct ChannelMaxPower
     {
@@ -104,7 +131,6 @@ public:
      * @param[in]   aEnableAutoAttach       Whether or not to automatically attach to the saved network.
      *
      * @returns Non-null OpenThread Controller instance.
-     *
      */
     static std::unique_ptr<ThreadHost> Create(const char                      *aInterfaceName,
                                               const std::vector<const char *> &aRadioUrls,
@@ -120,7 +146,6 @@ public:
      *
      * @param[in] aActiveOpDatasetTlvs  A reference to the active operational dataset of the Thread network.
      * @param[in] aReceiver             A receiver to get the async result of this operation.
-     *
      */
     virtual void Join(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs, const AsyncResultReceiver &aRecevier) = 0;
 
@@ -137,7 +162,6 @@ public:
      *    will be passed to @p aReceiver when the error happens.
      *
      * @param[in] aReceiver  A receiver to get the async result of this operation.
-     *
      */
     virtual void Leave(const AsyncResultReceiver &aRecevier) = 0;
 
@@ -146,7 +170,6 @@ public:
      *
      * @param[in] aPendingOpDatasetTlvs  A reference to the pending operational dataset of the Thread network.
      * @param[in] aReceiver              A receiver to get the async result of this operation.
-     *
      */
     virtual void ScheduleMigration(const otOperationalDatasetTlvs &aPendingOpDatasetTlvs,
                                    const AsyncResultReceiver       aReceiver) = 0;
@@ -202,14 +225,19 @@ public:
                                      const AsyncResultReceiver          &aReceiver) = 0;
 
     /**
-     * Returns the co-processor type.
+     * This method adds a event listener for Thread state changes.
      *
+     * @param[in] aCallback  The callback to receive Thread state changed events.
+     */
+    virtual void AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback) = 0;
+
+    /**
+     * Returns the co-processor type.
      */
     virtual CoprocessorType GetCoprocessorType(void) = 0;
 
     /**
      * Returns the co-processor version string.
-     *
      */
     virtual const char *GetCoprocessorVersion(void) = 0;
 
@@ -217,25 +245,21 @@ public:
      * This method returns the Thread network interface name.
      *
      * @returns A pointer to the Thread network interface name string.
-     *
      */
     virtual const char *GetInterfaceName(void) const = 0;
 
     /**
      * Initializes the Thread controller.
-     *
      */
     virtual void Init(void) = 0;
 
     /**
      * Deinitializes the Thread controller.
-     *
      */
     virtual void Deinit(void) = 0;
 
     /**
      * The destructor.
-     *
      */
     virtual ~ThreadHost(void) = default;
 };
