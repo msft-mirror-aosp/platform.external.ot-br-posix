@@ -64,6 +64,7 @@ private:
     otInstance *GetOtInstance(void);
 
     static otLinkModeConfig GetLinkModeConfig(bool aBeRouter);
+    void                    SetBorderRouterEnabled(bool aEnabled);
 
     static AndroidRcpHost *sAndroidRcpHost;
 
