@@ -32,6 +32,7 @@
 #include <openthread/openthread-system.h>
 #include <openthread/thread.h>
 #include <openthread/thread_ftd.h>
+#include <openthread/trel.h>
 #include <openthread/platform/radio.h>
 
 #if OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
@@ -249,6 +250,21 @@ void RetrieveBorderAgentInfo(otInstance *aInstance, TelemetryData::BorderAgentIn
 
     baCounters->set_mgmt_active_get_reqs(otBorderAgentCounters.mMgmtActiveGets);
     baCounters->set_mgmt_pending_get_reqs(otBorderAgentCounters.mMgmtPendingGets);
+}
+
+void RetrieveTrelInfo(otInstance *aInstance, TelemetryData::TrelInfo *aTrelInfo)
+{
+    auto otTrelCounters = otTrelGetCounters(aInstance);
+    auto trelCounters   = aTrelInfo->mutable_counters();
+
+    aTrelInfo->set_is_trel_enabled(otTrelIsEnabled(aInstance));
+    aTrelInfo->set_num_trel_peers(otTrelGetNumberOfPeers(aInstance));
+
+    trelCounters->set_trel_tx_packets(otTrelCounters->mTxPackets);
+    trelCounters->set_trel_tx_bytes(otTrelCounters->mTxBytes);
+    trelCounters->set_trel_tx_packets_failed(otTrelCounters->mTxFailure);
+    trelCounters->set_trel_rx_packets(otTrelCounters->mRxPackets);
+    trelCounters->set_trel_rx_bytes(otTrelCounters->mRxBytes);
 }
 
 otError RetrieveTelemetryAtom(otInstance                         *otInstance,
@@ -739,6 +755,7 @@ otError RetrieveTelemetryAtom(otInstance                         *otInstance,
 
         RetrieveNat64State(otInstance, wpanBorderRouter);
         RetrieveBorderAgentInfo(otInstance, wpanBorderRouter->mutable_border_agent_info());
+        RetrieveTrelInfo(otInstance, wpanBorderRouter->mutable_trel_info());
     }
 
     return error;
