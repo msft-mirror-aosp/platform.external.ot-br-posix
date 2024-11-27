@@ -36,8 +36,6 @@
 #include <random>
 #include <string.h>
 
-#include <android-base/file.h>
-#include <android-base/stringprintf.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
 #include <openthread/border_agent.h>
@@ -299,47 +297,6 @@ void OtDaemonServer::ReceiveCallback(otMessage *aMessage)
 
 exit:
     otMessageFree(aMessage);
-}
-
-int OtDaemonServer::OtCtlCommandCallback(void *aBinderServer, const char *aFormat, va_list aArguments)
-{
-    return static_cast<OtDaemonServer *>(aBinderServer)->OtCtlCommandCallback(aFormat, aArguments);
-}
-
-int OtDaemonServer::OtCtlCommandCallback(const char *aFormat, va_list aArguments)
-{
-    static const std::string kPrompt = "> ";
-    std::string              output;
-
-    VerifyOrExit(mOtCtlOutputReceiver != nullptr, otSysCliInitUsingDaemon(GetOtInstance()));
-
-    android::base::StringAppendV(&output, aFormat, aArguments);
-
-    // Ignore CLI prompt
-    VerifyOrExit(output != kPrompt);
-
-    mOtCtlOutputReceiver->onOutput(output);
-
-    // Check if the command has completed (indicated by "Done" or "Error")
-    if (output.starts_with("Done") || output.starts_with("Error"))
-    {
-        mIsOtCtlOutputComplete = true;
-    }
-
-    // The OpenThread CLI consistently outputs "\r\n" as a newline character. Therefore, we use the presence of "\r\n"
-    // following "Done" or "Error" to signal the completion of a command's output.
-    if (mIsOtCtlOutputComplete && output.ends_with("\r\n"))
-    {
-        if (!mIsOtCtlInteractiveMode)
-        {
-            otSysCliInitUsingDaemon(GetOtInstance());
-        }
-        mIsOtCtlOutputComplete = false;
-        mOtCtlOutputReceiver->onComplete();
-    }
-
-exit:
-    return output.length();
 }
 
 static constexpr uint8_t kIpVersion4 = 4;
@@ -1258,18 +1215,7 @@ void OtDaemonServer::runOtCtlCommandInternal(const std::string                  
                                              const bool                                aIsInteractive,
                                              const std::shared_ptr<IOtOutputReceiver> &aReceiver)
 {
-    otSysCliInitUsingDaemon(GetOtInstance());
-
-    if (!aCommand.empty())
-    {
-        std::string command = aCommand;
-
-        mIsOtCtlInteractiveMode = aIsInteractive;
-        mOtCtlOutputReceiver    = aReceiver;
-
-        otCliInit(GetOtInstance(), OtDaemonServer::OtCtlCommandCallback, this);
-        otCliInputLine(command.data());
-    }
+    mAndroidHost->RunOtCtlCommand(aCommand, aIsInteractive, aReceiver);
 }
 
 Status OtDaemonServer::setInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
@@ -1281,60 +1227,9 @@ Status OtDaemonServer::setInfraLinkDnsServers(const std::vector<std::string>    
     return Status::ok();
 }
 
-static int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)
-{
-    std::string output;
-
-    android::base::StringAppendV(&output, aFormat, aArguments);
-
-    int length = output.length();
-
-    VerifyOrExit(android::base::WriteStringToFd(output, *(static_cast<int *>(aContext))), length = 0);
-
-exit:
-    return length;
-}
-
-inline void DumpCliCommand(std::string aCommand, int aFd)
-{
-    android::base::WriteStringToFd(aCommand + '\n', aFd);
-    otCliInputLine(aCommand.data());
-}
-
 binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumArgs)
 {
-    OT_UNUSED_VARIABLE(aArgs);
-    OT_UNUSED_VARIABLE(aNumArgs);
-
-    otCliInit(GetOtInstance(), OutputCallback, &aFd);
-
-    DumpCliCommand("state", aFd);
-    DumpCliCommand("srp server state", aFd);
-    DumpCliCommand("srp server service", aFd);
-    DumpCliCommand("srp server host", aFd);
-    DumpCliCommand("dataset activetimestamp", aFd);
-    DumpCliCommand("dataset channel", aFd);
-    DumpCliCommand("dataset channelmask", aFd);
-    DumpCliCommand("dataset extpanid", aFd);
-    DumpCliCommand("dataset meshlocalprefix", aFd);
-    DumpCliCommand("dataset networkname", aFd);
-    DumpCliCommand("dataset panid", aFd);
-    DumpCliCommand("dataset securitypolicy", aFd);
-    DumpCliCommand("leaderdata", aFd);
-    DumpCliCommand("eidcache", aFd);
-    DumpCliCommand("counters mac", aFd);
-    DumpCliCommand("counters mle", aFd);
-    DumpCliCommand("counters ip", aFd);
-    DumpCliCommand("router table", aFd);
-    DumpCliCommand("neighbor table", aFd);
-    DumpCliCommand("ipaddr -v", aFd);
-    DumpCliCommand("netdata show", aFd);
-
-    fsync(aFd);
-
-    otSysCliInitUsingDaemon(GetOtInstance());
-
-    return STATUS_OK;
+    return mAndroidHost->Dump(aFd, aArgs, aNumArgs);
 }
 
 void OtDaemonServer::PushTelemetryIfConditionMatch()
