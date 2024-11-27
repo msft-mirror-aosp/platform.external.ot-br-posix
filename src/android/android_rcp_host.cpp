@@ -87,11 +87,14 @@ void AndroidRcpHost::SetConfiguration(const OtDaemonConfiguration              &
     if (aConfiguration.borderRouterEnabled)
     {
         otSrpServerSetAutoEnableMode(GetOtInstance(), true);
+        SetBorderRouterEnabled(true);
     }
     else
     {
         // This automatically disables the auto-enable mode which is designed for border router
         otSrpServerSetEnabled(GetOtInstance(), true);
+
+        SetBorderRouterEnabled(false);
     }
 
     mConfiguration = aConfiguration;
@@ -254,6 +257,24 @@ otLinkModeConfig AndroidRcpHost::GetLinkModeConfig(bool aIsRouter)
     }
 
     return linkModeConfig;
+}
+
+void AndroidRcpHost::SetBorderRouterEnabled(bool aEnabled)
+{
+    otError error;
+
+    error = otBorderRoutingSetEnabled(GetOtInstance(), aEnabled);
+    if (error != OT_ERROR_NONE)
+    {
+        otbrLogWarning("Failed to %s Border Routing: %s", (aEnabled ? "enable" : "disable"),
+                       otThreadErrorToString(error));
+        ExitNow();
+    }
+
+    otBackboneRouterSetEnabled(GetOtInstance(), aEnabled);
+
+exit:
+    return;
 }
 
 extern "C" otError otPlatInfraIfDiscoverNat64Prefix(uint32_t aInfraIfIndex)
