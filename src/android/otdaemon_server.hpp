@@ -163,8 +163,6 @@ private:
     static void         AddressCallback(const otIp6AddressInfo *aAddressInfo, bool aIsAdded, void *aBinderServer);
     static void         ReceiveCallback(otMessage *aMessage, void *aBinderServer);
     void                ReceiveCallback(otMessage *aMessage);
-    static int          OtCtlCommandCallback(void *aBinderServer, const char *aFormat, va_list aArguments);
-    int                 OtCtlCommandCallback(const char *aFormat, va_list aArguments);
     void                TransmitCallback(void);
     BackboneRouterState GetBackboneRouterState(void);
     static void         HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
@@ -197,9 +195,6 @@ private:
     std::shared_ptr<IOtStatusReceiver> mJoinReceiver;
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
-    bool                               mIsOtCtlInteractiveMode;
-    bool                               mIsOtCtlOutputComplete;
-    std::shared_ptr<IOtOutputReceiver> mOtCtlOutputReceiver;
     std::set<OnMeshPrefixConfig>       mOnMeshPrefixes;
     int64_t                            mEphemeralKeyExpiryMillis;
 
