@@ -33,6 +33,8 @@
 #include <net/if.h>
 #include <vector>
 
+#include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <openthread/backbone_router_ftd.h>
 #include <openthread/border_routing.h>
 #include <openthread/dnssd_server.h>
@@ -87,11 +89,14 @@ void AndroidRcpHost::SetConfiguration(const OtDaemonConfiguration              &
     if (aConfiguration.borderRouterEnabled)
     {
         otSrpServerSetAutoEnableMode(GetOtInstance(), true);
+        SetBorderRouterEnabled(true);
     }
     else
     {
         // This automatically disables the auto-enable mode which is designed for border router
         otSrpServerSetEnabled(GetOtInstance(), true);
+
+        SetBorderRouterEnabled(false);
     }
 
     mConfiguration = aConfiguration;
@@ -183,6 +188,121 @@ exit:
     PropagateResult(error, message, aReceiver);
 }
 
+void AndroidRcpHost::RunOtCtlCommand(const std::string                        &aCommand,
+                                     const bool                                aIsInteractive,
+                                     const std::shared_ptr<IOtOutputReceiver> &aReceiver)
+{
+    otSysCliInitUsingDaemon(GetOtInstance());
+
+    if (!aCommand.empty())
+    {
+        std::string command = aCommand;
+
+        mIsOtCtlInteractiveMode = aIsInteractive;
+        mOtCtlOutputReceiver    = aReceiver;
+
+        otCliInit(GetOtInstance(), AndroidRcpHost::OtCtlCommandCallback, this);
+        otCliInputLine(command.data());
+    }
+}
+
+int AndroidRcpHost::OtCtlCommandCallback(void *aBinderServer, const char *aFormat, va_list aArguments)
+{
+    return static_cast<AndroidRcpHost *>(aBinderServer)->OtCtlCommandCallback(aFormat, aArguments);
+}
+
+int AndroidRcpHost::OtCtlCommandCallback(const char *aFormat, va_list aArguments)
+{
+    static const std::string kPrompt = "> ";
+    std::string              output;
+
+    VerifyOrExit(mOtCtlOutputReceiver != nullptr, otSysCliInitUsingDaemon(GetOtInstance()));
+
+    android::base::StringAppendV(&output, aFormat, aArguments);
+
+    // Ignore CLI prompt
+    VerifyOrExit(output != kPrompt);
+
+    mOtCtlOutputReceiver->onOutput(output);
+
+    // Check if the command has completed (indicated by "Done" or "Error")
+    if (output.starts_with("Done") || output.starts_with("Error"))
+    {
+        mIsOtCtlOutputComplete = true;
+    }
+
+    // The OpenThread CLI consistently outputs "\r\n" as a newline character. Therefore, we use the presence of "\r\n"
+    // following "Done" or "Error" to signal the completion of a command's output.
+    if (mIsOtCtlOutputComplete && output.ends_with("\r\n"))
+    {
+        if (!mIsOtCtlInteractiveMode)
+        {
+            otSysCliInitUsingDaemon(GetOtInstance());
+        }
+        mIsOtCtlOutputComplete = false;
+        mOtCtlOutputReceiver->onComplete();
+    }
+
+exit:
+    return output.length();
+}
+
+static int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)
+{
+    std::string output;
+
+    android::base::StringAppendV(&output, aFormat, aArguments);
+
+    int length = output.length();
+
+    VerifyOrExit(android::base::WriteStringToFd(output, *(static_cast<int *>(aContext))), length = 0);
+
+exit:
+    return length;
+}
+
+inline void DumpCliCommand(std::string aCommand, int aFd)
+{
+    android::base::WriteStringToFd(aCommand + '\n', aFd);
+    otCliInputLine(aCommand.data());
+}
+
+binder_status_t AndroidRcpHost::Dump(int aFd, const char **aArgs, uint32_t aNumArgs)
+{
+    OT_UNUSED_VARIABLE(aArgs);
+    OT_UNUSED_VARIABLE(aNumArgs);
+
+    otCliInit(GetOtInstance(), OutputCallback, &aFd);
+
+    DumpCliCommand("state", aFd);
+    DumpCliCommand("srp server state", aFd);
+    DumpCliCommand("srp server service", aFd);
+    DumpCliCommand("srp server host", aFd);
+    DumpCliCommand("dataset activetimestamp", aFd);
+    DumpCliCommand("dataset channel", aFd);
+    DumpCliCommand("dataset channelmask", aFd);
+    DumpCliCommand("dataset extpanid", aFd);
+    DumpCliCommand("dataset meshlocalprefix", aFd);
+    DumpCliCommand("dataset networkname", aFd);
+    DumpCliCommand("dataset panid", aFd);
+    DumpCliCommand("dataset securitypolicy", aFd);
+    DumpCliCommand("leaderdata", aFd);
+    DumpCliCommand("eidcache", aFd);
+    DumpCliCommand("counters mac", aFd);
+    DumpCliCommand("counters mle", aFd);
+    DumpCliCommand("counters ip", aFd);
+    DumpCliCommand("router table", aFd);
+    DumpCliCommand("neighbor table", aFd);
+    DumpCliCommand("ipaddr -v", aFd);
+    DumpCliCommand("netdata show", aFd);
+
+    fsync(aFd);
+
+    otSysCliInitUsingDaemon(GetOtInstance());
+
+    return STATUS_OK;
+}
+
 std::vector<otIp6Address> ToOtUpstreamDnsServerAddresses(const std::vector<std::string> &aAddresses)
 {
     std::vector<otIp6Address> addresses;
@@ -254,6 +374,24 @@ otLinkModeConfig AndroidRcpHost::GetLinkModeConfig(bool aIsRouter)
     }
 
     return linkModeConfig;
+}
+
+void AndroidRcpHost::SetBorderRouterEnabled(bool aEnabled)
+{
+    otError error;
+
+    error = otBorderRoutingSetEnabled(GetOtInstance(), aEnabled);
+    if (error != OT_ERROR_NONE)
+    {
+        otbrLogWarning("Failed to %s Border Routing: %s", (aEnabled ? "enable" : "disable"),
+                       otThreadErrorToString(error));
+        ExitNow();
+    }
+
+    otBackboneRouterSetEnabled(GetOtInstance(), aEnabled);
+
+exit:
+    return;
 }
 
 extern "C" otError otPlatInfraIfDiscoverNat64Prefix(uint32_t aInfraIfIndex)
