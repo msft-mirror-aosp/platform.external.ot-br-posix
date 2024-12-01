@@ -96,7 +96,9 @@ Status MdnsPublisher::NsdResolveServiceCallback::onServiceResolved(const std::st
     for (const auto &addressStr : aAddresses)
     {
         Ip6Address address;
-        int        error = Ip6Address::FromString(addressStr.c_str(), address);
+        // addressStr may be in the format of "fe80::1234%eth0"
+        std::string addrStr(addressStr.begin(), std::find(addressStr.begin(), addressStr.end(), '%'));
+        int         error = Ip6Address::FromString(addrStr.c_str(), address);
 
         if (error != OTBR_ERROR_NONE)
         {
