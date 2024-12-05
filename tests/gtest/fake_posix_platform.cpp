@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, The OpenThread Authors.
+ *  Copyright (c) 2024, The OpenThread Authors.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -26,63 +26,61 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @file
- *   This file includes definitions for CRC16 computations.
- */
+#include "fake_platform.hpp"
 
-#ifndef OTBR_UTILS_CRC16_HPP_
-#define OTBR_UTILS_CRC16_HPP_
+#include <assert.h>
 
-#include "openthread-br/config.h"
+#include "openthread/openthread-system.h"
 
-#include <stdint.h>
+otPlatResetReason        gPlatResetReason = OT_PLAT_RESET_REASON_POWER_ON;
+static ot::FakePlatform *sFakePlatform;
 
-namespace otbr {
-
-/**
- * This class implements CRC16 computations.
- */
-class Crc16
+const otRadioSpinelMetrics *otSysGetRadioSpinelMetrics(void)
 {
-public:
-    enum Polynomial
+    return nullptr;
+}
+const otRcpInterfaceMetrics *otSysGetRcpInterfaceMetrics(void)
+{
+    return nullptr;
+}
+
+uint32_t otSysGetInfraNetifFlags(void)
+{
+    return 0;
+}
+
+void otSysCountInfraNetifAddresses(otSysInfraNetIfAddressCounters *)
+{
+}
+
+const char *otSysGetInfraNetifName(void)
+{
+    return nullptr;
+}
+
+otInstance *otSysInit(otPlatformConfig *aPlatformConfig)
+{
+    OT_UNUSED_VARIABLE(aPlatformConfig);
+
+    assert(sFakePlatform == nullptr);
+    sFakePlatform = new ot::FakePlatform();
+    return sFakePlatform->CurrentInstance();
+}
+
+void otSysDeinit(void)
+{
+    if (sFakePlatform != nullptr)
     {
-        kCcitt = 0x1021, ///< CRC16_CCITT
-        kAnsi  = 0x8005, ///< CRC16-ANSI
-    };
+        delete sFakePlatform;
+        sFakePlatform = nullptr;
+    }
+}
 
-    /**
-     * This constructor initializes the object.
-     *
-     * @param[in] aPolynomial  The polynomial value.
-     */
-    Crc16(Polynomial aPolynomial);
+void otSysMainloopUpdate(otInstance *, otSysMainloopContext *)
+{
+}
 
-    /**
-     * This method initializes the CRC16 computation.
-     */
-    void Init(void) { mCrc = 0; }
-
-    /**
-     * This method feeds a byte value into the CRC16 computation.
-     *
-     * @param[in] aByte  The byte value.
-     */
-    void Update(uint8_t aByte);
-
-    /**
-     * This method gets the current CRC16 value.
-     *
-     * @returns The current CRC16 value.
-     */
-    uint16_t Get(void) const { return mCrc; }
-
-private:
-    uint16_t mPolynomial;
-    uint16_t mCrc;
-};
-
-} // namespace otbr
-
-#endif // OTBR_UTILS_CRC16_HPP_
+void otSysMainloopProcess(otInstance *, const otSysMainloopContext *)
+{
+    sFakePlatform->Run(/* microseconds */ 1000);
+}
