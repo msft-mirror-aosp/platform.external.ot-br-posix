@@ -94,22 +94,22 @@ oneway interface IOtDaemon {
      *
      * <p>This API MUST be called before all other APIs of this interface.
      *
-     * @param tunFd the Thread tunnel interface FD which can be used to transmit/receive
-     *              packets to/from Thread PAN
      * @param enabled the Thead enabled state from Persistent Settings
      * @param configuration the Thread configuration from Persistent Settings
+     * @param tunFd the Thread tunnel interface FD which can be used to transmit/receive
+     *              packets to/from Thread PAN
      * @param nsdPublisher the INsdPublisher which can be used for mDNS advertisement/discovery
      *                     on AIL by {@link NsdManager}
      * @param meshcopTxts the MeshCoP TXT values set by the system_server to override the default
      *                    ones
-     * @param callback the callback for receiving OtDaemonState changes
      * @param countryCode 2 bytes country code (as defined in ISO 3166) to set
      * @param trelEnabled the TREL enabled state
+     * @param callback the callback for receiving OtDaemonState changes
      */
-    void initialize(in ParcelFileDescriptor tunFd, in boolean enabled,
-            in OtDaemonConfiguration configuration, in INsdPublisher nsdPublisher,
-            in MeshcopTxtAttributes meshcopTxts, in IOtDaemonCallback callback,
-            in String countryCode, in boolean trelEnabled);
+    void initialize(boolean enabled, in OtDaemonConfiguration configuration,
+            in ParcelFileDescriptor tunFd, in INsdPublisher nsdPublisher,
+            in MeshcopTxtAttributes meshcopTxts, in String countryCode, in boolean trelEnabled,
+            in IOtDaemonCallback callback);
 
     /** Terminates the ot-daemon process. */
     void terminate();
