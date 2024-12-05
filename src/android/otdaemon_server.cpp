@@ -533,14 +533,14 @@ std::unique_ptr<AndroidThreadHost> OtDaemonServer::CreateAndroidHost(void)
     return host;
 }
 
-Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTunFd,
-                                  const bool                                aEnabled,
+Status OtDaemonServer::initialize(const bool                                aEnabled,
                                   const OtDaemonConfiguration              &aConfiguration,
+                                  const ScopedFileDescriptor               &aTunFd,
                                   const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                   const MeshcopTxtAttributes               &aMeshcopTxts,
-                                  const std::shared_ptr<IOtDaemonCallback> &aCallback,
                                   const std::string                        &aCountryCode,
-                                  const bool                                aTrelEnabled)
+                                  const bool                                aTrelEnabled,
+                                  const std::shared_ptr<IOtDaemonCallback> &aCallback)
 {
     otbrLogInfo("OT daemon is initialized by system server (enabled=%s, tunFd=%d)", (aEnabled ? "true" : "false"),
                 aTunFd.get());
@@ -555,8 +555,8 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
 
     mTaskRunner.Post(
         [aEnabled, aConfiguration, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, aTrelEnabled, this]() {
-            initializeInternal(aEnabled, aConfiguration, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode,
-                               aTrelEnabled);
+            initializeInternal(aEnabled, aConfiguration, mINsdPublisher, mMeshcopTxts, aCountryCode, aTrelEnabled,
+                               aCallback);
         });
 
     return Status::ok();
@@ -566,9 +566,9 @@ void OtDaemonServer::initializeInternal(const bool                              
                                         const OtDaemonConfiguration              &aConfiguration,
                                         const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                         const MeshcopTxtAttributes               &aMeshcopTxts,
-                                        const std::shared_ptr<IOtDaemonCallback> &aCallback,
                                         const std::string                        &aCountryCode,
-                                        const bool                                aTrelEnabled)
+                                        const bool                                aTrelEnabled,
+                                        const std::shared_ptr<IOtDaemonCallback> &aCallback)
 {
     std::string              instanceName = aMeshcopTxts.vendorName + " " + aMeshcopTxts.modelName;
     Mdns::Publisher::TxtList nonStandardTxts;
