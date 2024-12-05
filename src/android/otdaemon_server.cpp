@@ -99,13 +99,13 @@ static const char *ThreadEnabledStateToString(int enabledState)
 
 OtDaemonServer *OtDaemonServer::sOtDaemonServer = nullptr;
 
-OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &rcpHost,
-                               otbr::Mdns::Publisher &mdnsPublisher,
-                               otbr::BorderAgent     &borderAgent)
-    : mHost(rcpHost)
+OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &aRcpHost,
+                               otbr::Mdns::Publisher &aMdnsPublisher,
+                               otbr::BorderAgent     &aBorderAgent)
+    : mHost(aRcpHost)
     , mAndroidHost(CreateAndroidHost())
-    , mMdnsPublisher(static_cast<MdnsPublisher &>(mdnsPublisher))
-    , mBorderAgent(borderAgent)
+    , mMdnsPublisher(static_cast<MdnsPublisher &>(aMdnsPublisher))
+    , mBorderAgent(aBorderAgent)
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
@@ -650,14 +650,14 @@ void OtDaemonServer::EnableThread(const std::shared_ptr<IOtStatusReceiver> &aRec
     UpdateThreadEnabledState(OT_STATE_ENABLED, aReceiver);
 }
 
-Status OtDaemonServer::setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+Status OtDaemonServer::setThreadEnabled(const bool aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    mTaskRunner.Post([enabled, aReceiver, this]() { setThreadEnabledInternal(enabled, aReceiver); });
+    mTaskRunner.Post([aEnabled, aReceiver, this]() { setThreadEnabledInternal(aEnabled, aReceiver); });
 
     return Status::ok();
 }
 
-void OtDaemonServer::setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+void OtDaemonServer::setThreadEnabledInternal(const bool aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     int         error = OT_ERROR_NONE;
     std::string message;
@@ -666,13 +666,13 @@ void OtDaemonServer::setThreadEnabledInternal(const bool enabled, const std::sha
 
     VerifyOrExit(mState.threadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
-    if ((mState.threadEnabled == OT_STATE_ENABLED) == enabled)
+    if ((mState.threadEnabled == OT_STATE_ENABLED) == aEnabled)
     {
         aReceiver->onSuccess();
         ExitNow();
     }
 
-    if (enabled)
+    if (aEnabled)
     {
         EnableThread(aReceiver);
     }
@@ -696,16 +696,16 @@ exit:
     }
 }
 
-Status OtDaemonServer::activateEphemeralKeyMode(const int64_t                             lifetimeMillis,
+Status OtDaemonServer::activateEphemeralKeyMode(const int64_t                             aLifetimeMillis,
                                                 const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     mTaskRunner.Post(
-        [lifetimeMillis, aReceiver, this]() { activateEphemeralKeyModeInternal(lifetimeMillis, aReceiver); });
+        [aLifetimeMillis, aReceiver, this]() { activateEphemeralKeyModeInternal(aLifetimeMillis, aReceiver); });
 
     return Status::ok();
 }
 
-void OtDaemonServer::activateEphemeralKeyModeInternal(const int64_t                             lifetimeMillis,
+void OtDaemonServer::activateEphemeralKeyModeInternal(const int64_t                             aLifetimeMillis,
                                                       const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     int         error = OT_ERROR_NONE;
@@ -718,11 +718,11 @@ void OtDaemonServer::activateEphemeralKeyModeInternal(const int64_t             
     VerifyOrExit(!otBorderAgentIsEphemeralKeyActive(GetOtInstance()), error = OT_ERROR_BUSY,
                  message = "ephemeral key mode is already activated");
 
-    otbrLogInfo("Activating ephemeral key mode with %lldms lifetime.", lifetimeMillis);
+    otbrLogInfo("Activating ephemeral key mode with %lldms lifetime.", aLifetimeMillis);
 
     SuccessOrExit(error = mBorderAgent.CreateEphemeralKey(passcode), message = "Failed to create ephemeral key");
     SuccessOrExit(error   = otBorderAgentSetEphemeralKey(GetOtInstance(), passcode.c_str(),
-                                                         static_cast<uint32_t>(lifetimeMillis), 0 /* aUdpPort */),
+                                                         static_cast<uint32_t>(aLifetimeMillis), 0 /* aUdpPort */),
                   message = "Failed to set ephemeral key");
 
 exit:
@@ -734,7 +734,7 @@ exit:
             mEphemeralKeyExpiryMillis   = std::chrono::duration_cast<std::chrono::milliseconds>(
                                             std::chrono::steady_clock::now().time_since_epoch())
                                             .count() +
-                                        lifetimeMillis;
+                                        aLifetimeMillis;
             aReceiver->onSuccess();
         }
         else
@@ -768,15 +768,15 @@ exit:
     PropagateResult(error, message, aReceiver);
 }
 
-Status OtDaemonServer::registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t listenerId)
+Status OtDaemonServer::registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t aListenerId)
 {
-    mTaskRunner.Post([aCallback, listenerId, this]() { registerStateCallbackInternal(aCallback, listenerId); });
+    mTaskRunner.Post([aCallback, aListenerId, this]() { registerStateCallbackInternal(aCallback, aListenerId); });
 
     return Status::ok();
 }
 
 void OtDaemonServer::registerStateCallbackInternal(const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                                                   int64_t                                   listenerId)
+                                                   int64_t                                   aListenerId)
 {
     VerifyOrExit(GetOtInstance() != nullptr, otbrLogWarning("OT is not initialized"));
 
@@ -789,7 +789,7 @@ void OtDaemonServer::registerStateCallbackInternal(const std::shared_ptr<IOtDaem
     // To ensure that a client app can get the latest correct state immediately when registering a
     // state callback, here needs to invoke the callback
     RefreshOtDaemonState(/* aFlags */ 0xffffffff);
-    NotifyStateChanged(listenerId);
+    NotifyStateChanged(aListenerId);
     mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
 
 exit:

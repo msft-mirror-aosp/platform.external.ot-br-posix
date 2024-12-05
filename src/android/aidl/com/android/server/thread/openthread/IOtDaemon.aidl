@@ -171,7 +171,7 @@ oneway interface IOtDaemon {
      * @param countryCode 2 bytes country code (as defined in ISO 3166) to set.
      * @param receiver the receiver to receive result of this operation
      */
-    oneway void setCountryCode(in String countryCode, in IOtStatusReceiver receiver);
+    void setCountryCode(in String countryCode, in IOtStatusReceiver receiver);
 
     /**
      * Sets the configuration at ot-daemon.
@@ -180,7 +180,7 @@ oneway interface IOtDaemon {
      * @param receiver the status receiver
      *
      */
-    oneway void setConfiguration(in OtDaemonConfiguration config, in IOtStatusReceiver receiver);
+    void setConfiguration(in OtDaemonConfiguration config, in IOtStatusReceiver receiver);
 
     /**
      * Sets the infrastructure network interface.
@@ -190,7 +190,7 @@ oneway interface IOtDaemon {
      * @param receiver the status receiver
      *
      */
-    oneway void setInfraLinkInterfaceName(in @nullable String interfaceName,
+    void setInfraLinkInterfaceName(in @nullable String interfaceName,
             in ParcelFileDescriptor icmp6Socket, in IOtStatusReceiver receiver);
 
     /**
@@ -200,7 +200,7 @@ oneway interface IOtDaemon {
      * @param receiver the status receiver
      *
      */
-    oneway void setInfraLinkNat64Prefix(
+    void setInfraLinkNat64Prefix(
             in @nullable String nat64Prefix, in IOtStatusReceiver receiver);
 
     /**
@@ -210,7 +210,7 @@ oneway interface IOtDaemon {
      * @param receiver the status receiver
      *
      */
-    oneway void setNat64Cidr(in @nullable String nat64Cidr, in IOtStatusReceiver receiver);
+    void setNat64Cidr(in @nullable String nat64Cidr, in IOtStatusReceiver receiver);
 
     /**
      * Sets the infrastructure link DNS servers.
@@ -219,7 +219,7 @@ oneway interface IOtDaemon {
      * @param receiver the status receiver
      *
      */
-    oneway void setInfraLinkDnsServers(in List<String> dnsServers, in IOtStatusReceiver receiver);
+    void setInfraLinkDnsServers(in List<String> dnsServers, in IOtStatusReceiver receiver);
 
     /**
      * Gets the supported and preferred channel masks.
@@ -244,7 +244,7 @@ oneway interface IOtDaemon {
      * @param isInteractive indicates whether to run command in interactive mode
      * @param receiver the callback interface to receive the command's output
      */
-    oneway void runOtCtlCommand(
+    void runOtCtlCommand(
             in String command, in boolean isInteractive, in IOtOutputReceiver receiver);
 
     /**
