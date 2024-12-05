@@ -82,21 +82,21 @@ private:
 
     // Implements IOtDaemon.aidl
 
-    Status initialize(const ScopedFileDescriptor               &aTunFd,
-                      const bool                                aEnabled,
+    Status initialize(const bool                                aEnabled,
                       const OtDaemonConfiguration              &aConfiguration,
+                      const ScopedFileDescriptor               &aTunFd,
                       const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                       const MeshcopTxtAttributes               &aMeshcopTxts,
-                      const std::shared_ptr<IOtDaemonCallback> &aCallback,
                       const std::string                        &aCountryCode,
-                      const bool                                aTrelEnabled) override;
+                      const bool                                aTrelEnabled,
+                      const std::shared_ptr<IOtDaemonCallback> &aCallback) override;
     void   initializeInternal(const bool                                aEnabled,
                               const OtDaemonConfiguration              &aConfiguration,
                               const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                               const MeshcopTxtAttributes               &aMeshcopTxts,
-                              const std::shared_ptr<IOtDaemonCallback> &aCallback,
                               const std::string                        &aCountryCode,
-                              const bool                                aTrelEnabled);
+                              const bool                                aTrelEnabled,
+                              const std::shared_ptr<IOtDaemonCallback> &aCallback);
     Status terminate(void) override;
     Status setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
