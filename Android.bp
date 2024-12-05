@@ -152,16 +152,20 @@ cc_defaults {
         // The platform specific rules for selecting infrastructure link do not apply to Android
         "-DOTBR_ENABLE_VENDOR_INFRA_LINK_SELECT=0",
 
-        // Disable 1.4 features, they are not supported on Android yet.
+        "-DOTBR_ENABLE_TREL=1",
+
+        // For the following 1.4 features, the `OTBR_ENABLE_*` macros are set to 0 because they
+        // only guard code which deals with feature flagging or telemetry. Such code is targeting
+        // other Linux platforms but not Android.
         "-DOTBR_ENABLE_NAT64=0",
         "-DOTBR_ENABLE_DNS_UPSTREAM_QUERY=0",
         "-DOTBR_ENABLE_DHCP6_PD=0",
-        "-DOTBR_ENABLE_TREL=0",
         "-DOTBR_ENABLE_EPSKC=0",
     ],
 
     srcs: [
         "src/agent/application.cpp",
+        "src/android/android_rcp_host.cpp",
         "src/android/common_utils.cpp",
         "src/android/mdns_publisher.cpp",
         "src/android/otdaemon_server.cpp",
@@ -185,6 +189,7 @@ cc_defaults {
         "src/ncp/thread_host.cpp",
         "src/sdp_proxy/advertising_proxy.cpp",
         "src/sdp_proxy/discovery_proxy.cpp",
+        "src/trel_dnssd/trel_dnssd.cpp",
         "src/utils/crc16.cpp",
         "src/utils/dns_utils.cpp",
         "src/utils/hex.cpp",

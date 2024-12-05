@@ -36,7 +36,9 @@
 #include <openthread/instance.h>
 #include <openthread/ip6.h>
 
+#include "common_utils.hpp"
 #include "agent/vendor.hpp"
+#include "android/android_thread_host.hpp"
 #include "android/common_utils.hpp"
 #include "android/mdns_publisher.hpp"
 #include "common/mainloop.hpp"
@@ -61,8 +63,6 @@ public:
 
     static OtDaemonServer *Get(void) { return sOtDaemonServer; }
 
-    void NotifyNat64PrefixDiscoveryDone(void);
-
 private:
     using LeaveCallback = std::function<void()>;
 
@@ -77,6 +77,9 @@ private:
     void Update(MainloopContext &aMainloop) override;
     void Process(const MainloopContext &aMainloop) override;
 
+    // Creates AndroidThreadHost instance
+    std::unique_ptr<AndroidThreadHost> CreateAndroidHost(void);
+
     // Implements IOtDaemon.aidl
 
     Status initialize(const ScopedFileDescriptor               &aTunFd,
@@ -85,13 +88,15 @@ private:
                       const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                       const MeshcopTxtAttributes               &aMeshcopTxts,
                       const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                      const std::string                        &aCountryCode) override;
+                      const std::string                        &aCountryCode,
+                      const bool                                aTrelEnabled) override;
     void   initializeInternal(const bool                                aEnabled,
                               const OtDaemonConfiguration              &aConfiguration,
                               const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                               const MeshcopTxtAttributes               &aMeshcopTxts,
                               const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                              const std::string                        &aCountryCode);
+                              const std::string                        &aCountryCode,
+                              const bool                                aTrelEnabled);
     Status terminate(void) override;
     Status setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
@@ -116,14 +121,9 @@ private:
                                        const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setConfiguration(const OtDaemonConfiguration              &aConfiguration,
                             const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   setConfigurationInternal(const OtDaemonConfiguration              &aConfiguration,
-                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setInfraLinkInterfaceName(const std::optional<std::string>         &aInterfaceName,
                                      const ScopedFileDescriptor               &aIcmp6Socket,
                                      const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   setInfraLinkInterfaceNameInternal(const std::string                        &aInterfaceName,
-                                             int                                       aIcmp6SocketFd,
-                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status setInfraLinkNat64Prefix(const std::optional<std::string>         &aNat64Prefix,
                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   setInfraLinkNat64PrefixInternal(const std::string                        &aNat64Prefix,
@@ -150,7 +150,6 @@ private:
                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status deactivateEphemeralKeyMode(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   deactivateEphemeralKeyModeInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    static otLinkModeConfig GetLinkModeConfig(bool aBeRouter);
 
     bool        RefreshOtDaemonState(otChangedFlags aFlags);
     void        LeaveGracefully(const LeaveCallback &aReceiver);
@@ -164,8 +163,6 @@ private:
     static void         AddressCallback(const otIp6AddressInfo *aAddressInfo, bool aIsAdded, void *aBinderServer);
     static void         ReceiveCallback(otMessage *aMessage, void *aBinderServer);
     void                ReceiveCallback(otMessage *aMessage);
-    static int          OtCtlCommandCallback(void *aBinderServer, const char *aFormat, va_list aArguments);
-    int                 OtCtlCommandCallback(const char *aFormat, va_list aArguments);
     void                TransmitCallback(void);
     BackboneRouterState GetBackboneRouterState(void);
     static void         HandleBackboneMulticastListenerEvent(void                                  *aBinderServer,
@@ -185,6 +182,7 @@ private:
     static OtDaemonServer *sOtDaemonServer;
 
     otbr::Ncp::RcpHost                &mHost;
+    std::unique_ptr<AndroidThreadHost> mAndroidHost;
     MdnsPublisher                     &mMdnsPublisher;
     otbr::BorderAgent                 &mBorderAgent;
     std::shared_ptr<INsdPublisher>     mINsdPublisher;
@@ -197,13 +195,7 @@ private:
     std::shared_ptr<IOtStatusReceiver> mJoinReceiver;
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
-    bool                               mIsOtCtlInteractiveMode;
-    bool                               mIsOtCtlOutputComplete;
-    std::shared_ptr<IOtOutputReceiver> mOtCtlOutputReceiver;
-    OtDaemonConfiguration              mConfiguration;
     std::set<OnMeshPrefixConfig>       mOnMeshPrefixes;
-    InfraLinkState                     mInfraLinkState;
-    int                                mInfraIcmp6Socket;
     int64_t                            mEphemeralKeyExpiryMillis;
 
     static constexpr Seconds kTelemetryCheckInterval           = Seconds(600);          // 600 seconds

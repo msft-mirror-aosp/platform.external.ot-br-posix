@@ -47,25 +47,29 @@ namespace Ncp {
 
 /**
  * This class implements the NetworkProperties under NCP mode.
- *
  */
 class NcpNetworkProperties : virtual public NetworkProperties, public PropsObserver
 {
 public:
     /**
      * Constructor
-     *
      */
     explicit NcpNetworkProperties(void);
 
     // NetworkProperties methods
     otDeviceRole GetDeviceRole(void) const override;
+    bool         Ip6IsEnabled(void) const override;
+    uint32_t     GetPartitionId(void) const override;
+    void         GetDatasetActiveTlvs(otOperationalDatasetTlvs &aDatasetTlvs) const override;
+    void         GetDatasetPendingTlvs(otOperationalDatasetTlvs &aDatasetTlvs) const override;
 
 private:
     // PropsObserver methods
     void SetDeviceRole(otDeviceRole aRole) override;
+    void SetDatasetActiveTlvs(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs) override;
 
-    otDeviceRole mDeviceRole;
+    otDeviceRole             mDeviceRole;
+    otOperationalDatasetTlvs mDatasetActiveTlvs;
 };
 
 class NcpHost : public MainloopProcessor, public ThreadHost, public NcpNetworkProperties
@@ -76,13 +80,11 @@ public:
      *
      * @param[in]   aInterfaceName  A string of the NCP interface name.
      * @param[in]   aDryRun         TRUE to indicate dry-run mode. FALSE otherwise.
-     *
      */
     NcpHost(const char *aInterfaceName, bool aDryRun);
 
     /**
      * Destructor.
-     *
      */
     ~NcpHost(void) override = default;
 
@@ -96,6 +98,7 @@ public:
     void GetChannelMasks(const ChannelMasksReceiver &aReceiver, const AsyncResultReceiver &aErrReceiver) override;
     void SetChannelMaxPowers(const std::vector<ChannelMaxPower> &aChannelMaxPowers,
                              const AsyncResultReceiver          &aReceiver) override;
+    void AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback) override;
     CoprocessorType GetCoprocessorType(void) override { return OT_COPROCESSOR_NCP; }
     const char     *GetCoprocessorVersion(void) override;
     const char     *GetInterfaceName(void) const override { return mConfig.mInterfaceName; }
