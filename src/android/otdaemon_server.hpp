@@ -51,7 +51,9 @@ namespace Android {
 class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendor::VendorServer
 {
 public:
-    OtDaemonServer(otbr::Ncp::RcpHost &rcpHost, otbr::Mdns::Publisher &mdnsPublisher, otbr::BorderAgent &borderAgent);
+    OtDaemonServer(otbr::Ncp::RcpHost    &aRcpHost,
+                   otbr::Mdns::Publisher &aMdnsPublisher,
+                   otbr::BorderAgent     &aBorderAgent);
     virtual ~OtDaemonServer(void) = default;
 
     // Disallow copy and assign.
@@ -82,26 +84,26 @@ private:
 
     // Implements IOtDaemon.aidl
 
-    Status initialize(const ScopedFileDescriptor               &aTunFd,
-                      const bool                                aEnabled,
+    Status initialize(const bool                                aEnabled,
                       const OtDaemonConfiguration              &aConfiguration,
+                      const ScopedFileDescriptor               &aTunFd,
                       const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                       const MeshcopTxtAttributes               &aMeshcopTxts,
-                      const std::shared_ptr<IOtDaemonCallback> &aCallback,
                       const std::string                        &aCountryCode,
-                      const bool                                aTrelEnabled) override;
+                      const bool                                aTrelEnabled,
+                      const std::shared_ptr<IOtDaemonCallback> &aCallback) override;
     void   initializeInternal(const bool                                aEnabled,
                               const OtDaemonConfiguration              &aConfiguration,
                               const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                               const MeshcopTxtAttributes               &aMeshcopTxts,
-                              const std::shared_ptr<IOtDaemonCallback> &aCallback,
                               const std::string                        &aCountryCode,
-                              const bool                                aTrelEnabled);
+                              const bool                                aTrelEnabled,
+                              const std::shared_ptr<IOtDaemonCallback> &aCallback);
     Status terminate(void) override;
-    Status setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    Status registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t listenerId) override;
-    void   registerStateCallbackInternal(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t listenerId);
+    Status setThreadEnabled(const bool aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
+    void   setThreadEnabledInternal(const bool aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    Status registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t aListenerId) override;
+    void   registerStateCallbackInternal(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t aListenerId);
     bool   isAttached(void);
     Status join(const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
@@ -144,9 +146,9 @@ private:
     void   runOtCtlCommandInternal(const std::string                        &aCommand,
                                    const bool                                aIsInteractive,
                                    const std::shared_ptr<IOtOutputReceiver> &aReceiver);
-    Status activateEphemeralKeyMode(const int64_t                             lifetimeMillis,
+    Status activateEphemeralKeyMode(const int64_t                             aLifetimeMillis,
                                     const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void   activateEphemeralKeyModeInternal(const int64_t                             lifetimeMillis,
+    void   activateEphemeralKeyModeInternal(const int64_t                             aLifetimeMillis,
                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     Status deactivateEphemeralKeyMode(const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   deactivateEphemeralKeyModeInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
