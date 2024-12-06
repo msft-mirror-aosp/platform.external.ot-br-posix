@@ -31,6 +31,7 @@
 #include "ncp/rcp_host.hpp"
 
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -76,6 +77,38 @@ OtNetworkProperties::OtNetworkProperties(void)
 otDeviceRole OtNetworkProperties::GetDeviceRole(void) const
 {
     return otThreadGetDeviceRole(mInstance);
+}
+
+bool OtNetworkProperties::Ip6IsEnabled(void) const
+{
+    return otIp6IsEnabled(mInstance);
+}
+
+uint32_t OtNetworkProperties::GetPartitionId(void) const
+{
+    return otThreadGetPartitionId(mInstance);
+}
+
+void OtNetworkProperties::GetDatasetActiveTlvs(otOperationalDatasetTlvs &aDatasetTlvs) const
+{
+    otError error = otDatasetGetActiveTlvs(mInstance, &aDatasetTlvs);
+
+    if (error != OT_ERROR_NONE)
+    {
+        aDatasetTlvs.mLength = 0;
+        memset(aDatasetTlvs.mTlvs, 0, sizeof(aDatasetTlvs.mTlvs));
+    }
+}
+
+void OtNetworkProperties::GetDatasetPendingTlvs(otOperationalDatasetTlvs &aDatasetTlvs) const
+{
+    otError error = otDatasetGetPendingTlvs(mInstance, &aDatasetTlvs);
+
+    if (error != OT_ERROR_NONE)
+    {
+        aDatasetTlvs.mLength = 0;
+        memset(aDatasetTlvs.mTlvs, 0, sizeof(aDatasetTlvs.mTlvs));
+    }
 }
 
 void OtNetworkProperties::SetInstance(otInstance *aInstance)
@@ -295,6 +328,9 @@ void RcpHost::Deinit(void)
     OtNetworkProperties::SetInstance(nullptr);
     mThreadStateChangedCallbacks.clear();
     mResetHandlers.clear();
+
+    mSetThreadEnabledReceiver  = nullptr;
+    mScheduleMigrationReceiver = nullptr;
 }
 
 void RcpHost::HandleStateChanged(otChangedFlags aFlags)
@@ -411,10 +447,172 @@ void RcpHost::Leave(const AsyncResultReceiver &aReceiver)
 void RcpHost::ScheduleMigration(const otOperationalDatasetTlvs &aPendingOpDatasetTlvs,
                                 const AsyncResultReceiver       aReceiver)
 {
-    OT_UNUSED_VARIABLE(aPendingOpDatasetTlvs);
+    otError              error = OT_ERROR_NONE;
+    std::string          errorMsg;
+    otOperationalDataset emptyDataset;
 
-    // TODO: Implement ScheduleMigration under RCP mode.
-    mTaskRunner.Post([aReceiver](void) { aReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
+    VerifyOrExit(mInstance != nullptr, error = OT_ERROR_INVALID_STATE, errorMsg = "OT is not initialized");
+    VerifyOrExit(IsAttached(), error = OT_ERROR_FAILED,
+                 errorMsg = "Cannot schedule migration when this device is detached");
+
+    // TODO: check supported channel mask
+
+    SuccessOrExit(error    = otDatasetSendMgmtPendingSet(mInstance, &emptyDataset, aPendingOpDatasetTlvs.mTlvs,
+                                                         static_cast<uint8_t>(aPendingOpDatasetTlvs.mLength),
+                                                         SendMgmtPendingSetCallback, this),
+                  errorMsg = "Failed to send MGMT_PENDING_SET.req");
+
+exit:
+    if (error != OT_ERROR_NONE)
+    {
+        mTaskRunner.Post([aReceiver, error, errorMsg](void) { aReceiver(error, errorMsg); });
+    }
+    else
+    {
+        // otDatasetSendMgmtPendingSet() returns OT_ERROR_BUSY if it has already been called before but the
+        // callback hasn't been invoked. So we can guarantee that mMigrationReceiver is always nullptr here
+        assert(mScheduleMigrationReceiver == nullptr);
+        mScheduleMigrationReceiver = aReceiver;
+    }
+}
+
+void RcpHost::SendMgmtPendingSetCallback(otError aError, void *aContext)
+{
+    static_cast<RcpHost *>(aContext)->SendMgmtPendingSetCallback(aError);
+}
+
+void RcpHost::SendMgmtPendingSetCallback(otError aError)
+{
+    SafeInvokeAndClear(mScheduleMigrationReceiver, aError, "");
+}
+
+void RcpHost::SetThreadEnabled(bool aEnabled, const AsyncResultReceiver aReceiver)
+{
+    otError error             = OT_ERROR_NONE;
+    bool    receiveResultHere = true;
+
+    VerifyOrExit(mInstance != nullptr, error = OT_ERROR_INVALID_STATE);
+    VerifyOrExit(mSetThreadEnabledReceiver == nullptr, error = OT_ERROR_BUSY);
+
+    if (aEnabled)
+    {
+        otOperationalDatasetTlvs datasetTlvs;
+
+        if (otDatasetGetActiveTlvs(mInstance, &datasetTlvs) != OT_ERROR_NOT_FOUND && datasetTlvs.mLength > 0 &&
+            otThreadGetDeviceRole(mInstance) == OT_DEVICE_ROLE_DISABLED)
+        {
+            SuccessOrExit(error = otIp6SetEnabled(mInstance, true));
+            SuccessOrExit(error = otThreadSetEnabled(mInstance, true));
+        }
+    }
+    else
+    {
+        SuccessOrExit(error = otThreadDetachGracefully(mInstance, DisableThreadAfterDetach, this));
+        mSetThreadEnabledReceiver = aReceiver;
+        receiveResultHere         = false;
+    }
+
+exit:
+    if (receiveResultHere)
+    {
+        mTaskRunner.Post([aReceiver, error](void) { aReceiver(error, ""); });
+    }
+}
+
+void RcpHost::GetChannelMasks(const ChannelMasksReceiver &aReceiver, const AsyncResultReceiver &aErrReceiver)
+{
+    otError  error = OT_ERROR_NONE;
+    uint32_t supportedChannelMask;
+    uint32_t preferredChannelMask;
+
+    VerifyOrExit(mInstance != nullptr, error = OT_ERROR_INVALID_STATE);
+
+    supportedChannelMask = otLinkGetSupportedChannelMask(mInstance);
+    preferredChannelMask = otPlatRadioGetPreferredChannelMask(mInstance);
+
+exit:
+    if (error == OT_ERROR_NONE)
+    {
+        mTaskRunner.Post([aReceiver, supportedChannelMask, preferredChannelMask](void) {
+            aReceiver(supportedChannelMask, preferredChannelMask);
+        });
+    }
+    else
+    {
+        mTaskRunner.Post([aErrReceiver, error](void) { aErrReceiver(error, "OT is not initialized"); });
+    }
+}
+
+void RcpHost::SetChannelMaxPowers(const std::vector<ChannelMaxPower> &aChannelMaxPowers,
+                                  const AsyncResultReceiver          &aReceiver)
+{
+    otError     error = OT_ERROR_NONE;
+    std::string errorMsg;
+
+    VerifyOrExit(mInstance != nullptr, error = OT_ERROR_INVALID_STATE, errorMsg = "OT is not initialized");
+
+    for (ChannelMaxPower channelMaxPower : aChannelMaxPowers)
+    {
+        VerifyOrExit((channelMaxPower.mChannel >= OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MIN) &&
+                         (channelMaxPower.mChannel <= OT_RADIO_2P4GHZ_OQPSK_CHANNEL_MAX),
+                     error = OT_ERROR_INVALID_ARGS, errorMsg = "The channel is invalid");
+    }
+
+    for (ChannelMaxPower channelMaxPower : aChannelMaxPowers)
+    {
+        otbrLogInfo("Set channel max power: channel=%u, maxPower=%u", static_cast<uint32_t>(channelMaxPower.mChannel),
+                    static_cast<uint32_t>(channelMaxPower.mMaxPower));
+        SuccessOrExit(error = otPlatRadioSetChannelTargetPower(
+                          mInstance, static_cast<uint8_t>(channelMaxPower.mChannel), channelMaxPower.mMaxPower),
+                      errorMsg = "Failed to set channel max power");
+    }
+
+exit:
+    mTaskRunner.Post([aReceiver, error, errorMsg](void) { aReceiver(error, errorMsg); });
+}
+
+void RcpHost::DisableThreadAfterDetach(void *aContext)
+{
+    static_cast<RcpHost *>(aContext)->DisableThreadAfterDetach();
+}
+
+void RcpHost::DisableThreadAfterDetach(void)
+{
+    otError     error = OT_ERROR_NONE;
+    std::string errorMsg;
+
+    SuccessOrExit(error = otThreadSetEnabled(mInstance, false), errorMsg = "Failed to disable Thread stack");
+    SuccessOrExit(error = otIp6SetEnabled(mInstance, false), errorMsg = "Failed to disable Thread interface");
+
+exit:
+    SafeInvokeAndClear(mSetThreadEnabledReceiver, error, errorMsg);
+}
+
+void RcpHost::SetCountryCode(const std::string &aCountryCode, const AsyncResultReceiver &aReceiver)
+{
+    static constexpr int kCountryCodeLength = 2;
+    otError              error              = OT_ERROR_NONE;
+    std::string          errorMsg;
+    uint16_t             countryCode;
+
+    VerifyOrExit((aCountryCode.length() == kCountryCodeLength) && isalpha(aCountryCode[0]) && isalpha(aCountryCode[1]),
+                 error = OT_ERROR_INVALID_ARGS, errorMsg = "The country code is invalid");
+
+    otbrLogInfo("Set country code: %c%c", aCountryCode[0], aCountryCode[1]);
+    VerifyOrExit(mInstance != nullptr, error = OT_ERROR_INVALID_STATE, errorMsg = "OT is not initialized");
+
+    countryCode = static_cast<uint16_t>((aCountryCode[0] << 8) | aCountryCode[1]);
+    SuccessOrExit(error = otLinkSetRegion(mInstance, countryCode), errorMsg = "Failed to set the country code");
+
+exit:
+    mTaskRunner.Post([aReceiver, error, errorMsg](void) { aReceiver(error, errorMsg); });
+}
+
+bool RcpHost::IsAttached(void)
+{
+    otDeviceRole role = GetDeviceRole();
+
+    return role == OT_DEVICE_ROLE_CHILD || role == OT_DEVICE_ROLE_ROUTER || role == OT_DEVICE_ROLE_LEADER;
 }
 
 /*

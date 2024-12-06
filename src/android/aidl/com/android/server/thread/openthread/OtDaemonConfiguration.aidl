@@ -28,7 +28,13 @@
 
 package com.android.server.thread.openthread;
 
-/** The ot-daemon configuration. */
+/** An internal mirror of {@link android.net.thread.ThreadConfiguration}. */
 @JavaOnlyImmutable
 @JavaDerive(equals=true, toString=true)
-parcelable OtDaemonConfiguration {}
+parcelable OtDaemonConfiguration {
+    // Follow the default value in {@link android.net.thread.ThreadConfiguration}.
+    boolean borderRouterEnabled = true;
+
+    boolean nat64Enabled;
+    boolean dhcpv6PdEnabled;
+}

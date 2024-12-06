@@ -49,6 +49,7 @@ namespace Ncp {
 NcpNetworkProperties::NcpNetworkProperties(void)
     : mDeviceRole(OT_DEVICE_ROLE_DISABLED)
 {
+    memset(&mDatasetActiveTlvs, 0, sizeof(mDatasetActiveTlvs));
 }
 
 otDeviceRole NcpNetworkProperties::GetDeviceRole(void) const
@@ -59,6 +60,36 @@ otDeviceRole NcpNetworkProperties::GetDeviceRole(void) const
 void NcpNetworkProperties::SetDeviceRole(otDeviceRole aRole)
 {
     mDeviceRole = aRole;
+}
+
+bool NcpNetworkProperties::Ip6IsEnabled(void) const
+{
+    // TODO: Implement the method under NCP mode.
+    return false;
+}
+
+uint32_t NcpNetworkProperties::GetPartitionId(void) const
+{
+    // TODO: Implement the method under NCP mode.
+    return 0;
+}
+
+void NcpNetworkProperties::SetDatasetActiveTlvs(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs)
+{
+    mDatasetActiveTlvs.mLength = aActiveOpDatasetTlvs.mLength;
+    memcpy(mDatasetActiveTlvs.mTlvs, aActiveOpDatasetTlvs.mTlvs, aActiveOpDatasetTlvs.mLength);
+}
+
+void NcpNetworkProperties::GetDatasetActiveTlvs(otOperationalDatasetTlvs &aDatasetTlvs) const
+{
+    aDatasetTlvs.mLength = mDatasetActiveTlvs.mLength;
+    memcpy(aDatasetTlvs.mTlvs, mDatasetActiveTlvs.mTlvs, mDatasetActiveTlvs.mLength);
+}
+
+void NcpNetworkProperties::GetDatasetPendingTlvs(otOperationalDatasetTlvs &aDatasetTlvs) const
+{
+    // TODO: Implement the method under NCP mode.
+    OTBR_UNUSED_VARIABLE(aDatasetTlvs);
 }
 
 // ===================================== NcpHost ======================================
@@ -142,6 +173,45 @@ exit:
         mTaskRunner.Post(
             [aReceiver, error](void) { aReceiver(error, "Cannot schedule migration when this device is detached"); });
     }
+}
+
+void NcpHost::SetThreadEnabled(bool aEnabled, const AsyncResultReceiver aReceiver)
+{
+    OT_UNUSED_VARIABLE(aEnabled);
+
+    // TODO: Implement SetThreadEnabled under NCP mode.
+    mTaskRunner.Post([aReceiver](void) { aReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
+}
+
+void NcpHost::SetCountryCode(const std::string &aCountryCode, const AsyncResultReceiver &aReceiver)
+{
+    OT_UNUSED_VARIABLE(aCountryCode);
+
+    // TODO: Implement SetCountryCode under NCP mode.
+    mTaskRunner.Post([aReceiver](void) { aReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
+}
+
+void NcpHost::GetChannelMasks(const ChannelMasksReceiver &aReceiver, const AsyncResultReceiver &aErrReceiver)
+{
+    OT_UNUSED_VARIABLE(aReceiver);
+
+    // TODO: Implement GetChannelMasks under NCP mode.
+    mTaskRunner.Post([aErrReceiver](void) { aErrReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
+}
+
+void NcpHost::SetChannelMaxPowers(const std::vector<ChannelMaxPower> &aChannelMaxPowers,
+                                  const AsyncResultReceiver          &aReceiver)
+{
+    OT_UNUSED_VARIABLE(aChannelMaxPowers);
+
+    // TODO: Implement SetChannelMaxPowers under NCP mode.
+    mTaskRunner.Post([aReceiver](void) { aReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
+}
+
+void NcpHost::AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback)
+{
+    // TODO: Implement AddThreadStateChangedCallback under NCP mode.
+    OT_UNUSED_VARIABLE(aCallback);
 }
 
 void NcpHost::Process(const MainloopContext &aMainloop)
