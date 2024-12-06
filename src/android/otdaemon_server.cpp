@@ -36,8 +36,6 @@
 #include <random>
 #include <string.h>
 
-#include <android-base/file.h>
-#include <android-base/stringprintf.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
 #include <openthread/border_agent.h>
@@ -101,13 +99,13 @@ static const char *ThreadEnabledStateToString(int enabledState)
 
 OtDaemonServer *OtDaemonServer::sOtDaemonServer = nullptr;
 
-OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &rcpHost,
-                               otbr::Mdns::Publisher &mdnsPublisher,
-                               otbr::BorderAgent     &borderAgent)
-    : mHost(rcpHost)
+OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &aRcpHost,
+                               otbr::Mdns::Publisher &aMdnsPublisher,
+                               otbr::BorderAgent     &aBorderAgent)
+    : mHost(aRcpHost)
     , mAndroidHost(CreateAndroidHost())
-    , mMdnsPublisher(static_cast<MdnsPublisher &>(mdnsPublisher))
-    , mBorderAgent(borderAgent)
+    , mMdnsPublisher(static_cast<MdnsPublisher &>(aMdnsPublisher))
+    , mBorderAgent(aBorderAgent)
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
@@ -299,47 +297,6 @@ void OtDaemonServer::ReceiveCallback(otMessage *aMessage)
 
 exit:
     otMessageFree(aMessage);
-}
-
-int OtDaemonServer::OtCtlCommandCallback(void *aBinderServer, const char *aFormat, va_list aArguments)
-{
-    return static_cast<OtDaemonServer *>(aBinderServer)->OtCtlCommandCallback(aFormat, aArguments);
-}
-
-int OtDaemonServer::OtCtlCommandCallback(const char *aFormat, va_list aArguments)
-{
-    static const std::string kPrompt = "> ";
-    std::string              output;
-
-    VerifyOrExit(mOtCtlOutputReceiver != nullptr, otSysCliInitUsingDaemon(GetOtInstance()));
-
-    android::base::StringAppendV(&output, aFormat, aArguments);
-
-    // Ignore CLI prompt
-    VerifyOrExit(output != kPrompt);
-
-    mOtCtlOutputReceiver->onOutput(output);
-
-    // Check if the command has completed (indicated by "Done" or "Error")
-    if (output.starts_with("Done") || output.starts_with("Error"))
-    {
-        mIsOtCtlOutputComplete = true;
-    }
-
-    // The OpenThread CLI consistently outputs "\r\n" as a newline character. Therefore, we use the presence of "\r\n"
-    // following "Done" or "Error" to signal the completion of a command's output.
-    if (mIsOtCtlOutputComplete && output.ends_with("\r\n"))
-    {
-        if (!mIsOtCtlInteractiveMode)
-        {
-            otSysCliInitUsingDaemon(GetOtInstance());
-        }
-        mIsOtCtlOutputComplete = false;
-        mOtCtlOutputReceiver->onComplete();
-    }
-
-exit:
-    return output.length();
 }
 
 static constexpr uint8_t kIpVersion4 = 4;
@@ -576,14 +533,14 @@ std::unique_ptr<AndroidThreadHost> OtDaemonServer::CreateAndroidHost(void)
     return host;
 }
 
-Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTunFd,
-                                  const bool                                aEnabled,
+Status OtDaemonServer::initialize(const bool                                aEnabled,
                                   const OtDaemonConfiguration              &aConfiguration,
+                                  const ScopedFileDescriptor               &aTunFd,
                                   const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                   const MeshcopTxtAttributes               &aMeshcopTxts,
-                                  const std::shared_ptr<IOtDaemonCallback> &aCallback,
                                   const std::string                        &aCountryCode,
-                                  const bool                                aTrelEnabled)
+                                  const bool                                aTrelEnabled,
+                                  const std::shared_ptr<IOtDaemonCallback> &aCallback)
 {
     otbrLogInfo("OT daemon is initialized by system server (enabled=%s, tunFd=%d)", (aEnabled ? "true" : "false"),
                 aTunFd.get());
@@ -598,8 +555,8 @@ Status OtDaemonServer::initialize(const ScopedFileDescriptor               &aTun
 
     mTaskRunner.Post(
         [aEnabled, aConfiguration, aINsdPublisher, aMeshcopTxts, aCallback, aCountryCode, aTrelEnabled, this]() {
-            initializeInternal(aEnabled, aConfiguration, mINsdPublisher, mMeshcopTxts, aCallback, aCountryCode,
-                               aTrelEnabled);
+            initializeInternal(aEnabled, aConfiguration, mINsdPublisher, mMeshcopTxts, aCountryCode, aTrelEnabled,
+                               aCallback);
         });
 
     return Status::ok();
@@ -609,9 +566,9 @@ void OtDaemonServer::initializeInternal(const bool                              
                                         const OtDaemonConfiguration              &aConfiguration,
                                         const std::shared_ptr<INsdPublisher>     &aINsdPublisher,
                                         const MeshcopTxtAttributes               &aMeshcopTxts,
-                                        const std::shared_ptr<IOtDaemonCallback> &aCallback,
                                         const std::string                        &aCountryCode,
-                                        const bool                                aTrelEnabled)
+                                        const bool                                aTrelEnabled,
+                                        const std::shared_ptr<IOtDaemonCallback> &aCallback)
 {
     std::string              instanceName = aMeshcopTxts.vendorName + " " + aMeshcopTxts.modelName;
     Mdns::Publisher::TxtList nonStandardTxts;
@@ -693,14 +650,14 @@ void OtDaemonServer::EnableThread(const std::shared_ptr<IOtStatusReceiver> &aRec
     UpdateThreadEnabledState(OT_STATE_ENABLED, aReceiver);
 }
 
-Status OtDaemonServer::setThreadEnabled(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+Status OtDaemonServer::setThreadEnabled(const bool aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    mTaskRunner.Post([enabled, aReceiver, this]() { setThreadEnabledInternal(enabled, aReceiver); });
+    mTaskRunner.Post([aEnabled, aReceiver, this]() { setThreadEnabledInternal(aEnabled, aReceiver); });
 
     return Status::ok();
 }
 
-void OtDaemonServer::setThreadEnabledInternal(const bool enabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+void OtDaemonServer::setThreadEnabledInternal(const bool aEnabled, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     int         error = OT_ERROR_NONE;
     std::string message;
@@ -709,13 +666,13 @@ void OtDaemonServer::setThreadEnabledInternal(const bool enabled, const std::sha
 
     VerifyOrExit(mState.threadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
 
-    if ((mState.threadEnabled == OT_STATE_ENABLED) == enabled)
+    if ((mState.threadEnabled == OT_STATE_ENABLED) == aEnabled)
     {
         aReceiver->onSuccess();
         ExitNow();
     }
 
-    if (enabled)
+    if (aEnabled)
     {
         EnableThread(aReceiver);
     }
@@ -739,16 +696,16 @@ exit:
     }
 }
 
-Status OtDaemonServer::activateEphemeralKeyMode(const int64_t                             lifetimeMillis,
+Status OtDaemonServer::activateEphemeralKeyMode(const int64_t                             aLifetimeMillis,
                                                 const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     mTaskRunner.Post(
-        [lifetimeMillis, aReceiver, this]() { activateEphemeralKeyModeInternal(lifetimeMillis, aReceiver); });
+        [aLifetimeMillis, aReceiver, this]() { activateEphemeralKeyModeInternal(aLifetimeMillis, aReceiver); });
 
     return Status::ok();
 }
 
-void OtDaemonServer::activateEphemeralKeyModeInternal(const int64_t                             lifetimeMillis,
+void OtDaemonServer::activateEphemeralKeyModeInternal(const int64_t                             aLifetimeMillis,
                                                       const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     int         error = OT_ERROR_NONE;
@@ -761,11 +718,11 @@ void OtDaemonServer::activateEphemeralKeyModeInternal(const int64_t             
     VerifyOrExit(!otBorderAgentIsEphemeralKeyActive(GetOtInstance()), error = OT_ERROR_BUSY,
                  message = "ephemeral key mode is already activated");
 
-    otbrLogInfo("Activating ephemeral key mode with %lldms lifetime.", lifetimeMillis);
+    otbrLogInfo("Activating ephemeral key mode with %lldms lifetime.", aLifetimeMillis);
 
     SuccessOrExit(error = mBorderAgent.CreateEphemeralKey(passcode), message = "Failed to create ephemeral key");
     SuccessOrExit(error   = otBorderAgentSetEphemeralKey(GetOtInstance(), passcode.c_str(),
-                                                         static_cast<uint32_t>(lifetimeMillis), 0 /* aUdpPort */),
+                                                         static_cast<uint32_t>(aLifetimeMillis), 0 /* aUdpPort */),
                   message = "Failed to set ephemeral key");
 
 exit:
@@ -777,7 +734,7 @@ exit:
             mEphemeralKeyExpiryMillis   = std::chrono::duration_cast<std::chrono::milliseconds>(
                                             std::chrono::steady_clock::now().time_since_epoch())
                                             .count() +
-                                        lifetimeMillis;
+                                        aLifetimeMillis;
             aReceiver->onSuccess();
         }
         else
@@ -811,15 +768,15 @@ exit:
     PropagateResult(error, message, aReceiver);
 }
 
-Status OtDaemonServer::registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t listenerId)
+Status OtDaemonServer::registerStateCallback(const std::shared_ptr<IOtDaemonCallback> &aCallback, int64_t aListenerId)
 {
-    mTaskRunner.Post([aCallback, listenerId, this]() { registerStateCallbackInternal(aCallback, listenerId); });
+    mTaskRunner.Post([aCallback, aListenerId, this]() { registerStateCallbackInternal(aCallback, aListenerId); });
 
     return Status::ok();
 }
 
 void OtDaemonServer::registerStateCallbackInternal(const std::shared_ptr<IOtDaemonCallback> &aCallback,
-                                                   int64_t                                   listenerId)
+                                                   int64_t                                   aListenerId)
 {
     VerifyOrExit(GetOtInstance() != nullptr, otbrLogWarning("OT is not initialized"));
 
@@ -832,7 +789,7 @@ void OtDaemonServer::registerStateCallbackInternal(const std::shared_ptr<IOtDaem
     // To ensure that a client app can get the latest correct state immediately when registering a
     // state callback, here needs to invoke the callback
     RefreshOtDaemonState(/* aFlags */ 0xffffffff);
-    NotifyStateChanged(listenerId);
+    NotifyStateChanged(aListenerId);
     mCallback->onBackboneRouterStateChanged(GetBackboneRouterState());
 
 exit:
@@ -1258,18 +1215,7 @@ void OtDaemonServer::runOtCtlCommandInternal(const std::string                  
                                              const bool                                aIsInteractive,
                                              const std::shared_ptr<IOtOutputReceiver> &aReceiver)
 {
-    otSysCliInitUsingDaemon(GetOtInstance());
-
-    if (!aCommand.empty())
-    {
-        std::string command = aCommand;
-
-        mIsOtCtlInteractiveMode = aIsInteractive;
-        mOtCtlOutputReceiver    = aReceiver;
-
-        otCliInit(GetOtInstance(), OtDaemonServer::OtCtlCommandCallback, this);
-        otCliInputLine(command.data());
-    }
+    mAndroidHost->RunOtCtlCommand(aCommand, aIsInteractive, aReceiver);
 }
 
 Status OtDaemonServer::setInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
@@ -1281,60 +1227,9 @@ Status OtDaemonServer::setInfraLinkDnsServers(const std::vector<std::string>    
     return Status::ok();
 }
 
-static int OutputCallback(void *aContext, const char *aFormat, va_list aArguments)
-{
-    std::string output;
-
-    android::base::StringAppendV(&output, aFormat, aArguments);
-
-    int length = output.length();
-
-    VerifyOrExit(android::base::WriteStringToFd(output, *(static_cast<int *>(aContext))), length = 0);
-
-exit:
-    return length;
-}
-
-inline void DumpCliCommand(std::string aCommand, int aFd)
-{
-    android::base::WriteStringToFd(aCommand + '\n', aFd);
-    otCliInputLine(aCommand.data());
-}
-
 binder_status_t OtDaemonServer::dump(int aFd, const char **aArgs, uint32_t aNumArgs)
 {
-    OT_UNUSED_VARIABLE(aArgs);
-    OT_UNUSED_VARIABLE(aNumArgs);
-
-    otCliInit(GetOtInstance(), OutputCallback, &aFd);
-
-    DumpCliCommand("state", aFd);
-    DumpCliCommand("srp server state", aFd);
-    DumpCliCommand("srp server service", aFd);
-    DumpCliCommand("srp server host", aFd);
-    DumpCliCommand("dataset activetimestamp", aFd);
-    DumpCliCommand("dataset channel", aFd);
-    DumpCliCommand("dataset channelmask", aFd);
-    DumpCliCommand("dataset extpanid", aFd);
-    DumpCliCommand("dataset meshlocalprefix", aFd);
-    DumpCliCommand("dataset networkname", aFd);
-    DumpCliCommand("dataset panid", aFd);
-    DumpCliCommand("dataset securitypolicy", aFd);
-    DumpCliCommand("leaderdata", aFd);
-    DumpCliCommand("eidcache", aFd);
-    DumpCliCommand("counters mac", aFd);
-    DumpCliCommand("counters mle", aFd);
-    DumpCliCommand("counters ip", aFd);
-    DumpCliCommand("router table", aFd);
-    DumpCliCommand("neighbor table", aFd);
-    DumpCliCommand("ipaddr -v", aFd);
-    DumpCliCommand("netdata show", aFd);
-
-    fsync(aFd);
-
-    otSysCliInitUsingDaemon(GetOtInstance());
-
-    return STATUS_OK;
+    return mAndroidHost->Dump(aFd, aArgs, aNumArgs);
 }
 
 void OtDaemonServer::PushTelemetryIfConditionMatch()

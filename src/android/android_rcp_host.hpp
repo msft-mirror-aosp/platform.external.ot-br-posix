@@ -55,7 +55,11 @@ public:
                                                          const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void                         SetInfraLinkDnsServers(const std::vector<std::string>           &aDnsServers,
                                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
-    void                         SetTrelEnabled(bool aEnabled);
+    void                         SetTrelEnabled(bool aEnabled) override;
+    void                         RunOtCtlCommand(const std::string                        &aCommand,
+                                                 const bool                                aIsInteractive,
+                                                 const std::shared_ptr<IOtOutputReceiver> &aReceiver) override;
+    binder_status_t              Dump(int aFd, const char **aArgs, uint32_t aNumArgs) override;
 
     void                   NotifyNat64PrefixDiscoveryDone(void);
     static AndroidRcpHost *Get(void) { return sAndroidRcpHost; }
@@ -64,6 +68,9 @@ private:
     otInstance *GetOtInstance(void);
 
     static otLinkModeConfig GetLinkModeConfig(bool aBeRouter);
+    void                    SetBorderRouterEnabled(bool aEnabled);
+    static int              OtCtlCommandCallback(void *aBinderServer, const char *aFormat, va_list aArguments);
+    int                     OtCtlCommandCallback(const char *aFormat, va_list aArguments);
 
     static AndroidRcpHost *sAndroidRcpHost;
 
@@ -72,6 +79,10 @@ private:
     InfraLinkState        mInfraLinkState;
     int                   mInfraIcmp6Socket;
     bool                  mTrelEnabled;
+
+    bool                               mIsOtCtlInteractiveMode;
+    bool                               mIsOtCtlOutputComplete;
+    std::shared_ptr<IOtOutputReceiver> mOtCtlOutputReceiver;
 };
 
 } // namespace Android
