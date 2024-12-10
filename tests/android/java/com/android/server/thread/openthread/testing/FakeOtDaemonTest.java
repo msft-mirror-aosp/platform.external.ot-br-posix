@@ -297,6 +297,7 @@ public final class FakeOtDaemonTest {
     public void setConfiguration_validConfig_onSuccessIsInvoked() throws Exception {
         IOtStatusReceiver receiver = mock(IOtStatusReceiver.class);
         mConfig = new OtDaemonConfiguration.Builder().setNat64Enabled(true).build();
+
         mFakeOtDaemon.setConfiguration(mConfig, receiver);
         mTestLooper.dispatchAll();
 
@@ -305,13 +306,10 @@ public final class FakeOtDaemonTest {
     }
 
     @Test
-    public void setConfiguration_supportedConfig_onErrorIsInvoked() throws Exception {
+    public void setConfiguration_notSupportedConfig_onErrorIsInvoked() throws Exception {
         IOtStatusReceiver receiver = mock(IOtStatusReceiver.class);
-        mConfig =
-                new OtDaemonConfiguration.Builder()
-                        .setNat64Enabled(true)
-                        .setDhcpv6PdEnabled(true)
-                        .build();
+        mConfig = new OtDaemonConfiguration.Builder().setDhcpv6PdEnabled(true).build();
+
         mFakeOtDaemon.setConfiguration(mConfig, receiver);
         mTestLooper.dispatchAll();
 
@@ -322,6 +320,7 @@ public final class FakeOtDaemonTest {
     @Test
     public void setNat64Cidr_onSuccessIsInvoked() throws Exception {
         IOtStatusReceiver receiver = mock(IOtStatusReceiver.class);
+
         mFakeOtDaemon.setNat64Cidr(TEST_NAT64_CIDR, receiver);
         mTestLooper.dispatchAll();
 
