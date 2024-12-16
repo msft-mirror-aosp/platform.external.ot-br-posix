@@ -154,18 +154,20 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
 
     @Override
     public void initialize(
-            ParcelFileDescriptor tunFd,
             boolean enabled,
             OtDaemonConfiguration config,
+            ParcelFileDescriptor tunFd,
             INsdPublisher nsdPublisher,
             MeshcopTxtAttributes overriddenMeshcopTxts,
-            IOtDaemonCallback callback,
             String countryCode,
-            boolean trelEnabled)
+            boolean trelEnabled,
+            IOtDaemonCallback callback)
             throws RemoteException {
         mIsInitialized = true;
-        mTunFd = tunFd;
+
         mState.threadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
+        setConfiguration(config, null /* receiver */);
+        mTunFd = tunFd;
         mNsdPublisher = nsdPublisher;
         mCountryCode = countryCode;
         mTrelEnabled = trelEnabled;
@@ -178,8 +180,6 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
                 List.copyOf(overriddenMeshcopTxts.nonStandardTxtEntries);
 
         registerStateCallback(callback, PROACTIVE_LISTENER_ID);
-
-        setConfiguration(config, null /* receiver */);
     }
 
     /** Returns {@code true} if {@link initialize} has been called to initialize this object. */
