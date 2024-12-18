@@ -27,9 +27,12 @@
  */
 #include "android/otdaemon_telemetry.hpp"
 
+#include <openthread/border_agent.h>
+#include <openthread/nat64.h>
 #include <openthread/openthread-system.h>
 #include <openthread/thread.h>
 #include <openthread/thread_ftd.h>
+#include <openthread/trel.h>
 #include <openthread/platform/radio.h>
 
 #if OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
@@ -49,6 +52,7 @@ namespace Android {
 using android::os::statsd::threadnetwork::ThreadnetworkDeviceInfoReported;
 using android::os::statsd::threadnetwork::ThreadnetworkTelemetryDataReported;
 using android::os::statsd::threadnetwork::ThreadnetworkTopoEntryRepeated;
+using TelemetryData = android::os::statsd::threadnetwork::ThreadnetworkTelemetryDataReported;
 
 static uint32_t TelemetryNodeTypeFromRoleAndLinkMode(const otDeviceRole &aRole, const otLinkModeConfig &aLinkModeCfg)
 {
@@ -145,6 +149,124 @@ void CopyMdnsResponseCounters(const MdnsResponseCounters                        
     to->set_invalid_state_count(from.mInvalidState);
 }
 
+TelemetryData::Nat64State Nat64StateFromOtNat64State(otNat64State aNat64State)
+{
+    TelemetryData::Nat64State nat64State;
+
+    switch (aNat64State)
+    {
+    case OT_NAT64_STATE_DISABLED:
+        nat64State = TelemetryData::NAT64_STATE_DISABLED;
+        break;
+    case OT_NAT64_STATE_NOT_RUNNING:
+        nat64State = TelemetryData::NAT64_STATE_NOT_RUNNING;
+        break;
+    case OT_NAT64_STATE_IDLE:
+        nat64State = TelemetryData::NAT64_STATE_IDLE;
+        break;
+    case OT_NAT64_STATE_ACTIVE:
+        nat64State = TelemetryData::NAT64_STATE_ACTIVE;
+        break;
+    default:
+        nat64State = TelemetryData::NAT64_STATE_UNSPECIFIED;
+    }
+
+    return nat64State;
+}
+
+void RetrieveNat64State(otInstance *aInstance, TelemetryData::WpanBorderRouter *aWpanBorderRouter)
+{
+    auto nat64State = aWpanBorderRouter->mutable_nat64_state();
+
+    nat64State->set_prefix_manager_state(Nat64StateFromOtNat64State(otNat64GetPrefixManagerState(aInstance)));
+    nat64State->set_translator_state(Nat64StateFromOtNat64State(otNat64GetTranslatorState(aInstance)));
+}
+
+void RetrieveNat64Counters(otInstance *aInstance, TelemetryData::BorderRoutingCounters *aBorderRoutingCounters)
+{
+    {
+        auto nat64IcmpCounters = aBorderRoutingCounters->mutable_nat64_protocol_counters()->mutable_icmp();
+        auto nat64UdpCounters  = aBorderRoutingCounters->mutable_nat64_protocol_counters()->mutable_udp();
+        auto nat64TcpCounters  = aBorderRoutingCounters->mutable_nat64_protocol_counters()->mutable_tcp();
+        otNat64ProtocolCounters otCounters;
+
+        otNat64GetCounters(aInstance, &otCounters);
+        nat64IcmpCounters->set_ipv4_to_ipv6_packets(otCounters.mIcmp.m4To6Packets);
+        nat64IcmpCounters->set_ipv4_to_ipv6_bytes(otCounters.mIcmp.m4To6Bytes);
+        nat64IcmpCounters->set_ipv6_to_ipv4_packets(otCounters.mIcmp.m6To4Packets);
+        nat64IcmpCounters->set_ipv6_to_ipv4_bytes(otCounters.mIcmp.m6To4Bytes);
+        nat64UdpCounters->set_ipv4_to_ipv6_packets(otCounters.mUdp.m4To6Packets);
+        nat64UdpCounters->set_ipv4_to_ipv6_bytes(otCounters.mUdp.m4To6Bytes);
+        nat64UdpCounters->set_ipv6_to_ipv4_packets(otCounters.mUdp.m6To4Packets);
+        nat64UdpCounters->set_ipv6_to_ipv4_bytes(otCounters.mUdp.m6To4Bytes);
+        nat64TcpCounters->set_ipv4_to_ipv6_packets(otCounters.mTcp.m4To6Packets);
+        nat64TcpCounters->set_ipv4_to_ipv6_bytes(otCounters.mTcp.m4To6Bytes);
+        nat64TcpCounters->set_ipv6_to_ipv4_packets(otCounters.mTcp.m6To4Packets);
+        nat64TcpCounters->set_ipv6_to_ipv4_bytes(otCounters.mTcp.m6To4Bytes);
+    }
+
+    {
+        auto                 errorCounters = aBorderRoutingCounters->mutable_nat64_error_counters();
+        otNat64ErrorCounters otCounters;
+        otNat64GetErrorCounters(aInstance, &otCounters);
+
+        errorCounters->mutable_unknown()->set_ipv4_to_ipv6_packets(otCounters.mCount4To6[OT_NAT64_DROP_REASON_UNKNOWN]);
+        errorCounters->mutable_unknown()->set_ipv6_to_ipv4_packets(otCounters.mCount6To4[OT_NAT64_DROP_REASON_UNKNOWN]);
+        errorCounters->mutable_illegal_packet()->set_ipv4_to_ipv6_packets(
+            otCounters.mCount4To6[OT_NAT64_DROP_REASON_ILLEGAL_PACKET]);
+        errorCounters->mutable_illegal_packet()->set_ipv6_to_ipv4_packets(
+            otCounters.mCount6To4[OT_NAT64_DROP_REASON_ILLEGAL_PACKET]);
+        errorCounters->mutable_unsupported_protocol()->set_ipv4_to_ipv6_packets(
+            otCounters.mCount4To6[OT_NAT64_DROP_REASON_UNSUPPORTED_PROTO]);
+        errorCounters->mutable_unsupported_protocol()->set_ipv6_to_ipv4_packets(
+            otCounters.mCount6To4[OT_NAT64_DROP_REASON_UNSUPPORTED_PROTO]);
+        errorCounters->mutable_no_mapping()->set_ipv4_to_ipv6_packets(
+            otCounters.mCount4To6[OT_NAT64_DROP_REASON_NO_MAPPING]);
+        errorCounters->mutable_no_mapping()->set_ipv6_to_ipv4_packets(
+            otCounters.mCount6To4[OT_NAT64_DROP_REASON_NO_MAPPING]);
+    }
+}
+
+void RetrieveBorderAgentInfo(otInstance *aInstance, TelemetryData::BorderAgentInfo *aBorderAgentInfo)
+{
+    auto baCounters            = aBorderAgentInfo->mutable_border_agent_counters();
+    auto otBorderAgentCounters = *otBorderAgentGetCounters(aInstance);
+
+    baCounters->set_epskc_activations(otBorderAgentCounters.mEpskcActivations);
+    baCounters->set_epskc_deactivation_clears(otBorderAgentCounters.mEpskcDeactivationClears);
+    baCounters->set_epskc_deactivation_timeouts(otBorderAgentCounters.mEpskcDeactivationTimeouts);
+    baCounters->set_epskc_deactivation_max_attempts(otBorderAgentCounters.mEpskcDeactivationMaxAttempts);
+    baCounters->set_epskc_deactivation_disconnects(otBorderAgentCounters.mEpskcDeactivationDisconnects);
+    baCounters->set_epskc_invalid_ba_state_errors(otBorderAgentCounters.mEpskcInvalidBaStateErrors);
+    baCounters->set_epskc_invalid_args_errors(otBorderAgentCounters.mEpskcInvalidArgsErrors);
+    baCounters->set_epskc_start_secure_session_errors(otBorderAgentCounters.mEpskcStartSecureSessionErrors);
+    baCounters->set_epskc_secure_session_successes(otBorderAgentCounters.mEpskcSecureSessionSuccesses);
+    baCounters->set_epskc_secure_session_failures(otBorderAgentCounters.mEpskcSecureSessionFailures);
+    baCounters->set_epskc_commissioner_petitions(otBorderAgentCounters.mEpskcCommissionerPetitions);
+
+    baCounters->set_pskc_secure_session_successes(otBorderAgentCounters.mPskcSecureSessionSuccesses);
+    baCounters->set_pskc_secure_session_failures(otBorderAgentCounters.mPskcSecureSessionFailures);
+    baCounters->set_pskc_commissioner_petitions(otBorderAgentCounters.mPskcCommissionerPetitions);
+
+    baCounters->set_mgmt_active_get_reqs(otBorderAgentCounters.mMgmtActiveGets);
+    baCounters->set_mgmt_pending_get_reqs(otBorderAgentCounters.mMgmtPendingGets);
+}
+
+void RetrieveTrelInfo(otInstance *aInstance, TelemetryData::TrelInfo *aTrelInfo)
+{
+    auto otTrelCounters = otTrelGetCounters(aInstance);
+    auto trelCounters   = aTrelInfo->mutable_counters();
+
+    aTrelInfo->set_is_trel_enabled(otTrelIsEnabled(aInstance));
+    aTrelInfo->set_num_trel_peers(otTrelGetNumberOfPeers(aInstance));
+
+    trelCounters->set_trel_tx_packets(otTrelCounters->mTxPackets);
+    trelCounters->set_trel_tx_bytes(otTrelCounters->mTxBytes);
+    trelCounters->set_trel_tx_packets_failed(otTrelCounters->mTxFailure);
+    trelCounters->set_trel_rx_packets(otTrelCounters->mRxPackets);
+    trelCounters->set_trel_rx_bytes(otTrelCounters->mRxBytes);
+}
+
 otError RetrieveTelemetryAtom(otInstance                         *otInstance,
                               Mdns::Publisher                    *aPublisher,
                               ThreadnetworkTelemetryDataReported &telemetryDataReported,
@@ -154,6 +276,12 @@ otError RetrieveTelemetryAtom(otInstance                         *otInstance,
     otError                     error = OT_ERROR_NONE;
     std::vector<otNeighborInfo> neighborTable;
 
+    // Begin of ThreadnetworkDeviceInfoReported section.
+    deviceInfoReported.set_thread_version(otThreadGetVersion());
+    deviceInfoReported.set_ot_rcp_version(otGetRadioVersionString(otInstance));
+    // TODO: populate ot_host_version, thread_daemon_version.
+    // End of ThreadnetworkDeviceInfoReported section.
+
     // Begin of WpanStats section.
     auto wpanStats = telemetryDataReported.mutable_wpan_stats();
 
@@ -162,6 +290,16 @@ otError RetrieveTelemetryAtom(otInstance                         *otInstance,
         otLinkModeConfig otCfg = otThreadGetLinkMode(otInstance);
 
         wpanStats->set_node_type(TelemetryNodeTypeFromRoleAndLinkMode(role, otCfg));
+    }
+
+    // Disable telemetry retrieval when Thread stack is disabled. DeviceInfo section above is
+    // always uploaded to understand the device count.
+    if (wpanStats->node_type() == ThreadnetworkTelemetryDataReported::NODE_TYPE_DISABLED)
+    {
+        otbrLogDebug("Skip telemetry retrieval since Thread stack is disabled.");
+        // Return error that only partial telemetries are populated.
+        // TODO: refine the error code name to mean: partial data are populated.
+        return OT_ERROR_FAILED;
     }
 
     wpanStats->set_channel(otLinkGetChannel(otInstance));
@@ -394,32 +532,37 @@ otError RetrieveTelemetryAtom(otInstance                         *otInstance,
     {
         // Begin of WpanBorderRouter section.
         auto wpanBorderRouter = telemetryDataReported.mutable_wpan_border_router();
-        // Begin of BorderRoutingCounters section.
-        auto                           borderRoutingCouters    = wpanBorderRouter->mutable_border_routing_counters();
-        const otBorderRoutingCounters *otBorderRoutingCounters = otIp6GetBorderRoutingCounters(otInstance);
 
-        borderRoutingCouters->mutable_inbound_unicast()->set_packet_count(
-            otBorderRoutingCounters->mInboundUnicast.mPackets);
-        borderRoutingCouters->mutable_inbound_unicast()->set_byte_count(
-            otBorderRoutingCounters->mInboundUnicast.mBytes);
-        borderRoutingCouters->mutable_inbound_multicast()->set_packet_count(
-            otBorderRoutingCounters->mInboundMulticast.mPackets);
-        borderRoutingCouters->mutable_inbound_multicast()->set_byte_count(
-            otBorderRoutingCounters->mInboundMulticast.mBytes);
-        borderRoutingCouters->mutable_outbound_unicast()->set_packet_count(
-            otBorderRoutingCounters->mOutboundUnicast.mPackets);
-        borderRoutingCouters->mutable_outbound_unicast()->set_byte_count(
-            otBorderRoutingCounters->mOutboundUnicast.mBytes);
-        borderRoutingCouters->mutable_outbound_multicast()->set_packet_count(
-            otBorderRoutingCounters->mOutboundMulticast.mPackets);
-        borderRoutingCouters->mutable_outbound_multicast()->set_byte_count(
-            otBorderRoutingCounters->mOutboundMulticast.mBytes);
-        borderRoutingCouters->set_ra_rx(otBorderRoutingCounters->mRaRx);
-        borderRoutingCouters->set_ra_tx_success(otBorderRoutingCounters->mRaTxSuccess);
-        borderRoutingCouters->set_ra_tx_failure(otBorderRoutingCounters->mRaTxFailure);
-        borderRoutingCouters->set_rs_rx(otBorderRoutingCounters->mRsRx);
-        borderRoutingCouters->set_rs_tx_success(otBorderRoutingCounters->mRsTxSuccess);
-        borderRoutingCouters->set_rs_tx_failure(otBorderRoutingCounters->mRsTxFailure);
+        // Begin of BorderRoutingCounters section.
+        {
+            auto                           borderRoutingCouters = wpanBorderRouter->mutable_border_routing_counters();
+            const otBorderRoutingCounters *otBorderRoutingCounters = otIp6GetBorderRoutingCounters(otInstance);
+
+            borderRoutingCouters->mutable_inbound_unicast()->set_packet_count(
+                otBorderRoutingCounters->mInboundUnicast.mPackets);
+            borderRoutingCouters->mutable_inbound_unicast()->set_byte_count(
+                otBorderRoutingCounters->mInboundUnicast.mBytes);
+            borderRoutingCouters->mutable_inbound_multicast()->set_packet_count(
+                otBorderRoutingCounters->mInboundMulticast.mPackets);
+            borderRoutingCouters->mutable_inbound_multicast()->set_byte_count(
+                otBorderRoutingCounters->mInboundMulticast.mBytes);
+            borderRoutingCouters->mutable_outbound_unicast()->set_packet_count(
+                otBorderRoutingCounters->mOutboundUnicast.mPackets);
+            borderRoutingCouters->mutable_outbound_unicast()->set_byte_count(
+                otBorderRoutingCounters->mOutboundUnicast.mBytes);
+            borderRoutingCouters->mutable_outbound_multicast()->set_packet_count(
+                otBorderRoutingCounters->mOutboundMulticast.mPackets);
+            borderRoutingCouters->mutable_outbound_multicast()->set_byte_count(
+                otBorderRoutingCounters->mOutboundMulticast.mBytes);
+            borderRoutingCouters->set_ra_rx(otBorderRoutingCounters->mRaRx);
+            borderRoutingCouters->set_ra_tx_success(otBorderRoutingCounters->mRaTxSuccess);
+            borderRoutingCouters->set_ra_tx_failure(otBorderRoutingCounters->mRaTxFailure);
+            borderRoutingCouters->set_rs_rx(otBorderRoutingCounters->mRsRx);
+            borderRoutingCouters->set_rs_tx_success(otBorderRoutingCounters->mRsTxSuccess);
+            borderRoutingCouters->set_rs_tx_failure(otBorderRoutingCounters->mRsTxFailure);
+
+            RetrieveNat64Counters(otInstance, borderRoutingCouters);
+        }
 
         // End of BorderRoutingCounters section.
 
@@ -506,8 +649,17 @@ otError RetrieveTelemetryAtom(otInstance                         *otInstance,
             dnsServerResponseCounters->set_name_error_count(otDnssdCounters.mNameErrorResponse);
             dnsServerResponseCounters->set_not_implemented_count(otDnssdCounters.mNotImplementedResponse);
             dnsServerResponseCounters->set_other_count(otDnssdCounters.mOtherResponse);
+            // The counters of queries, responses, failures handled by upstream DNS server.
+            dnsServerResponseCounters->set_upstream_dns_queries(otDnssdCounters.mUpstreamDnsCounters.mQueries);
+            dnsServerResponseCounters->set_upstream_dns_responses(otDnssdCounters.mUpstreamDnsCounters.mResponses);
+            dnsServerResponseCounters->set_upstream_dns_failures(otDnssdCounters.mUpstreamDnsCounters.mFailures);
 
             dnsServer->set_resolved_by_local_srp_count(otDnssdCounters.mResolvedBySrp);
+
+            dnsServer->set_upstream_dns_query_state(
+                otDnssdUpstreamQueryIsEnabled(otInstance)
+                    ? ThreadnetworkTelemetryDataReported::UPSTREAMDNS_QUERY_STATE_ENABLED
+                    : ThreadnetworkTelemetryDataReported::UPSTREAMDNS_QUERY_STATE_DISABLED);
         }
         // End of DnsServerInfo section.
 #endif // OTBR_ENABLE_DNSSD_DISCOVERY_PROXY
@@ -600,11 +752,11 @@ otError RetrieveTelemetryAtom(otInstance                         *otInstance,
             }
         }
         // End of CoexMetrics section.
-    }
 
-    deviceInfoReported.set_thread_version(otThreadGetVersion());
-    deviceInfoReported.set_ot_rcp_version(otGetRadioVersionString(otInstance));
-    // TODO: populate ot_host_version, thread_daemon_version.
+        RetrieveNat64State(otInstance, wpanBorderRouter);
+        RetrieveBorderAgentInfo(otInstance, wpanBorderRouter->mutable_border_agent_info());
+        RetrieveTrelInfo(otInstance, wpanBorderRouter->mutable_trel_info());
+    }
 
     return error;
 }

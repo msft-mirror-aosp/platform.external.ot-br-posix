@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2021, The OpenThread Authors.
+ *    Copyright (c) 2017, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,42 +26,40 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "common/callback.hpp"
+#include <vector>
 
-#include <CppUTest/TestHarness.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
-TEST_GROUP(IsNull){};
+using ::testing::ElementsAreArray;
 
-TEST(IsNull, NullptrIsNull)
+#include "utils/pskc.hpp"
+
+TEST(Pskc, Test123456_0001020304050607_OpenThread)
 {
-    otbr::OnceCallback<void(void)> noop = nullptr;
+    otbr::Psk::Pskc pskc;
 
-    CHECK_TRUE(noop.IsNull());
+    uint8_t extpanid[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+    uint8_t expected[] = {
+        0xb7, 0x83, 0x81, 0x27, 0x89, 0x91, 0x1e, 0xb4, 0xea, 0x76, 0x59, 0x6c, 0x9c, 0xed, 0x2a, 0x69,
+    };
+
+    const uint8_t *actual = pskc.ComputePskc(extpanid, "OpenThread", "123456");
+    EXPECT_THAT(std::vector<uint8_t>(actual, actual + OT_PSKC_LENGTH), ElementsAreArray(expected));
 }
 
-TEST(IsNull, NonNullptrIsNotNull)
+TEST(Pskc, Test_TruncatedNetworkNamePskc_OpenThread)
 {
-    otbr::OnceCallback<void(void)> noop = [](void) {};
+    otbr::Psk::Pskc pskc;
+    uint8_t         extpanid[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+    uint8_t         expected[OT_PSKC_LENGTH];
 
-    CHECK_FALSE(noop.IsNull());
-}
+    // First run with shorter network name (max)
+    const uint8_t *actual = pskc.ComputePskc(extpanid, "OpenThread123456", "123456");
+    memcpy(expected, actual, OT_PSKC_LENGTH);
 
-TEST(IsNull, IsNullAfterInvoking)
-{
-    otbr::OnceCallback<int(int)> square = [](int x) { return x * x; };
+    // Second run with longer network name that gets truncated
+    actual = pskc.ComputePskc(extpanid, "OpenThread123456NetworkNameThatExceedsBuffer", "123456");
 
-    std::move(square)(5);
-
-    CHECK_TRUE(square.IsNull());
-}
-
-TEST_GROUP(VerifyInvocation){};
-
-TEST(VerifyInvocation, CallbackResultIsExpected)
-{
-    otbr::OnceCallback<int(int)> square = [](int x) { return x * x; };
-
-    int ret = std::move(square)(5);
-
-    CHECK_EQUAL(ret, 25);
+    EXPECT_THAT(std::vector<uint8_t>(actual, actual + OT_PSKC_LENGTH), ElementsAreArray(expected));
 }

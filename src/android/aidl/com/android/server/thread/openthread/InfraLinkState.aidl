@@ -1,5 +1,5 @@
 /*
- *    Copyright (c) 2017, The OpenThread Authors.
+ *    Copyright (c) 2024, The OpenThread Authors.
  *    All rights reserved.
  *
  *    Redistribution and use in source and binary forms, with or without
@@ -26,9 +26,13 @@
  *    POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <CppUTest/CommandLineTestRunner.h>
+package com.android.server.thread.openthread;
 
-int main(int argc, const char *argv[])
-{
-    return RUN_ALL_TESTS(argc, argv);
+/** The ot-daemon platform state. */
+@JavaOnlyImmutable
+@JavaDerive(equals=true, toString=true)
+parcelable InfraLinkState {
+    @nullable String interfaceName; // The name of infra network interface.
+    @nullable String nat64Prefix; // The NAT64 prefix.
+    List<String> dnsServers; // The DNS server IP addresses represented by strings.
 }

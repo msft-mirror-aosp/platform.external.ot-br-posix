@@ -28,6 +28,9 @@
 
 package com.android.server.thread.openthread.testing;
 
+import static com.android.server.thread.openthread.IOtDaemon.ErrorCode.OT_ERROR_NOT_IMPLEMENTED;
+import static com.android.server.thread.openthread.IOtDaemon.OT_EPHEMERAL_KEY_DISABLED;
+import static com.android.server.thread.openthread.IOtDaemon.OT_EPHEMERAL_KEY_ENABLED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_DISABLED;
 import static com.android.server.thread.openthread.IOtDaemon.OT_STATE_ENABLED;
 
@@ -45,6 +48,7 @@ import com.android.server.thread.openthread.IChannelMasksReceiver;
 import com.android.server.thread.openthread.INsdPublisher;
 import com.android.server.thread.openthread.IOtDaemon;
 import com.android.server.thread.openthread.IOtDaemonCallback;
+import com.android.server.thread.openthread.IOtOutputReceiver;
 import com.android.server.thread.openthread.IOtStatusReceiver;
 import com.android.server.thread.openthread.MeshcopTxtAttributes;
 import com.android.server.thread.openthread.OtDaemonConfiguration;
@@ -76,6 +80,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     private int mChannelMasksReceiverOtError = OT_ERROR_NONE;
     private int mSupportedChannelMask = 0x07FFF800; // from channel 11 to 26
     private int mPreferredChannelMask = 0;
+    private boolean mTrelEnabled = false;
 
     @Nullable private DeathRecipient mDeathRecipient;
     @Nullable private ParcelFileDescriptor mTunFd;
@@ -84,7 +89,10 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable private IOtDaemonCallback mCallback;
     @Nullable private Long mCallbackListenerId;
     @Nullable private RemoteException mJoinException;
+    @Nullable private RemoteException mSetNat64CidrException;
+    @Nullable private RemoteException mRunOtCtlCommandException;
     @Nullable private String mCountryCode;
+    @Nullable private OtDaemonConfiguration mConfiguration;
 
     public FakeOtDaemon(Handler handler) {
         mHandler = handler;
@@ -99,9 +107,13 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         mState.activeDatasetTlvs = new byte[0];
         mState.pendingDatasetTlvs = new byte[0];
         mState.threadEnabled = OT_STATE_DISABLED;
+        mState.ephemeralKeyState = OT_EPHEMERAL_KEY_DISABLED;
+        mState.ephemeralKeyPasscode = "";
+        mState.ephemeralKeyLifetimeMillis = 0;
         mBbrState = new BackboneRouterState();
         mBbrState.multicastForwardingEnabled = false;
         mBbrState.listeningAddresses = new ArrayList<>();
+        mConfiguration = null;
 
         mTunFd = null;
         mNsdPublisher = null;
@@ -142,18 +154,23 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
 
     @Override
     public void initialize(
-            ParcelFileDescriptor tunFd,
             boolean enabled,
+            OtDaemonConfiguration config,
+            ParcelFileDescriptor tunFd,
             INsdPublisher nsdPublisher,
             MeshcopTxtAttributes overriddenMeshcopTxts,
-            IOtDaemonCallback callback,
-            String countryCode)
+            String countryCode,
+            boolean trelEnabled,
+            IOtDaemonCallback callback)
             throws RemoteException {
         mIsInitialized = true;
-        mTunFd = tunFd;
+
         mState.threadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
+        setConfiguration(config, null /* receiver */);
+        mTunFd = tunFd;
         mNsdPublisher = nsdPublisher;
         mCountryCode = countryCode;
+        mTrelEnabled = trelEnabled;
 
         mOverriddenMeshcopTxts = new MeshcopTxtAttributes();
         mOverriddenMeshcopTxts.vendorOui = overriddenMeshcopTxts.vendorOui.clone();
@@ -293,6 +310,36 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
                 JOIN_DELAY.toMillis());
     }
 
+    @Override
+    public void activateEphemeralKeyMode(long lifetimeMillis, IOtStatusReceiver receiver) {
+        mHandler.post(
+                () -> {
+                    mState.ephemeralKeyState = OT_EPHEMERAL_KEY_ENABLED;
+                    mState.ephemeralKeyPasscode = "123456789";
+                    mState.ephemeralKeyLifetimeMillis = lifetimeMillis;
+                    try {
+                        receiver.onSuccess();
+                    } catch (RemoteException e) {
+                        throw new AssertionError(e);
+                    }
+                });
+    }
+
+    @Override
+    public void deactivateEphemeralKeyMode(IOtStatusReceiver receiver) {
+        mHandler.post(
+                () -> {
+                    mState.ephemeralKeyState = OT_EPHEMERAL_KEY_DISABLED;
+                    mState.ephemeralKeyPasscode = "";
+                    mState.ephemeralKeyLifetimeMillis = 0;
+                    try {
+                        receiver.onSuccess();
+                    } catch (RemoteException e) {
+                        throw new AssertionError(e);
+                    }
+                });
+    }
+
     private OtDaemonState makeCopy(OtDaemonState state) {
         OtDaemonState copyState = new OtDaemonState();
         copyState.isInterfaceUp = state.isInterfaceUp;
@@ -338,18 +385,59 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     }
 
     @Override
-    public void leave(IOtStatusReceiver receiver) throws RemoteException {
+    public void leave(boolean eraseDataset, IOtStatusReceiver receiver) throws RemoteException {
         throw new UnsupportedOperationException("FakeOtDaemon#leave is not implemented!");
     }
 
     @Override
-    public void setConfiguration(
-            OtDaemonConfiguration config,
-            ParcelFileDescriptor infraIcmp6Socket,
-            IOtStatusReceiver receiver)
+    public void setConfiguration(OtDaemonConfiguration config, IOtStatusReceiver receiver)
+            throws RemoteException {
+        mConfiguration = config;
+        // TODO: b/343814054 - Support enabling/disabling DHCPv6-PD.
+        if (mConfiguration.dhcpv6PdEnabled) {
+            receiver.onError(OT_ERROR_NOT_IMPLEMENTED, "DHCPv6-PD is not supported");
+            return;
+        }
+        if (receiver != null) {
+            receiver.onSuccess();
+        }
+    }
+
+    @Override
+    public void setInfraLinkInterfaceName(
+            String interfaceName, ParcelFileDescriptor fd, IOtStatusReceiver receiver)
             throws RemoteException {
         throw new UnsupportedOperationException(
-                "FakeOtDaemon#setConfiguration is not implemented!");
+                "FakeOtDaemon#setInfraLinkInterfaceName is not implemented!");
+    }
+
+    @Override
+    public void setInfraLinkNat64Prefix(String nat64Prefix, IOtStatusReceiver receiver)
+            throws RemoteException {
+        throw new UnsupportedOperationException(
+                "FakeOtDaemon#setInfraLinkNat64Prefix is not implemented!");
+    }
+
+    /** Sets the {@link RemoteException} which will be thrown from {@link #setNat64Cidr}. */
+    public void setSetNat64CidrException(RemoteException exception) {
+        mSetNat64CidrException = exception;
+    }
+
+    @Override
+    public void setNat64Cidr(String nat64Cidr, IOtStatusReceiver receiver) throws RemoteException {
+        if (mSetNat64CidrException != null) {
+            throw mSetNat64CidrException;
+        }
+        if (receiver != null) {
+            receiver.onSuccess();
+        }
+    }
+
+    @Override
+    public void setInfraLinkDnsServers(List<String> dnsServers, IOtStatusReceiver receiver)
+            throws RemoteException {
+        throw new UnsupportedOperationException(
+                "FakeOtDaemon#setInfraLinkDnsServers is not implemented!");
     }
 
     @Override
@@ -396,5 +484,40 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
             throws RemoteException {
         throw new UnsupportedOperationException(
                 "FakeOtDaemon#setChannelTargetPowers is not implemented!");
+    }
+
+    @Override
+    public void runOtCtlCommand(String command, boolean isInteractive, IOtOutputReceiver receiver)
+            throws RemoteException {
+        if (mRunOtCtlCommandException != null) {
+            throw mRunOtCtlCommandException;
+        }
+
+        mHandler.post(
+                () -> {
+                    try {
+                        List<String> outputLines = new ArrayList<>();
+                        outputLines.add("leader");
+                        outputLines.add("\r\n");
+                        outputLines.add("Done");
+                        outputLines.add("\r\n");
+
+                        for (String line : outputLines) {
+                            receiver.onOutput(line);
+                        }
+                        receiver.onComplete();
+                    } catch (RemoteException e) {
+                        throw new AssertionError(e);
+                    }
+                });
+    }
+
+    /** Sets the {@link RemoteException} which will be thrown from {@link #runOtCtlCommand}. */
+    public void setRunOtCtlCommandException(RemoteException exception) {
+        mRunOtCtlCommandException = exception;
+    }
+
+    public boolean isTrelEnabled() {
+        return mTrelEnabled;
     }
 }
