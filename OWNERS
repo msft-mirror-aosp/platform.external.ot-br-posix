@@ -1,3 +1,4 @@
 # Bug component: 1203089
 
 include platform/packages/modules/ThreadNetwork:/OWNERS
+include platform/system/core:/janitors/OWNERS #{LAST_RESORT_SUGGESTION}
