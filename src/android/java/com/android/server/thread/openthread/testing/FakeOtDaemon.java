@@ -80,6 +80,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     private int mChannelMasksReceiverOtError = OT_ERROR_NONE;
     private int mSupportedChannelMask = 0x07FFF800; // from channel 11 to 26
     private int mPreferredChannelMask = 0;
+    private boolean mTrelEnabled = false;
 
     @Nullable private DeathRecipient mDeathRecipient;
     @Nullable private ParcelFileDescriptor mTunFd;
@@ -153,19 +154,23 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
 
     @Override
     public void initialize(
-            ParcelFileDescriptor tunFd,
             boolean enabled,
             OtDaemonConfiguration config,
+            ParcelFileDescriptor tunFd,
             INsdPublisher nsdPublisher,
             MeshcopTxtAttributes overriddenMeshcopTxts,
-            IOtDaemonCallback callback,
-            String countryCode)
+            String countryCode,
+            boolean trelEnabled,
+            IOtDaemonCallback callback)
             throws RemoteException {
         mIsInitialized = true;
-        mTunFd = tunFd;
+
         mState.threadEnabled = enabled ? OT_STATE_ENABLED : OT_STATE_DISABLED;
+        setConfiguration(config, null /* receiver */);
+        mTunFd = tunFd;
         mNsdPublisher = nsdPublisher;
         mCountryCode = countryCode;
+        mTrelEnabled = trelEnabled;
 
         mOverriddenMeshcopTxts = new MeshcopTxtAttributes();
         mOverriddenMeshcopTxts.vendorOui = overriddenMeshcopTxts.vendorOui.clone();
@@ -175,8 +180,6 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
                 List.copyOf(overriddenMeshcopTxts.nonStandardTxtEntries);
 
         registerStateCallback(callback, PROACTIVE_LISTENER_ID);
-
-        setConfiguration(config, null /* receiver */);
     }
 
     /** Returns {@code true} if {@link initialize} has been called to initialize this object. */
@@ -512,5 +515,9 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     /** Sets the {@link RemoteException} which will be thrown from {@link #runOtCtlCommand}. */
     public void setRunOtCtlCommandException(RemoteException exception) {
         mRunOtCtlCommandException = exception;
+    }
+
+    public boolean isTrelEnabled() {
+        return mTrelEnabled;
     }
 }
