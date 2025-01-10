@@ -403,6 +403,12 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         }
     }
 
+    /** Returns the configuration set by {@link #initialize} or {@link #setConfiguration}. */
+    @Nullable
+    public OtDaemonConfiguration getConfiguration() {
+        return mConfiguration;
+    }
+
     @Override
     public void setInfraLinkInterfaceName(
             String interfaceName, ParcelFileDescriptor fd, IOtStatusReceiver receiver)

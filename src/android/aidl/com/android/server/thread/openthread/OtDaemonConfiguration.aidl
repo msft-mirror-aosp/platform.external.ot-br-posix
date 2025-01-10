@@ -28,7 +28,10 @@
 
 package com.android.server.thread.openthread;
 
-/** An internal mirror of {@link android.net.thread.ThreadConfiguration}. */
+/**
+ * A mirror of {@link android.net.thread.ThreadConfiguration} with optionally more internal
+ * parameters.
+ */
 @JavaOnlyImmutable
 @JavaDerive(equals=true, toString=true)
 parcelable OtDaemonConfiguration {
@@ -37,4 +40,7 @@ parcelable OtDaemonConfiguration {
 
     boolean nat64Enabled;
     boolean dhcpv6PdEnabled;
+
+    /** {@code true} if SRP sevrer should wait for border routing getting ready. */
+    boolean srpServerWaitForBorderRoutingEnabled = true;
 }
