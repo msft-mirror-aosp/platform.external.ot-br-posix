@@ -641,7 +641,9 @@ void OtDaemonServer::EnableThread(const std::shared_ptr<IOtStatusReceiver> &aRec
 {
     otOperationalDatasetTlvs datasetTlvs;
 
-    if (otDatasetGetActiveTlvs(GetOtInstance(), &datasetTlvs) != OT_ERROR_NOT_FOUND && datasetTlvs.mLength > 0 &&
+    if ((mAndroidHost->GetConfiguration().borderRouterEnabled &&
+         mAndroidHost->GetConfiguration().borderRouterAutoJoinEnabled) &&
+        (otDatasetGetActiveTlvs(GetOtInstance(), &datasetTlvs) != OT_ERROR_NOT_FOUND && datasetTlvs.mLength > 0) &&
         !isAttached())
     {
         (void)otIp6SetEnabled(GetOtInstance(), true);
