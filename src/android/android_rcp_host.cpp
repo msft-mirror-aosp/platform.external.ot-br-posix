@@ -86,18 +86,18 @@ void AndroidRcpHost::SetConfiguration(const OtDaemonConfiguration              &
 
     linkModeConfig = GetLinkModeConfig(aConfiguration.borderRouterEnabled);
     SuccessOrExit(error = otThreadSetLinkMode(GetOtInstance(), linkModeConfig), message = "Failed to set link mode");
-    if (aConfiguration.borderRouterEnabled)
+
+    if (aConfiguration.borderRouterEnabled && aConfiguration.srpServerWaitForBorderRoutingEnabled)
     {
         otSrpServerSetAutoEnableMode(GetOtInstance(), true);
-        SetBorderRouterEnabled(true);
     }
     else
     {
         // This automatically disables the auto-enable mode which is designed for border router
         otSrpServerSetEnabled(GetOtInstance(), true);
-
-        SetBorderRouterEnabled(false);
     }
+
+    SetBorderRouterEnabled(aConfiguration.borderRouterEnabled);
 
     mConfiguration = aConfiguration;
 
