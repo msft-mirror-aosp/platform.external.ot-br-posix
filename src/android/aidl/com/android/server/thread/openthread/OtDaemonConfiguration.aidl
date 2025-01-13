@@ -43,4 +43,10 @@ parcelable OtDaemonConfiguration {
 
     /** {@code true} if SRP sevrer should wait for border routing getting ready. */
     boolean srpServerWaitForBorderRoutingEnabled = true;
+
+    /**
+     * {@code true} if this border router automatically joins the previously connected network
+     * after device reboots.
+     */
+    boolean borderRouterAutoJoinEnabled = true;
 }
