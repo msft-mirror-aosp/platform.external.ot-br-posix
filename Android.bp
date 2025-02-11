@@ -254,6 +254,7 @@ cc_fuzz {
             "wgtdkp@google.com",
         ],
     },
+    apex_available: ["//apex_available:platform"],
 }
 
 cc_library_static {
