@@ -27,6 +27,9 @@
 #
 
 add_library(otbr-posix
+    dnssd.cpp
+    infra_if.hpp
+    infra_if.cpp
     netif.cpp
     netif_linux.cpp
     netif_unix.cpp

@@ -37,10 +37,13 @@
 #include <functional>
 #include <memory>
 
+#include <vector>
+
 #include <openthread/dataset.h>
 #include <openthread/error.h>
 #include <openthread/link.h>
 #include <openthread/thread.h>
+#include <openthread/platform/dnssd.h>
 
 #include "lib/spinel/spinel.h"
 #include "lib/spinel/spinel_buffer.hpp"
@@ -49,10 +52,13 @@
 
 #include "common/task_runner.hpp"
 #include "common/types.hpp"
-#include "ncp/async_task.hpp"
+#include "host/async_task.hpp"
+#include "host/posix/infra_if.hpp"
+#include "host/posix/netif.hpp"
+#include "mdns/mdns.hpp"
 
 namespace otbr {
-namespace Ncp {
+namespace Host {
 
 /**
  * This interface is an observer to subscribe the network properties from NCP.
@@ -83,12 +89,14 @@ public:
 /**
  * The class provides methods for controlling the Thread stack on the network co-processor (NCP).
  */
-class NcpSpinel
+class NcpSpinel : public Netif::Dependencies, public InfraIf::Dependencies
 {
 public:
     using Ip6AddressTableCallback          = std::function<void(const std::vector<Ip6AddressInfo> &)>;
     using Ip6MulticastAddressTableCallback = std::function<void(const std::vector<Ip6Address> &)>;
     using NetifStateChangedCallback        = std::function<void(bool)>;
+    using Ip6ReceiveCallback               = std::function<void(const uint8_t *, uint16_t)>;
+    using InfraIfSendIcmp6NdCallback = std::function<void(uint32_t, const otIp6Address &, const uint8_t *, uint16_t)>;
 
     /**
      * Constructor.
@@ -173,6 +181,13 @@ public:
     }
 
     /**
+     * This method sets the callback to receive IP6 datagrams.
+     *
+     * @param[in] aCallback  The callback to receive IP6 datagrams.
+     */
+    void Ip6SetReceiveCallback(const Ip6ReceiveCallback &aCallback) { mIp6ReceiveCallback = aCallback; }
+
+    /**
      * This methods sends an IP6 datagram through the NCP.
      *
      * @param[in] aData      A pointer to the beginning of the IP6 datagram.
@@ -181,7 +196,7 @@ public:
      * @retval OTBR_ERROR_NONE  The datagram is sent to NCP successfully.
      * @retval OTBR_ERROR_BUSY  NcpSpinel is busy with other requests.
      */
-    otbrError Ip6Send(const uint8_t *aData, uint16_t aLength);
+    otbrError Ip6Send(const uint8_t *aData, uint16_t aLength) override;
 
     /**
      * This method enableds/disables the Thread network on the NCP.
@@ -224,10 +239,55 @@ public:
         mNetifStateChangedCallback = aCallback;
     }
 
+    /**
+     * This method sets the function to send an Icmp6 ND message on the infrastructure link.
+     *
+     * @param[in] aCallback  The callback to send an Icmp6 ND message on the infrastructure link.
+     */
+    void InfraIfSetIcmp6NdSendCallback(const InfraIfSendIcmp6NdCallback &aCallback)
+    {
+        mInfraIfIcmp6NdCallback = aCallback;
+    }
+
+#if OTBR_ENABLE_SRP_ADVERTISING_PROXY
+    /**
+     * This method enables/disables the SRP Server on NCP.
+     *
+     * @param[in] aEnable  A boolean to enable/disable the SRP server.
+     */
+    void SrpServerSetEnabled(bool aEnabled);
+
+    /**
+     * This method enables/disables the auto-enable mode on SRP Server on NCP.
+     *
+     * @param[in] aEnable  A boolean to enable/disable the SRP server.
+     */
+    void SrpServerSetAutoEnableMode(bool aEnabled);
+
+    /**
+     * This method sets the dnssd state on NCP.
+     *
+     * @param[in] aState  The dnssd state.
+     */
+    void DnssdSetState(Mdns::Publisher::State aState);
+
+    /**
+     * This method sets the mDNS Publisher object.
+     *
+     * @param[in] aPublisher  A pointer to the mDNS Publisher object.
+     */
+    void SetMdnsPublisher(otbr::Mdns::Publisher *aPublisher)
+    {
+        mPublisher = aPublisher;
+    }
+#endif // OTBR_ENABLE_SRP_ADVERTISING_PROXY
+
 private:
     using FailureHandler = std::function<void(otError)>;
 
-    static constexpr uint8_t kMaxTids = 16;
+    static constexpr uint8_t  kMaxTids             = 16;
+    static constexpr uint16_t kCallbackDataMaxSize = sizeof(uint64_t); // Maximum size of a function pointer.
+    static constexpr uint16_t kMaxSubTypes         = 8;                // Maximum number of sub types in a MDNS service.
 
     template <typename Function, typename... Args> static void SafeInvoke(Function &aFunc, Args &&...aArgs)
     {
@@ -261,22 +321,55 @@ private:
     void      HandleNotification(const uint8_t *aFrame, uint16_t aLength);
     void      HandleResponse(spinel_tid_t aTid, const uint8_t *aFrame, uint16_t aLength);
     void      HandleValueIs(spinel_prop_key_t aKey, const uint8_t *aBuffer, uint16_t aLength);
+    void      HandleValueInserted(spinel_prop_key_t aKey, const uint8_t *aBuffer, uint16_t aLength);
+    void      HandleValueRemoved(spinel_prop_key_t aKey, const uint8_t *aBuffer, uint16_t aLength);
     otbrError HandleResponseForPropSet(spinel_tid_t      aTid,
                                        spinel_prop_key_t aKey,
                                        const uint8_t    *aData,
                                        uint16_t          aLength);
+    otbrError HandleResponseForPropInsert(spinel_tid_t      aTid,
+                                          spinel_command_t  aCmd,
+                                          spinel_prop_key_t aKey,
+                                          const uint8_t    *aData,
+                                          uint16_t          aLength);
+    otbrError HandleResponseForPropRemove(spinel_tid_t      aTid,
+                                          spinel_command_t  aCmd,
+                                          spinel_prop_key_t aKey,
+                                          const uint8_t    *aData,
+                                          uint16_t          aLength);
+
+    otbrError Ip6MulAddrUpdateSubscription(const otIp6Address &aAddress, bool aIsAdded) override;
 
     spinel_tid_t GetNextTid(void);
     void         FreeTidTableItem(spinel_tid_t aTid);
 
-    using EncodingFunc = std::function<otError(void)>;
+    using EncodingFunc = std::function<otError(ot::Spinel::Encoder &aEncoder)>;
+    otError SendCommand(spinel_command_t aCmd, spinel_prop_key_t aKey, const EncodingFunc &aEncodingFunc);
     otError SetProperty(spinel_prop_key_t aKey, const EncodingFunc &aEncodingFunc);
+    otError InsertProperty(spinel_prop_key_t aKey, const EncodingFunc &aEncodingFunc);
+    otError RemoveProperty(spinel_prop_key_t aKey, const EncodingFunc &aEncodingFunc);
+
     otError SendEncodedFrame(void);
 
     otError ParseIp6AddressTable(const uint8_t *aBuf, uint16_t aLength, std::vector<Ip6AddressInfo> &aAddressTable);
-    otError ParseIp6MulticastAddresses(const uint8_t *aBuf, uint8_t aLen, std::vector<Ip6Address> &aAddressList);
-    otError ParseIp6StreamNet(const uint8_t *aBuf, uint8_t aLen, const uint8_t *&aData, uint16_t &aDataLen);
-    otError ParseOperationalDatasetTlvs(const uint8_t *aBuf, uint8_t aLen, otOperationalDatasetTlvs &aDatasetTlvs);
+    otError ParseIp6MulticastAddresses(const uint8_t *aBuf, uint16_t aLen, std::vector<Ip6Address> &aAddressList);
+    otError ParseIp6StreamNet(const uint8_t *aBuf, uint16_t aLen, const uint8_t *&aData, uint16_t &aDataLen);
+    otError ParseOperationalDatasetTlvs(const uint8_t *aBuf, uint16_t aLen, otOperationalDatasetTlvs &aDatasetTlvs);
+    otError ParseInfraIfIcmp6Nd(const uint8_t       *aBuf,
+                                uint8_t              aLen,
+                                uint32_t            &aInfraIfIndex,
+                                const otIp6Address *&aAddr,
+                                const uint8_t      *&aData,
+                                uint16_t            &aDataLen);
+    otError SendDnssdResult(otPlatDnssdRequestId aRequestId, const std::vector<uint8_t> &aCallbackData, otError aError);
+
+    otbrError SetInfraIf(uint32_t                       aInfraIfIndex,
+                         bool                           aIsRunning,
+                         const std::vector<Ip6Address> &aIp6Addresses) override;
+    otbrError HandleIcmp6Nd(uint32_t          aInfraIfIndex,
+                            const Ip6Address &aIp6Address,
+                            const uint8_t    *aData,
+                            uint16_t          aDataLen) override;
 
     ot::Spinel::SpinelDriver *mSpinelDriver;
     uint16_t                  mCmdTidsInUse; ///< Used transaction ids.
@@ -295,6 +388,9 @@ private:
     TaskRunner mTaskRunner;
 
     PropsObserver *mPropsObserver;
+#if OTBR_ENABLE_SRP_ADVERTISING_PROXY
+    otbr::Mdns::Publisher *mPublisher;
+#endif
 
     AsyncTaskPtr mDatasetSetActiveTask;
     AsyncTaskPtr mDatasetMgmtSetPendingTask;
@@ -305,10 +401,12 @@ private:
 
     Ip6AddressTableCallback          mIp6AddressTableCallback;
     Ip6MulticastAddressTableCallback mIp6MulticastAddressTableCallback;
+    Ip6ReceiveCallback               mIp6ReceiveCallback;
     NetifStateChangedCallback        mNetifStateChangedCallback;
+    InfraIfSendIcmp6NdCallback       mInfraIfIcmp6NdCallback;
 };
 
-} // namespace Ncp
+} // namespace Host
 } // namespace otbr
 
 #endif // OTBR_AGENT_NCP_SPINEL_HPP_

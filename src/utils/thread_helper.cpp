@@ -69,7 +69,7 @@
 #include "common/code_utils.hpp"
 #include "common/logging.hpp"
 #include "common/tlv.hpp"
-#include "ncp/rcp_host.hpp"
+#include "host/rcp_host.hpp"
 
 namespace otbr {
 namespace agent {
@@ -228,7 +228,7 @@ void CopyMdnsResponseCounters(const MdnsResponseCounters &from, threadnetwork::T
 #endif // OTBR_ENABLE_TELEMETRY_DATA_API
 } // namespace
 
-ThreadHelper::ThreadHelper(otInstance *aInstance, otbr::Ncp::RcpHost *aHost)
+ThreadHelper::ThreadHelper(otInstance *aInstance, otbr::Host::RcpHost *aHost)
     : mInstance(aInstance)
     , mHost(aHost)
 {
@@ -427,7 +427,7 @@ void ThreadHelper::ActiveScanHandler(otActiveScanResult *aResult)
     }
 }
 
-#if OTBR_ENABLE_DHCP6_PD
+#if OTBR_ENABLE_DHCP6_PD && OTBR_ENABLE_BORDER_ROUTING
 void ThreadHelper::SetDhcp6PdStateCallback(Dhcp6PdStateCallback aCallback)
 {
     mDhcp6PdCallback = std::move(aCallback);
@@ -448,7 +448,7 @@ void ThreadHelper::BorderRoutingDhcp6PdCallback(otBorderRoutingDhcp6PdState aSta
         mDhcp6PdCallback(aState);
     }
 }
-#endif // OTBR_ENABLE_DHCP6_PD
+#endif // OTBR_ENABLE_DHCP6_PD && OTBR_ENABLE_BORDER_ROUTING
 
 void ThreadHelper::EnergyScanCallback(otEnergyScanResult *aResult, void *aThreadHelper)
 {
