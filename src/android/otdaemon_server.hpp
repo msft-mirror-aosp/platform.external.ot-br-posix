@@ -43,7 +43,7 @@
 #include "android/mdns_publisher.hpp"
 #include "common/mainloop.hpp"
 #include "common/time.hpp"
-#include "ncp/rcp_host.hpp"
+#include "host/rcp_host.hpp"
 
 namespace otbr {
 namespace Android {
@@ -51,7 +51,7 @@ namespace Android {
 class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendor::VendorServer
 {
 public:
-    OtDaemonServer(otbr::Ncp::RcpHost    &aRcpHost,
+    OtDaemonServer(otbr::Host::RcpHost   &aRcpHost,
                    otbr::Mdns::Publisher &aMdnsPublisher,
                    otbr::BorderAgent     &aBorderAgent);
     virtual ~OtDaemonServer(void) = default;
@@ -183,7 +183,7 @@ private:
 
     static OtDaemonServer *sOtDaemonServer;
 
-    otbr::Ncp::RcpHost                &mHost;
+    otbr::Host::RcpHost               &mHost;
     std::unique_ptr<AndroidThreadHost> mAndroidHost;
     MdnsPublisher                     &mMdnsPublisher;
     otbr::BorderAgent                 &mBorderAgent;
