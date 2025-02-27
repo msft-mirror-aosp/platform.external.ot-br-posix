@@ -29,13 +29,16 @@
 #include <fuzzbinder/libbinder_ndk_driver.h>
 #include <fuzzer/FuzzedDataProvider.h>
 
-#include "otdaemon_server.hpp"
+#include "android/mdns_publisher.hpp"
+#include "android/otdaemon_server.hpp"
+#include "host/rcp_host.hpp"
+#include "mdns/mdns.hpp"
 
 using android::fuzzService;
 using otbr::Android::MdnsPublisher;
 using otbr::Android::OtDaemonServer;
+using otbr::Host::RcpHost;
 using otbr::Mdns::Publisher;
-using otbr::Ncp::RcpHost;
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
@@ -47,7 +50,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     auto              mdnsPublisher = static_cast<MdnsPublisher *>(Publisher::Create([](Publisher::State) {}));
     otbr::BorderAgent borderAgent{rcpHost, *mdnsPublisher};
 
-    auto service = ndk::SharedRefBase::make<OtDaemonServer>(rcpHost, *mdnsPublisher, borderAgent);
+    auto service = ndk::SharedRefBase::make<OtDaemonServer>(rcpHost, *mdnsPublisher, borderAgent, [](){});
     fuzzService(service->asBinder().get(), FuzzedDataProvider(data, size));
     return 0;
 }
