@@ -68,7 +68,11 @@ std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplicatio
 {
     return ndk::SharedRefBase::make<Android::OtDaemonServer>(
         static_cast<otbr::Host::RcpHost &>(aApplication.GetHost()),
-        static_cast<otbr::Android::MdnsPublisher &>(aApplication.GetPublisher()), aApplication.GetBorderAgent());
+        static_cast<otbr::Android::MdnsPublisher &>(aApplication.GetPublisher()), aApplication.GetBorderAgent(),
+        [&aApplication]() {
+            aApplication.Deinit();
+            aApplication.Init();
+        });
 }
 
 } // namespace vendor
@@ -101,11 +105,13 @@ OtDaemonServer *OtDaemonServer::sOtDaemonServer = nullptr;
 
 OtDaemonServer::OtDaemonServer(otbr::Host::RcpHost   &aRcpHost,
                                otbr::Mdns::Publisher &aMdnsPublisher,
-                               otbr::BorderAgent     &aBorderAgent)
+                               otbr::BorderAgent     &aBorderAgent,
+                               ResetThreadHandler     aResetThreadHandler)
     : mHost(aRcpHost)
     , mAndroidHost(CreateAndroidHost())
     , mMdnsPublisher(static_cast<MdnsPublisher &>(aMdnsPublisher))
     , mBorderAgent(aBorderAgent)
+    , mResetThreadHandler(aResetThreadHandler)
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
@@ -592,6 +598,7 @@ void OtDaemonServer::initializeInternal(const bool                              
 
     mBorderAgent.SetEnabled(aEnabled && aConfiguration.borderRouterEnabled);
     mAndroidHost->SetTrelEnabled(aTrelEnabled);
+    mTrelEnabled = aTrelEnabled;
 
     if (aEnabled)
     {
@@ -984,9 +991,11 @@ void OtDaemonServer::FinishLeave(bool aEraseDataset, const std::shared_ptr<IOtSt
     if (aEraseDataset)
     {
         (void)otInstanceErasePersistentInfo(GetOtInstance());
+        mResetThreadHandler();
+        initializeInternal(mState.threadEnabled, mAndroidHost->GetConfiguration(), mINsdPublisher, mMeshcopTxts,
+                           mCountryCode, mTrelEnabled, mCallback);
     }
 
-    // TODO: b/323301831 - Re-init the Application class.
     if (aReceiver != nullptr)
     {
         aReceiver->onSuccess();
@@ -1116,7 +1125,12 @@ Status OtDaemonServer::setCountryCode(const std::string                        &
 void OtDaemonServer::setCountryCodeInternal(const std::string                        &aCountryCode,
                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    mHost.SetCountryCode(aCountryCode, [aReceiver](otError aError, const std::string &aMessage) {
+    mHost.SetCountryCode(aCountryCode, [aReceiver, aCountryCode, this](otError aError, const std::string &aMessage) {
+        if (aError == OT_ERROR_NONE)
+        {
+            mCountryCode = aCountryCode;
+        }
+
         PropagateResult(aError, aMessage, aReceiver);
     });
 }
