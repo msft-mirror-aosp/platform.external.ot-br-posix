@@ -37,12 +37,11 @@
 
 #include <openthread/openthread-system.h>
 
+#include "host/async_task.hpp"
 #include "lib/spinel/spinel_driver.hpp"
 
-#include "ncp/async_task.hpp"
-
 namespace otbr {
-namespace Ncp {
+namespace Host {
 
 // =============================== NcpNetworkProperties ===============================
 
@@ -94,14 +93,16 @@ void NcpNetworkProperties::GetDatasetPendingTlvs(otOperationalDatasetTlvs &aData
 
 // ===================================== NcpHost ======================================
 
-NcpHost::NcpHost(const char *aInterfaceName, bool aDryRun)
+NcpHost::NcpHost(const char *aInterfaceName, const char *aBackboneInterfaceName, bool aDryRun)
     : mSpinelDriver(*static_cast<ot::Spinel::SpinelDriver *>(otSysGetSpinelDriver()))
-    , mNetif()
+    , mNetif(mNcpSpinel)
+    , mInfraIf(mNcpSpinel)
 {
     memset(&mConfig, 0, sizeof(mConfig));
-    mConfig.mInterfaceName = aInterfaceName;
-    mConfig.mDryRun        = aDryRun;
-    mConfig.mSpeedUpFactor = 1;
+    mConfig.mInterfaceName         = aInterfaceName;
+    mConfig.mBackboneInterfaceName = aBackboneInterfaceName;
+    mConfig.mDryRun                = aDryRun;
+    mConfig.mSpeedUpFactor         = 1;
 }
 
 const char *NcpHost::GetCoprocessorVersion(void)
@@ -113,14 +114,35 @@ void NcpHost::Init(void)
 {
     otSysInit(&mConfig);
     mNcpSpinel.Init(mSpinelDriver, *this);
-    mNetif.Init(mConfig.mInterfaceName,
-                [this](const uint8_t *aData, uint16_t aLength) { return mNcpSpinel.Ip6Send(aData, aLength); });
+    mNetif.Init(mConfig.mInterfaceName);
+    mInfraIf.Init();
 
     mNcpSpinel.Ip6SetAddressCallback(
         [this](const std::vector<Ip6AddressInfo> &aAddrInfos) { mNetif.UpdateIp6UnicastAddresses(aAddrInfos); });
     mNcpSpinel.Ip6SetAddressMulticastCallback(
         [this](const std::vector<Ip6Address> &aAddrs) { mNetif.UpdateIp6MulticastAddresses(aAddrs); });
     mNcpSpinel.NetifSetStateChangedCallback([this](bool aState) { mNetif.SetNetifState(aState); });
+    mNcpSpinel.Ip6SetReceiveCallback(
+        [this](const uint8_t *aData, uint16_t aLength) { mNetif.Ip6Receive(aData, aLength); });
+    mNcpSpinel.InfraIfSetIcmp6NdSendCallback(
+        [this](uint32_t aInfraIfIndex, const otIp6Address &aAddr, const uint8_t *aData, uint16_t aDataLen) {
+            OTBR_UNUSED_VARIABLE(mInfraIf.SendIcmp6Nd(aInfraIfIndex, aAddr, aData, aDataLen));
+        });
+
+    if (mConfig.mBackboneInterfaceName != nullptr && strlen(mConfig.mBackboneInterfaceName) > 0)
+    {
+        mInfraIf.SetInfraIf(mConfig.mBackboneInterfaceName);
+    }
+
+#if OTBR_ENABLE_SRP_ADVERTISING_PROXY
+#if OTBR_ENABLE_SRP_SERVER_AUTO_ENABLE_MODE
+    // Let SRP server use auto-enable mode. The auto-enable mode delegates the control of SRP server to the Border
+    // Routing Manager. SRP server automatically starts when bi-directional connectivity is ready.
+    mNcpSpinel.SrpServerSetAutoEnableMode(/* aEnabled */ true);
+#else
+    mNcpSpinel.SrpServerSetEnabled(/* aEnabled */ true);
+#endif
+#endif
 }
 
 void NcpHost::Deinit(void)
@@ -144,14 +166,23 @@ void NcpHost::Join(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs, const A
     task->Run();
 }
 
-void NcpHost::Leave(const AsyncResultReceiver &aReceiver)
+void NcpHost::Leave(bool aEraseDataset, const AsyncResultReceiver &aReceiver)
 {
     AsyncTaskPtr task;
     auto errorHandler = [aReceiver](otError aError, const std::string &aErrorInfo) { aReceiver(aError, aErrorInfo); };
 
     task = std::make_shared<AsyncTask>(errorHandler);
     task->First([this](AsyncTaskPtr aNext) { mNcpSpinel.ThreadDetachGracefully(std::move(aNext)); })
-        ->Then([this](AsyncTaskPtr aNext) { mNcpSpinel.ThreadErasePersistentInfo(std::move(aNext)); });
+        ->Then([this, aEraseDataset](AsyncTaskPtr aNext) {
+            if (aEraseDataset)
+            {
+                mNcpSpinel.ThreadErasePersistentInfo(std::move(aNext));
+            }
+            else
+            {
+                aNext->SetResult(OT_ERROR_NONE, "");
+            }
+        });
     task->Run();
 }
 
@@ -199,6 +230,7 @@ void NcpHost::GetChannelMasks(const ChannelMasksReceiver &aReceiver, const Async
     mTaskRunner.Post([aErrReceiver](void) { aErrReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
 }
 
+#if OTBR_ENABLE_POWER_CALIBRATION
 void NcpHost::SetChannelMaxPowers(const std::vector<ChannelMaxPower> &aChannelMaxPowers,
                                   const AsyncResultReceiver          &aReceiver)
 {
@@ -207,6 +239,7 @@ void NcpHost::SetChannelMaxPowers(const std::vector<ChannelMaxPower> &aChannelMa
     // TODO: Implement SetChannelMaxPowers under NCP mode.
     mTaskRunner.Post([aReceiver](void) { aReceiver(OT_ERROR_NOT_IMPLEMENTED, "Not implemented!"); });
 }
+#endif
 
 void NcpHost::AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback)
 {
@@ -214,9 +247,17 @@ void NcpHost::AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback
     OT_UNUSED_VARIABLE(aCallback);
 }
 
+void NcpHost::AddThreadEnabledStateChangedCallback(ThreadEnabledStateCallback aCallback)
+{
+    // TODO: Implement AddThreadEnabledStateChangedCallback under NCP mode.
+    OT_UNUSED_VARIABLE(aCallback);
+}
+
 void NcpHost::Process(const MainloopContext &aMainloop)
 {
     mSpinelDriver.Process(&aMainloop);
+
+    mNetif.Process(&aMainloop);
 }
 
 void NcpHost::Update(MainloopContext &aMainloop)
@@ -228,7 +269,21 @@ void NcpHost::Update(MainloopContext &aMainloop)
         aMainloop.mTimeout.tv_sec  = 0;
         aMainloop.mTimeout.tv_usec = 0;
     }
+
+    mNetif.UpdateFdSet(&aMainloop);
 }
 
-} // namespace Ncp
+#if OTBR_ENABLE_SRP_ADVERTISING_PROXY
+void NcpHost::SetMdnsPublisher(Mdns::Publisher *aPublisher)
+{
+    mNcpSpinel.SetMdnsPublisher(aPublisher);
+}
+
+void NcpHost::HandleMdnsState(Mdns::Publisher::State aState)
+{
+    mNcpSpinel.DnssdSetState(aState);
+}
+#endif
+
+} // namespace Host
 } // namespace otbr
