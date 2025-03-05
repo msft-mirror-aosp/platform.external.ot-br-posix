@@ -161,6 +161,9 @@ cc_defaults {
         "-DOTBR_ENABLE_DNS_UPSTREAM_QUERY=0",
         "-DOTBR_ENABLE_DHCP6_PD=0",
         "-DOTBR_ENABLE_EPSKC=0",
+
+        // Used for the SetChannelMaxPowers API.
+        "-DOTBR_ENABLE_POWER_CALIBRATION=1",
     ],
 
     srcs: [
@@ -180,13 +183,15 @@ cc_defaults {
         "src/common/task_runner.cpp",
         "src/common/types.cpp",
         "src/mdns/mdns.cpp",
-        "src/ncp/async_task.cpp",
-        "src/ncp/ncp_host.cpp",
-        "src/ncp/ncp_spinel.cpp",
-        "src/ncp/posix/netif_linux.cpp",
-        "src/ncp/posix/netif.cpp",
-        "src/ncp/rcp_host.cpp",
-        "src/ncp/thread_host.cpp",
+        "src/host/async_task.cpp",
+        "src/host/ncp_host.cpp",
+        "src/host/ncp_spinel.cpp",
+        "src/host/posix/dnssd.cpp",
+        "src/host/posix/infra_if.cpp",
+        "src/host/posix/netif_linux.cpp",
+        "src/host/posix/netif.cpp",
+        "src/host/rcp_host.cpp",
+        "src/host/thread_host.cpp",
         "src/sdp_proxy/advertising_proxy.cpp",
         "src/sdp_proxy/discovery_proxy.cpp",
         "src/trel_dnssd/trel_dnssd.cpp",

@@ -43,7 +43,7 @@
 #include "android/mdns_publisher.hpp"
 #include "common/mainloop.hpp"
 #include "common/time.hpp"
-#include "ncp/rcp_host.hpp"
+#include "host/rcp_host.hpp"
 
 namespace otbr {
 namespace Android {
@@ -51,9 +51,12 @@ namespace Android {
 class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendor::VendorServer
 {
 public:
-    OtDaemonServer(otbr::Ncp::RcpHost    &aRcpHost,
+    using ResetThreadHandler = std::function<void()>;
+
+    OtDaemonServer(otbr::Host::RcpHost   &aRcpHost,
                    otbr::Mdns::Publisher &aMdnsPublisher,
-                   otbr::BorderAgent     &aBorderAgent);
+                   otbr::BorderAgent     &aBorderAgent,
+                   ResetThreadHandler     aResetThreadHandler);
     virtual ~OtDaemonServer(void) = default;
 
     // Disallow copy and assign.
@@ -183,16 +186,21 @@ private:
 
     static OtDaemonServer *sOtDaemonServer;
 
-    otbr::Ncp::RcpHost                &mHost;
+    otbr::Host::RcpHost               &mHost;
     std::unique_ptr<AndroidThreadHost> mAndroidHost;
     MdnsPublisher                     &mMdnsPublisher;
     otbr::BorderAgent                 &mBorderAgent;
+    ResetThreadHandler                 mResetThreadHandler;
+
     std::shared_ptr<INsdPublisher>     mINsdPublisher;
     MeshcopTxtAttributes               mMeshcopTxts;
+    std::string                        mCountryCode;
+    bool                               mTrelEnabled = false;
+    std::shared_ptr<IOtDaemonCallback> mCallback;
+
     TaskRunner                         mTaskRunner;
     ScopedFileDescriptor               mTunFd;
     OtDaemonState                      mState;
-    std::shared_ptr<IOtDaemonCallback> mCallback;
     BinderDeathRecipient               mClientDeathRecipient;
     std::shared_ptr<IOtStatusReceiver> mJoinReceiver;
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;

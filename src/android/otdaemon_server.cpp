@@ -56,7 +56,7 @@
 #include "android/common_utils.hpp"
 #include "android/otdaemon_telemetry.hpp"
 #include "common/code_utils.hpp"
-#include "ncp/thread_host.hpp"
+#include "host/thread_host.hpp"
 
 #define BYTE_ARR_END(arr) ((arr) + sizeof(arr))
 
@@ -67,8 +67,12 @@ namespace vendor {
 std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplication)
 {
     return ndk::SharedRefBase::make<Android::OtDaemonServer>(
-        static_cast<otbr::Ncp::RcpHost &>(aApplication.GetHost()),
-        static_cast<otbr::Android::MdnsPublisher &>(aApplication.GetPublisher()), aApplication.GetBorderAgent());
+        static_cast<otbr::Host::RcpHost &>(aApplication.GetHost()),
+        static_cast<otbr::Android::MdnsPublisher &>(aApplication.GetPublisher()), aApplication.GetBorderAgent(),
+        [&aApplication]() {
+            aApplication.Deinit();
+            aApplication.Init();
+        });
 }
 
 } // namespace vendor
@@ -99,13 +103,15 @@ static const char *ThreadEnabledStateToString(int enabledState)
 
 OtDaemonServer *OtDaemonServer::sOtDaemonServer = nullptr;
 
-OtDaemonServer::OtDaemonServer(otbr::Ncp::RcpHost    &aRcpHost,
+OtDaemonServer::OtDaemonServer(otbr::Host::RcpHost   &aRcpHost,
                                otbr::Mdns::Publisher &aMdnsPublisher,
-                               otbr::BorderAgent     &aBorderAgent)
+                               otbr::BorderAgent     &aBorderAgent,
+                               ResetThreadHandler     aResetThreadHandler)
     : mHost(aRcpHost)
     , mAndroidHost(CreateAndroidHost())
     , mMdnsPublisher(static_cast<MdnsPublisher &>(aMdnsPublisher))
     , mBorderAgent(aBorderAgent)
+    , mResetThreadHandler(aResetThreadHandler)
 {
     mClientDeathRecipient =
         ::ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(&OtDaemonServer::BinderDeathCallback));
@@ -412,20 +418,19 @@ int OtDaemonServer::GetEphemeralKeyState(void)
 {
     int ephemeralKeyState;
 
-    if (otBorderAgentIsEphemeralKeyActive(GetOtInstance()))
+    switch (otBorderAgentEphemeralKeyGetState(GetOtInstance()))
     {
-        if (otBorderAgentGetState(GetOtInstance()) == OT_BORDER_AGENT_STATE_ACTIVE)
-        {
-            ephemeralKeyState = OT_EPHEMERAL_KEY_IN_USE;
-        }
-        else
-        {
-            ephemeralKeyState = OT_EPHEMERAL_KEY_ENABLED;
-        }
-    }
-    else
-    {
+    case OT_BORDER_AGENT_STATE_STARTED:
+        ephemeralKeyState = OT_EPHEMERAL_KEY_ENABLED;
+        break;
+    case OT_BORDER_AGENT_STATE_CONNECTED:
+    case OT_BORDER_AGENT_STATE_ACCEPTED:
+        ephemeralKeyState = OT_EPHEMERAL_KEY_IN_USE;
+        break;
+    case OT_BORDER_AGENT_STATE_DISABLED:
+    case OT_BORDER_AGENT_STATE_STOPPED:
         ephemeralKeyState = OT_EPHEMERAL_KEY_DISABLED;
+        break;
     }
 
     return ephemeralKeyState;
@@ -521,7 +526,7 @@ std::unique_ptr<AndroidThreadHost> OtDaemonServer::CreateAndroidHost(void)
     switch (mHost.GetCoprocessorType())
     {
     case OT_COPROCESSOR_RCP:
-        host = std::make_unique<AndroidRcpHost>(static_cast<otbr::Ncp::RcpHost &>(mHost));
+        host = std::make_unique<AndroidRcpHost>(static_cast<otbr::Host::RcpHost &>(mHost));
         break;
 
     case OT_COPROCESSOR_NCP:
@@ -593,6 +598,7 @@ void OtDaemonServer::initializeInternal(const bool                              
 
     mBorderAgent.SetEnabled(aEnabled && aConfiguration.borderRouterEnabled);
     mAndroidHost->SetTrelEnabled(aTrelEnabled);
+    mTrelEnabled = aTrelEnabled;
 
     if (aEnabled)
     {
@@ -717,14 +723,16 @@ void OtDaemonServer::activateEphemeralKeyModeInternal(const int64_t             
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
     VerifyOrExit(isAttached(), error = static_cast<int>(IOtDaemon::ErrorCode::OT_ERROR_FAILED_PRECONDITION),
                  message = "Cannot activate ephemeral key mode when this device is not attached to Thread network");
-    VerifyOrExit(!otBorderAgentIsEphemeralKeyActive(GetOtInstance()), error = OT_ERROR_BUSY,
-                 message = "ephemeral key mode is already activated");
+    VerifyOrExit(otBorderAgentEphemeralKeyGetState(GetOtInstance()) != OT_BORDER_AGENT_STATE_DISABLED,
+                 error = OT_ERROR_INVALID_STATE, message = "ephemeral key manager is disabled");
+    VerifyOrExit(otBorderAgentEphemeralKeyGetState(GetOtInstance()) == OT_BORDER_AGENT_STATE_STOPPED,
+                 error = OT_ERROR_BUSY, message = "ephemeral key mode is already activated");
 
     otbrLogInfo("Activating ephemeral key mode with %lldms lifetime.", aLifetimeMillis);
 
     SuccessOrExit(error = mBorderAgent.CreateEphemeralKey(passcode), message = "Failed to create ephemeral key");
-    SuccessOrExit(error   = otBorderAgentSetEphemeralKey(GetOtInstance(), passcode.c_str(),
-                                                         static_cast<uint32_t>(aLifetimeMillis), 0 /* aUdpPort */),
+    SuccessOrExit(error   = otBorderAgentEphemeralKeyStart(GetOtInstance(), passcode.c_str(),
+                                                           static_cast<uint32_t>(aLifetimeMillis), 0 /* aUdpPort */),
                   message = "Failed to set ephemeral key");
 
 exit:
@@ -761,10 +769,11 @@ void OtDaemonServer::deactivateEphemeralKeyModeInternal(const std::shared_ptr<IO
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
     otbrLogInfo("Deactivating ephemeral key mode.");
 
-    VerifyOrExit(otBorderAgentIsEphemeralKeyActive(GetOtInstance()), error = OT_ERROR_NONE);
+    VerifyOrExit(otBorderAgentEphemeralKeyGetState(GetOtInstance()) != OT_BORDER_AGENT_STATE_DISABLED &&
+                     otBorderAgentEphemeralKeyGetState(GetOtInstance()) != OT_BORDER_AGENT_STATE_STOPPED,
+                 error = OT_ERROR_NONE);
 
-    otBorderAgentDisconnect(GetOtInstance());
-    otBorderAgentClearEphemeralKey(GetOtInstance());
+    otBorderAgentEphemeralKeyStop(GetOtInstance());
 
 exit:
     PropagateResult(error, message, aReceiver);
@@ -982,9 +991,11 @@ void OtDaemonServer::FinishLeave(bool aEraseDataset, const std::shared_ptr<IOtSt
     if (aEraseDataset)
     {
         (void)otInstanceErasePersistentInfo(GetOtInstance());
+        mResetThreadHandler();
+        initializeInternal(mState.threadEnabled, mAndroidHost->GetConfiguration(), mINsdPublisher, mMeshcopTxts,
+                           mCountryCode, mTrelEnabled, mCallback);
     }
 
-    // TODO: b/323301831 - Re-init the Application class.
     if (aReceiver != nullptr)
     {
         aReceiver->onSuccess();
@@ -1114,7 +1125,12 @@ Status OtDaemonServer::setCountryCode(const std::string                        &
 void OtDaemonServer::setCountryCodeInternal(const std::string                        &aCountryCode,
                                             const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    mHost.SetCountryCode(aCountryCode, [aReceiver](otError aError, const std::string &aMessage) {
+    mHost.SetCountryCode(aCountryCode, [aReceiver, aCountryCode, this](otError aError, const std::string &aMessage) {
+        if (aError == OT_ERROR_NONE)
+        {
+            mCountryCode = aCountryCode;
+        }
+
         PropagateResult(aError, aMessage, aReceiver);
     });
 }
@@ -1150,13 +1166,13 @@ Status OtDaemonServer::setChannelMaxPowersInternal(const std::vector<ChannelMaxP
                                                    const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
     // Transform aidl ChannelMaxPower to ThreadHost::ChannelMaxPower
-    std::vector<Ncp::ThreadHost::ChannelMaxPower> channelMaxPowers(aChannelMaxPowers.size());
+    std::vector<Host::ThreadHost::ChannelMaxPower> channelMaxPowers(aChannelMaxPowers.size());
     std::transform(aChannelMaxPowers.begin(), aChannelMaxPowers.end(), channelMaxPowers.begin(),
                    [](const ChannelMaxPower &aChannelMaxPower) {
                        // INT_MIN indicates that the corresponding channel is disabled in Thread Android API
                        // `setChannelMaxPowers()` INT16_MAX indicates that the corresponding channel is disabled in
                        // OpenThread API `otPlatRadioSetChannelTargetPower()`.
-                       return Ncp::ThreadHost::ChannelMaxPower(
+                       return Host::ThreadHost::ChannelMaxPower(
                            aChannelMaxPower.channel,
                            aChannelMaxPower.maxPower == INT_MIN
                                ? INT16_MAX
