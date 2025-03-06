@@ -1189,8 +1189,12 @@ Status OtDaemonServer::setChannelMaxPowersInternal(const std::vector<ChannelMaxP
 Status OtDaemonServer::setConfiguration(const OtDaemonConfiguration              &aConfiguration,
                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    mTaskRunner.Post(
-        [aConfiguration, aReceiver, this]() { mAndroidHost->SetConfiguration(aConfiguration, aReceiver); });
+    mTaskRunner.Post([aConfiguration, aReceiver, this]() {
+        if (aConfiguration != mAndroidHost->GetConfiguration())
+        {
+            mAndroidHost->SetConfiguration(aConfiguration, aReceiver);
+        }
+    });
 
     return Status::ok();
 }

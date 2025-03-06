@@ -50,7 +50,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     auto              mdnsPublisher = static_cast<MdnsPublisher *>(Publisher::Create([](Publisher::State) {}));
     otbr::BorderAgent borderAgent{rcpHost, *mdnsPublisher};
 
-    auto service = ndk::SharedRefBase::make<OtDaemonServer>(rcpHost, *mdnsPublisher, borderAgent, [](){});
+    auto service = ndk::SharedRefBase::make<OtDaemonServer>(rcpHost, *mdnsPublisher, borderAgent, []() {});
     fuzzService(service->asBinder().get(), FuzzedDataProvider(data, size));
     return 0;
 }
