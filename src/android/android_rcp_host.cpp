@@ -75,7 +75,6 @@ void AndroidRcpHost::SetConfiguration(const OtDaemonConfiguration              &
     otbrLogInfo("Set configuration: %s", aConfiguration.toString().c_str());
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-    VerifyOrExit(aConfiguration != mConfiguration);
 
     // TODO: b/343814054 - Support enabling/disabling DHCPv6-PD.
     VerifyOrExit(!aConfiguration.dhcpv6PdEnabled, error = OT_ERROR_NOT_IMPLEMENTED,
@@ -89,12 +88,13 @@ void AndroidRcpHost::SetConfiguration(const OtDaemonConfiguration              &
 
     if (aConfiguration.borderRouterEnabled && aConfiguration.srpServerWaitForBorderRoutingEnabled)
     {
+        // This will automatically disable fast-start mode if it was ever enabled
         otSrpServerSetAutoEnableMode(GetOtInstance(), true);
     }
     else
     {
-        // This automatically disables the auto-enable mode which is designed for border router
-        otSrpServerSetEnabled(GetOtInstance(), true);
+        otSrpServerSetAutoEnableMode(GetOtInstance(), false);
+        otSrpServerEnableFastStartMode(GetOtInstance());
     }
 
     SetBorderRouterEnabled(aConfiguration.borderRouterEnabled);
