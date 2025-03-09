@@ -49,7 +49,7 @@
 #include "common/mainloop.hpp"
 #include "common/task_runner.hpp"
 #include "common/types.hpp"
-#include "ncp/thread_host.hpp"
+#include "host/thread_host.hpp"
 #include "utils/thread_helper.hpp"
 
 namespace otbr {
@@ -58,7 +58,7 @@ namespace otbr {
 class FeatureFlagList;
 #endif
 
-namespace Ncp {
+namespace Host {
 
 /**
  * This class implements the NetworkProperties for architectures where OT APIs are directly accessible.
@@ -199,15 +199,18 @@ public:
 
     // Thread Control virtual methods
     void Join(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs, const AsyncResultReceiver &aRecevier) override;
-    void Leave(const AsyncResultReceiver &aRecevier) override;
+    void Leave(bool aEraseDataset, const AsyncResultReceiver &aRecevier) override;
     void ScheduleMigration(const otOperationalDatasetTlvs &aPendingOpDatasetTlvs,
                            const AsyncResultReceiver       aReceiver) override;
     void SetThreadEnabled(bool aEnabled, const AsyncResultReceiver aReceiver) override;
     void SetCountryCode(const std::string &aCountryCode, const AsyncResultReceiver &aReceiver) override;
     void GetChannelMasks(const ChannelMasksReceiver &aReceiver, const AsyncResultReceiver &aErrReceiver) override;
+#if OTBR_ENABLE_POWER_CALIBRATION
     void SetChannelMaxPowers(const std::vector<ChannelMaxPower> &aChannelMaxPowers,
                              const AsyncResultReceiver          &aReceiver) override;
+#endif
     void AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback) override;
+    void AddThreadEnabledStateChangedCallback(ThreadEnabledStateCallback aCallback) override;
 
     CoprocessorType GetCoprocessorType(void) override
     {
@@ -228,6 +231,13 @@ private:
             aReceiver = nullptr;
         }
     }
+    static void SafeInvoke(const AsyncResultReceiver &aReceiver, otError aError, const std::string &aErrorInfo = "")
+    {
+        if (aReceiver)
+        {
+            aReceiver(aError, aErrorInfo);
+        }
+    }
 
     static void HandleStateChanged(otChangedFlags aFlags, void *aContext)
     {
@@ -235,20 +245,11 @@ private:
     }
     void HandleStateChanged(otChangedFlags aFlags);
 
-    static void HandleBackboneRouterDomainPrefixEvent(void                             *aContext,
-                                                      otBackboneRouterDomainPrefixEvent aEvent,
-                                                      const otIp6Prefix                *aDomainPrefix);
-    void        HandleBackboneRouterDomainPrefixEvent(otBackboneRouterDomainPrefixEvent aEvent,
-                                                      const otIp6Prefix                *aDomainPrefix);
-
-#if OTBR_ENABLE_DUA_ROUTING
-    static void HandleBackboneRouterNdProxyEvent(void                        *aContext,
-                                                 otBackboneRouterNdProxyEvent aEvent,
-                                                 const otIp6Address          *aAddress);
-    void        HandleBackboneRouterNdProxyEvent(otBackboneRouterNdProxyEvent aEvent, const otIp6Address *aAddress);
-#endif
-
-    static void DisableThreadAfterDetach(void *aContext);
+    using DetachGracefullyCallback = std::function<void()>;
+    void        ThreadDetachGracefully(const DetachGracefullyCallback &aCallback);
+    static void ThreadDetachGracefullyCallback(void *aContext);
+    void        ThreadDetachGracefullyCallback(void);
+    void        ConditionalErasePersistentInfo(bool aErase);
     void        DisableThreadAfterDetach(void);
     static void SendMgmtPendingSetCallback(otError aError, void *aContext);
     void        SendMgmtPendingSetCallback(otError aError);
@@ -258,6 +259,8 @@ private:
 
     bool IsAttached(void);
 
+    void UpdateThreadEnabledState(ThreadEnabledState aState);
+
     otError SetOtbrAndOtLogLevel(otbrLogLevel aLevel);
 
     otInstance *mInstance;
@@ -266,11 +269,15 @@ private:
     std::unique_ptr<otbr::agent::ThreadHelper> mThreadHelper;
     std::vector<std::function<void(void)>>     mResetHandlers;
     TaskRunner                                 mTaskRunner;
-    std::vector<ThreadStateChangedCallback>    mThreadStateChangedCallbacks;
-    bool                                       mEnableAutoAttach = false;
 
-    AsyncResultReceiver mSetThreadEnabledReceiver;
-    AsyncResultReceiver mScheduleMigrationReceiver;
+    std::vector<ThreadStateChangedCallback> mThreadStateChangedCallbacks;
+    std::vector<ThreadEnabledStateCallback> mThreadEnabledStateChangedCallbacks;
+    bool                                    mEnableAutoAttach = false;
+    ThreadEnabledState                      mThreadEnabledState;
+    AsyncResultReceiver                     mJoinReceiver;
+    AsyncResultReceiver                     mSetThreadEnabledReceiver;
+    AsyncResultReceiver                     mScheduleMigrationReceiver;
+    std::vector<DetachGracefullyCallback>   mDetachGracefullyCallbacks;
 
 #if OTBR_ENABLE_FEATURE_FLAGS
     // The applied FeatureFlagList in ApplyFeatureFlagList call, used for debugging purpose.
@@ -278,7 +285,7 @@ private:
 #endif
 };
 
-} // namespace Ncp
+} // namespace Host
 } // namespace otbr
 
 #endif // OTBR_AGENT_RCP_HOST_HPP_

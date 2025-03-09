@@ -38,12 +38,12 @@
 #include "lib/spinel/spinel_driver.hpp"
 
 #include "common/mainloop.hpp"
-#include "ncp/ncp_spinel.hpp"
-#include "ncp/thread_host.hpp"
+#include "host/ncp_spinel.hpp"
+#include "host/thread_host.hpp"
 #include "posix/netif.hpp"
 
 namespace otbr {
-namespace Ncp {
+namespace Host {
 
 /**
  * This class implements the NetworkProperties under NCP mode.
@@ -72,16 +72,23 @@ private:
     otOperationalDatasetTlvs mDatasetActiveTlvs;
 };
 
-class NcpHost : public MainloopProcessor, public ThreadHost, public NcpNetworkProperties
+class NcpHost : public MainloopProcessor,
+                public ThreadHost,
+                public NcpNetworkProperties
+#if OTBR_ENABLE_SRP_ADVERTISING_PROXY
+    ,
+                public Mdns::StateObserver
+#endif
 {
 public:
     /**
      * Constructor.
      *
-     * @param[in]   aInterfaceName  A string of the NCP interface name.
-     * @param[in]   aDryRun         TRUE to indicate dry-run mode. FALSE otherwise.
+     * @param[in]   aInterfaceName          A string of the NCP interface name.
+     * @param[in]   aBackboneInterfaceName  A string of the backbone interface name.
+     * @param[in]   aDryRun                 TRUE to indicate dry-run mode. FALSE otherwise.
      */
-    NcpHost(const char *aInterfaceName, bool aDryRun);
+    NcpHost(const char *aInterfaceName, const char *aBackboneInterfaceName, bool aDryRun);
 
     /**
      * Destructor.
@@ -90,34 +97,52 @@ public:
 
     // ThreadHost methods
     void Join(const otOperationalDatasetTlvs &aActiveOpDatasetTlvs, const AsyncResultReceiver &aReceiver) override;
-    void Leave(const AsyncResultReceiver &aReceiver) override;
+    void Leave(bool aEraseDataset, const AsyncResultReceiver &aReceiver) override;
     void ScheduleMigration(const otOperationalDatasetTlvs &aPendingOpDatasetTlvs,
                            const AsyncResultReceiver       aReceiver) override;
     void SetThreadEnabled(bool aEnabled, const AsyncResultReceiver aReceiver) override;
     void SetCountryCode(const std::string &aCountryCode, const AsyncResultReceiver &aReceiver) override;
     void GetChannelMasks(const ChannelMasksReceiver &aReceiver, const AsyncResultReceiver &aErrReceiver) override;
+#if OTBR_ENABLE_POWER_CALIBRATION
     void SetChannelMaxPowers(const std::vector<ChannelMaxPower> &aChannelMaxPowers,
                              const AsyncResultReceiver          &aReceiver) override;
-    void AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback) override;
-    CoprocessorType GetCoprocessorType(void) override { return OT_COPROCESSOR_NCP; }
-    const char     *GetCoprocessorVersion(void) override;
-    const char     *GetInterfaceName(void) const override { return mConfig.mInterfaceName; }
-    void            Init(void) override;
-    void            Deinit(void) override;
+#endif
+    void            AddThreadStateChangedCallback(ThreadStateChangedCallback aCallback) override;
+    void            AddThreadEnabledStateChangedCallback(ThreadEnabledStateCallback aCallback) override;
+    CoprocessorType GetCoprocessorType(void) override
+    {
+        return OT_COPROCESSOR_NCP;
+    }
+    const char *GetCoprocessorVersion(void) override;
+    const char *GetInterfaceName(void) const override
+    {
+        return mConfig.mInterfaceName;
+    }
+    void Init(void) override;
+    void Deinit(void) override;
 
     // MainloopProcessor methods
     void Update(MainloopContext &aMainloop) override;
     void Process(const MainloopContext &aMainloop) override;
 
+#if OTBR_ENABLE_SRP_ADVERTISING_PROXY
+    void SetMdnsPublisher(Mdns::Publisher *aPublisher);
+#endif
+
 private:
+#if OTBR_ENABLE_SRP_ADVERTISING_PROXY
+    void HandleMdnsState(Mdns::Publisher::State aState) override;
+#endif
+
     ot::Spinel::SpinelDriver &mSpinelDriver;
     otPlatformConfig          mConfig;
     NcpSpinel                 mNcpSpinel;
     TaskRunner                mTaskRunner;
     Netif                     mNetif;
+    InfraIf                   mInfraIf;
 };
 
-} // namespace Ncp
+} // namespace Host
 } // namespace otbr
 
 #endif // OTBR_AGENT_NCP_HOST_HPP_

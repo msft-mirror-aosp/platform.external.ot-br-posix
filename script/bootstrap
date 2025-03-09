@@ -106,6 +106,20 @@ install_packages_apt()
         fi
     }
 
+    # dhcpv6-pd
+    without DHCPV6_PD_REF || {
+        sudo apt-get install --no-install-recommends -y dhcpcd
+        sudo mkdir -p /etc/systemd/system/dhcpcd.service.d
+        # allow edit system config file eg. /etc/radvd.conf
+        sudo tee /etc/systemd/system/dhcpcd.service.d/custom.conf >/dev/null <<EOF
+[Service]
+ProtectSystem=false
+EOF
+        # reload dhcpcd daemon to activate the custom.conf
+        sudo systemctl daemon-reload
+        sudo apt-get install --no-install-recommends -y radvd
+    }
+
     # network-manager
     without NETWORK_MANAGER || sudo apt-get install --no-install-recommends -y dnsmasq network-manager
 
@@ -116,7 +130,7 @@ install_packages_apt()
     sudo apt-get install --no-install-recommends -y libjsoncpp-dev
 
     # reference device
-    without REFERENCE_DEVICE || sudo apt-get install --no-install-recommends -y radvd dnsutils avahi-utils
+    without REFERENCE_DEVICE || sudo apt-get install --no-install-recommends -y radvd dnsutils avahi-utils iperf3
 
     # backbone-router
     without BACKBONE_ROUTER || sudo apt-get install --no-install-recommends -y libnetfilter-queue1 libnetfilter-queue-dev
