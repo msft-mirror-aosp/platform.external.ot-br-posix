@@ -393,12 +393,6 @@ void OtDaemonServer::HandleEpskcStateChanged(void *aBinderServer)
 void OtDaemonServer::HandleEpskcStateChanged(void)
 {
     mState.ephemeralKeyState = GetEphemeralKeyState();
-
-    NotifyStateChanged(/* aListenerId*/ -1);
-}
-
-void OtDaemonServer::NotifyStateChanged(int64_t aListenerId)
-{
     if (mState.ephemeralKeyState == OT_EPHEMERAL_KEY_DISABLED)
     {
         mState.ephemeralKeyLifetimeMillis = 0;
@@ -410,6 +404,12 @@ void OtDaemonServer::NotifyStateChanged(int64_t aListenerId)
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
                 .count();
     }
+
+    NotifyStateChanged(/* aListenerId*/ -1);
+}
+
+void OtDaemonServer::NotifyStateChanged(int64_t aListenerId)
+{
     if (mCallback != nullptr)
     {
         mCallback->onStateChanged(mState, aListenerId);
@@ -743,8 +743,10 @@ exit:
     {
         if (error == OT_ERROR_NONE)
         {
-            mState.ephemeralKeyPasscode = passcode;
-            mEphemeralKeyExpiryMillis   = std::chrono::duration_cast<std::chrono::milliseconds>(
+            mState.ephemeralKeyState          = GetEphemeralKeyState();
+            mState.ephemeralKeyPasscode       = passcode;
+            mState.ephemeralKeyLifetimeMillis = aLifetimeMillis;
+            mEphemeralKeyExpiryMillis         = std::chrono::duration_cast<std::chrono::milliseconds>(
                                             std::chrono::steady_clock::now().time_since_epoch())
                                             .count() +
                                         aLifetimeMillis;
