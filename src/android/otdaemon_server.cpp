@@ -69,7 +69,7 @@ std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplicatio
     return ndk::SharedRefBase::make<Android::OtDaemonServer>(
         static_cast<otbr::Host::RcpHost &>(aApplication.GetHost()),
         static_cast<otbr::Android::MdnsPublisher &>(aApplication.GetPublisher()), aApplication.GetBorderAgent(),
-        [&aApplication]() {
+        aApplication.GetAdvertisingProxy(), [&aApplication]() {
             aApplication.Deinit();
             aApplication.Init();
         });
@@ -103,14 +103,16 @@ static const char *ThreadEnabledStateToString(int enabledState)
 
 OtDaemonServer *OtDaemonServer::sOtDaemonServer = nullptr;
 
-OtDaemonServer::OtDaemonServer(otbr::Host::RcpHost   &aRcpHost,
-                               otbr::Mdns::Publisher &aMdnsPublisher,
-                               otbr::BorderAgent     &aBorderAgent,
-                               ResetThreadHandler     aResetThreadHandler)
+OtDaemonServer::OtDaemonServer(otbr::Host::RcpHost    &aRcpHost,
+                               otbr::Mdns::Publisher  &aMdnsPublisher,
+                               otbr::BorderAgent      &aBorderAgent,
+                               otbr::AdvertisingProxy &aAdvProxy,
+                               ResetThreadHandler      aResetThreadHandler)
     : mHost(aRcpHost)
     , mAndroidHost(CreateAndroidHost())
     , mMdnsPublisher(static_cast<MdnsPublisher &>(aMdnsPublisher))
     , mBorderAgent(aBorderAgent)
+    , mAdvProxy(aAdvProxy)
     , mResetThreadHandler(aResetThreadHandler)
 {
     mClientDeathRecipient =
@@ -391,12 +393,6 @@ void OtDaemonServer::HandleEpskcStateChanged(void *aBinderServer)
 void OtDaemonServer::HandleEpskcStateChanged(void)
 {
     mState.ephemeralKeyState = GetEphemeralKeyState();
-
-    NotifyStateChanged(/* aListenerId*/ -1);
-}
-
-void OtDaemonServer::NotifyStateChanged(int64_t aListenerId)
-{
     if (mState.ephemeralKeyState == OT_EPHEMERAL_KEY_DISABLED)
     {
         mState.ephemeralKeyLifetimeMillis = 0;
@@ -408,6 +404,12 @@ void OtDaemonServer::NotifyStateChanged(int64_t aListenerId)
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
                 .count();
     }
+
+    NotifyStateChanged(/* aListenerId*/ -1);
+}
+
+void OtDaemonServer::NotifyStateChanged(int64_t aListenerId)
+{
     if (mCallback != nullptr)
     {
         mCallback->onStateChanged(mState, aListenerId);
@@ -584,6 +586,7 @@ void OtDaemonServer::initializeInternal(const bool                              
     registerStateCallbackInternal(aCallback, -1 /* listenerId */);
 
     mMdnsPublisher.SetINsdPublisher(aINsdPublisher);
+    mAdvProxy.SetAllowMlEid(!aConfiguration.borderRouterEnabled);
 
     for (const auto &txtAttr : aMeshcopTxts.nonStandardTxtEntries)
     {
@@ -740,8 +743,10 @@ exit:
     {
         if (error == OT_ERROR_NONE)
         {
-            mState.ephemeralKeyPasscode = passcode;
-            mEphemeralKeyExpiryMillis   = std::chrono::duration_cast<std::chrono::milliseconds>(
+            mState.ephemeralKeyState          = GetEphemeralKeyState();
+            mState.ephemeralKeyPasscode       = passcode;
+            mState.ephemeralKeyLifetimeMillis = aLifetimeMillis;
+            mEphemeralKeyExpiryMillis         = std::chrono::duration_cast<std::chrono::milliseconds>(
                                             std::chrono::steady_clock::now().time_since_epoch())
                                             .count() +
                                         aLifetimeMillis;
@@ -1189,8 +1194,13 @@ Status OtDaemonServer::setChannelMaxPowersInternal(const std::vector<ChannelMaxP
 Status OtDaemonServer::setConfiguration(const OtDaemonConfiguration              &aConfiguration,
                                         const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    mTaskRunner.Post(
-        [aConfiguration, aReceiver, this]() { mAndroidHost->SetConfiguration(aConfiguration, aReceiver); });
+    mTaskRunner.Post([aConfiguration, aReceiver, this]() {
+        if (aConfiguration != mAndroidHost->GetConfiguration())
+        {
+            mAdvProxy.SetAllowMlEid(!aConfiguration.borderRouterEnabled);
+            mAndroidHost->SetConfiguration(aConfiguration, aReceiver);
+        }
+    });
 
     return Status::ok();
 }
