@@ -55,6 +55,7 @@ AdvertisingProxy::AdvertisingProxy(Host::RcpHost &aHost, Mdns::Publisher &aPubli
     : mHost(aHost)
     , mPublisher(aPublisher)
     , mIsEnabled(false)
+    , mAllowMlEid(false)
 {
     mHost.RegisterResetHandler(
         [this]() { otSrpServerSetServiceUpdateHandler(GetInstance(), AdvertisingHandler, this); });
@@ -170,7 +171,7 @@ std::vector<Ip6Address> AdvertisingProxy::GetEligibleAddresses(const otIp6Addres
     {
         Ip6Address address(aHostAddresses[i].mFields.m8);
 
-        if (otIp6PrefixMatch(meshLocalEid, &aHostAddresses[i]) >= OT_IP6_PREFIX_BITSIZE)
+        if (!mAllowMlEid && otIp6PrefixMatch(meshLocalEid, &aHostAddresses[i]) >= OT_IP6_PREFIX_BITSIZE)
         {
             continue;
         }
