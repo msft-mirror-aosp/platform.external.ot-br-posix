@@ -33,6 +33,7 @@
 #include "android/otdaemon_server.hpp"
 #include "host/rcp_host.hpp"
 #include "mdns/mdns.hpp"
+#include "sdp_proxy/advertising_proxy.hpp"
 
 using android::fuzzService;
 using otbr::Android::MdnsPublisher;
@@ -42,15 +43,16 @@ using otbr::Mdns::Publisher;
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
-    RcpHost           rcpHost       = RcpHost{"" /* aInterfaceName */,
+    RcpHost                rcpHost       = RcpHost{"" /* aInterfaceName */,
                               {"threadnetwork_hal://binder?none"},
                               "" /* aBackboneInterfaceName */,
                               true /* aDryRun */,
                               false /* aEnableAutoAttach*/};
-    auto              mdnsPublisher = static_cast<MdnsPublisher *>(Publisher::Create([](Publisher::State) {}));
-    otbr::BorderAgent borderAgent{rcpHost, *mdnsPublisher};
+    auto                   mdnsPublisher = static_cast<MdnsPublisher *>(Publisher::Create([](Publisher::State) {}));
+    otbr::BorderAgent      borderAgent{rcpHost, *mdnsPublisher};
+    otbr::AdvertisingProxy advProxy{rcpHost, *mdnsPublisher};
 
-    auto service = ndk::SharedRefBase::make<OtDaemonServer>(rcpHost, *mdnsPublisher, borderAgent, []() {});
+    auto service = ndk::SharedRefBase::make<OtDaemonServer>(rcpHost, *mdnsPublisher, borderAgent, advProxy, []() {});
     fuzzService(service->asBinder().get(), FuzzedDataProvider(data, size));
     return 0;
 }

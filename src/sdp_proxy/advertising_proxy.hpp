@@ -70,6 +70,9 @@ public:
      */
     void SetEnabled(bool aIsEnabled);
 
+    /** Sets `true` to allow advertising ML-EID. */
+    void SetAllowMlEid(bool aAllowMlEid) { mAllowMlEid = aAllowMlEid; }
+
     /**
      * This method publishes all registered hosts and services.
      */
@@ -129,6 +132,7 @@ private:
     Mdns::Publisher &mPublisher;
 
     bool mIsEnabled;
+    bool mAllowMlEid;
 
     // A vector that tracks outstanding updates.
     std::vector<OutstandingUpdate> mOutstandingUpdates;

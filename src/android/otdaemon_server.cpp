@@ -69,7 +69,7 @@ std::shared_ptr<VendorServer> VendorServer::newInstance(Application &aApplicatio
     return ndk::SharedRefBase::make<Android::OtDaemonServer>(
         static_cast<otbr::Host::RcpHost &>(aApplication.GetHost()),
         static_cast<otbr::Android::MdnsPublisher &>(aApplication.GetPublisher()), aApplication.GetBorderAgent(),
-        [&aApplication]() {
+        aApplication.GetAdvertisingProxy(), [&aApplication]() {
             aApplication.Deinit();
             aApplication.Init();
         });
@@ -103,14 +103,16 @@ static const char *ThreadEnabledStateToString(int enabledState)
 
 OtDaemonServer *OtDaemonServer::sOtDaemonServer = nullptr;
 
-OtDaemonServer::OtDaemonServer(otbr::Host::RcpHost   &aRcpHost,
-                               otbr::Mdns::Publisher &aMdnsPublisher,
-                               otbr::BorderAgent     &aBorderAgent,
-                               ResetThreadHandler     aResetThreadHandler)
+OtDaemonServer::OtDaemonServer(otbr::Host::RcpHost    &aRcpHost,
+                               otbr::Mdns::Publisher  &aMdnsPublisher,
+                               otbr::BorderAgent      &aBorderAgent,
+                               otbr::AdvertisingProxy &aAdvProxy,
+                               ResetThreadHandler      aResetThreadHandler)
     : mHost(aRcpHost)
     , mAndroidHost(CreateAndroidHost())
     , mMdnsPublisher(static_cast<MdnsPublisher &>(aMdnsPublisher))
     , mBorderAgent(aBorderAgent)
+    , mAdvProxy(aAdvProxy)
     , mResetThreadHandler(aResetThreadHandler)
 {
     mClientDeathRecipient =
@@ -584,6 +586,7 @@ void OtDaemonServer::initializeInternal(const bool                              
     registerStateCallbackInternal(aCallback, -1 /* listenerId */);
 
     mMdnsPublisher.SetINsdPublisher(aINsdPublisher);
+    mAdvProxy.SetAllowMlEid(!aConfiguration.borderRouterEnabled);
 
     for (const auto &txtAttr : aMeshcopTxts.nonStandardTxtEntries)
     {
@@ -1192,6 +1195,7 @@ Status OtDaemonServer::setConfiguration(const OtDaemonConfiguration             
     mTaskRunner.Post([aConfiguration, aReceiver, this]() {
         if (aConfiguration != mAndroidHost->GetConfiguration())
         {
+            mAdvProxy.SetAllowMlEid(!aConfiguration.borderRouterEnabled);
             mAndroidHost->SetConfiguration(aConfiguration, aReceiver);
         }
     });
