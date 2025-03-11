@@ -997,6 +997,11 @@ void OtDaemonServer::FinishLeave(bool aEraseDataset, const std::shared_ptr<IOtSt
     {
         (void)otInstanceErasePersistentInfo(GetOtInstance());
         mResetThreadHandler();
+
+        // The OtDaemonServer runtime states are outdated after
+        // the OT instances has been destroyed in `mResetThreadHandler`
+        ResetRuntimeStatesAfterLeave();
+
         initializeInternal(mState.threadEnabled, mAndroidHost->GetConfiguration(), mINsdPublisher, mMeshcopTxts,
                            mCountryCode, mTrelEnabled, mCallback);
     }
@@ -1005,6 +1010,23 @@ void OtDaemonServer::FinishLeave(bool aEraseDataset, const std::shared_ptr<IOtSt
     {
         aReceiver->onSuccess();
     }
+}
+
+void OtDaemonServer::ResetRuntimeStatesAfterLeave()
+{
+    bool threadEnabled = mState.threadEnabled;
+
+    assert(mJoinReceiver == nullptr);
+    assert(mMigrationReceiver == nullptr);
+
+    // The Thread Enabled state survives the leave() API call.
+    // This indicates that we should move the threadEnabled state
+    // out of the OtDaemonState class
+    mState               = OtDaemonState();
+    mState.threadEnabled = threadEnabled;
+
+    mOnMeshPrefixes.clear();
+    mEphemeralKeyExpiryMillis = 0;
 }
 
 void OtDaemonServer::LeaveGracefully(const LeaveCallback &aReceiver)
