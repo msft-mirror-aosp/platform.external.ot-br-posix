@@ -44,6 +44,7 @@
 #include "common/mainloop.hpp"
 #include "common/time.hpp"
 #include "host/rcp_host.hpp"
+#include "sdp_proxy/advertising_proxy.hpp"
 
 namespace otbr {
 namespace Android {
@@ -53,10 +54,11 @@ class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendo
 public:
     using ResetThreadHandler = std::function<void()>;
 
-    OtDaemonServer(otbr::Host::RcpHost   &aRcpHost,
-                   otbr::Mdns::Publisher &aMdnsPublisher,
-                   otbr::BorderAgent     &aBorderAgent,
-                   ResetThreadHandler     aResetThreadHandler);
+    OtDaemonServer(otbr::Host::RcpHost    &aRcpHost,
+                   otbr::Mdns::Publisher  &aMdnsPublisher,
+                   otbr::BorderAgent      &aBorderAgent,
+                   otbr::AdvertisingProxy &aAdvProxy,
+                   ResetThreadHandler      aResetThreadHandler);
     virtual ~OtDaemonServer(void) = default;
 
     // Disallow copy and assign.
@@ -190,6 +192,7 @@ private:
     std::unique_ptr<AndroidThreadHost> mAndroidHost;
     MdnsPublisher                     &mMdnsPublisher;
     otbr::BorderAgent                 &mBorderAgent;
+    otbr::AdvertisingProxy            &mAdvProxy;
     ResetThreadHandler                 mResetThreadHandler;
 
     std::shared_ptr<INsdPublisher>     mINsdPublisher;
