@@ -83,7 +83,8 @@ void AndroidRcpHost::SetConfiguration(const OtDaemonConfiguration              &
     // DNS upstream query is enabled if and only if NAT64 is enabled.
     otDnssdUpstreamQuerySetEnabled(GetOtInstance(), aConfiguration.nat64Enabled);
 
-    linkModeConfig = GetLinkModeConfig(aConfiguration.borderRouterEnabled);
+    // Thread has to be a Router before new Android API is added to support making it a SED (Sleepy End Device)
+    linkModeConfig = GetLinkModeConfig(/* aIsRouter= */ true);
     SuccessOrExit(error = otThreadSetLinkMode(GetOtInstance(), linkModeConfig), message = "Failed to set link mode");
 
     if (aConfiguration.borderRouterEnabled && aConfiguration.srpServerWaitForBorderRoutingEnabled)
