@@ -28,4 +28,6 @@
 
 #ifdef OTBR_CONFIG_ANDROID_VERSION_HEADER_ENABLE
 #include <otbr-config-android-version.h>
+
+#define OTBR_MAINLOOP_POLL_TIMEOUT_SEC (28 * 24 * 60 * 60)
 #endif
