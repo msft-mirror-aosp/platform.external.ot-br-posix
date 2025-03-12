@@ -1220,6 +1220,7 @@ Status OtDaemonServer::setConfiguration(const OtDaemonConfiguration             
         if (aConfiguration != mAndroidHost->GetConfiguration())
         {
             mAdvProxy.SetAllowMlEid(!aConfiguration.borderRouterEnabled);
+            mBorderAgent.SetEnabled(mState.threadEnabled && aConfiguration.borderRouterEnabled);
             mAndroidHost->SetConfiguration(aConfiguration, aReceiver);
         }
     });
