@@ -239,7 +239,9 @@ Ipv6AddressInfo OtDaemonServer::ConvertToAddressInfo(const otNetifAddress &aAddr
     addrInfo.prefixLength = aAddress.mPrefixLength;
     addrInfo.isPreferred  = aAddress.mPreferred;
     addrInfo.isMeshLocal  = aAddress.mMeshLocal;
-    addrInfo.isActiveOmr  = otNetDataContainsOmrPrefix(GetOtInstance(), &addressPrefix);
+    addrInfo.isMeshLocalEid =
+        (memcmp(&aAddress.mAddress, otThreadGetMeshLocalEid(GetOtInstance()), sizeof(aAddress.mAddress)) == 0);
+    addrInfo.isActiveOmr = otNetDataContainsOmrPrefix(GetOtInstance(), &addressPrefix);
     return addrInfo;
 }
 
