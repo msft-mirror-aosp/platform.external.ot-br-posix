@@ -44,6 +44,7 @@
 #include "common/mainloop.hpp"
 #include "common/time.hpp"
 #include "host/rcp_host.hpp"
+#include "sdp_proxy/advertising_proxy.hpp"
 
 namespace otbr {
 namespace Android {
@@ -53,10 +54,11 @@ class OtDaemonServer : public BnOtDaemon, public MainloopProcessor, public vendo
 public:
     using ResetThreadHandler = std::function<void()>;
 
-    OtDaemonServer(otbr::Host::RcpHost   &aRcpHost,
-                   otbr::Mdns::Publisher &aMdnsPublisher,
-                   otbr::BorderAgent     &aBorderAgent,
-                   ResetThreadHandler     aResetThreadHandler);
+    OtDaemonServer(otbr::Host::RcpHost    &aRcpHost,
+                   otbr::Mdns::Publisher  &aMdnsPublisher,
+                   otbr::BorderAgent      &aBorderAgent,
+                   otbr::AdvertisingProxy &aAdvProxy,
+                   ResetThreadHandler      aResetThreadHandler);
     virtual ~OtDaemonServer(void) = default;
 
     // Disallow copy and assign.
@@ -112,8 +114,12 @@ private:
                 const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   joinInternal(const std::vector<uint8_t>               &aActiveOpDatasetTlvs,
                         const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+
     Status leave(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   leaveInternal(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
+    void   LeaveGracefully(bool aEraseDataset, const LeaveCallback &aReceiver);
+    void   ResetRuntimeStatesAfterLeave();
+
     Status scheduleMigration(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
                              const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   scheduleMigrationInternal(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
@@ -186,25 +192,29 @@ private:
 
     static OtDaemonServer *sOtDaemonServer;
 
+    // Class dependencies
     otbr::Host::RcpHost               &mHost;
     std::unique_ptr<AndroidThreadHost> mAndroidHost;
     MdnsPublisher                     &mMdnsPublisher;
     otbr::BorderAgent                 &mBorderAgent;
+    otbr::AdvertisingProxy            &mAdvProxy;
     ResetThreadHandler                 mResetThreadHandler;
+    TaskRunner                         mTaskRunner;
 
+    // States initialized in initialize()
+    ScopedFileDescriptor               mTunFd;
     std::shared_ptr<INsdPublisher>     mINsdPublisher;
     MeshcopTxtAttributes               mMeshcopTxts;
     std::string                        mCountryCode;
     bool                               mTrelEnabled = false;
     std::shared_ptr<IOtDaemonCallback> mCallback;
-
-    TaskRunner                         mTaskRunner;
-    ScopedFileDescriptor               mTunFd;
-    OtDaemonState                      mState;
     BinderDeathRecipient               mClientDeathRecipient;
+
+    // Runtime states
     std::shared_ptr<IOtStatusReceiver> mJoinReceiver;
     std::shared_ptr<IOtStatusReceiver> mMigrationReceiver;
     std::vector<LeaveCallback>         mLeaveCallbacks;
+    OtDaemonState                      mState;
     std::set<OnMeshPrefixConfig>       mOnMeshPrefixes;
     int64_t                            mEphemeralKeyExpiryMillis;
 

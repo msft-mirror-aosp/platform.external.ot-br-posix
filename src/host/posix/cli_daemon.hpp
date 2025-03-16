@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2021, The OpenThread Authors.
+ *  Copyright (c) 2025, The OpenThread Authors.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -26,8 +26,39 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef OTBR_CONFIG_ANDROID_VERSION_HEADER_ENABLE
-#include <otbr-config-android-version.h>
+/**
+ * @file
+ *   This file includes definitions of the Cli Daemon of otbr-agent.
+ */
 
-#define OTBR_MAINLOOP_POLL_TIMEOUT_SEC (28 * 24 * 60 * 60)
-#endif
+#ifndef OTBR_AGENT_POSIX_DAEMON_HPP_
+#define OTBR_AGENT_POSIX_DAEMON_HPP_
+
+#include <vector>
+
+#include "common/mainloop.hpp"
+#include "common/types.hpp"
+
+namespace otbr {
+
+class CliDaemon
+{
+public:
+    CliDaemon(void);
+
+    void Init(const std::string &aNetIfName);
+
+private:
+    void CreateListenSocketOrDie(void);
+
+    std::string GetSocketFilename(const char *aSuffix) const;
+
+    int mListenSocket;
+    int mDaemonLock;
+
+    std::string mNetifName;
+};
+
+} // namespace otbr
+
+#endif // OTBR_AGENT_POSIX_DAEMON_HPP_

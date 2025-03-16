@@ -43,6 +43,7 @@ ARG REST_API
 ARG WEB_GUI
 ARG MDNS
 ARG FIREWALL
+ARG DNSSD_PLAT
 
 ENV INFRA_IF_NAME=${INFRA_IF_NAME:-eth0}
 ENV BORDER_ROUTING=${BORDER_ROUTING:-1}
@@ -61,6 +62,7 @@ ENV DNS64=${DNS64:-0}
 ENV WEB_GUI=${WEB_GUI:-1}
 ENV REST_API=${REST_API:-1}
 ENV FIREWALL=${FIREWALL:-1}
+ENV DNSSD_PLAT=${DNSSD_PLAT:-0}
 ENV DOCKER 1
 
 RUN env
@@ -74,7 +76,7 @@ ENV OTBR_DOCKER_DEPS git ca-certificates
 # Required and installed during build (script/bootstrap), could be removed
 ENV OTBR_BUILD_DEPS apt-utils build-essential psmisc ninja-build cmake wget ca-certificates \
   libreadline-dev libncurses-dev libdbus-1-dev libavahi-common-dev \
-  libavahi-client-dev libboost-dev libboost-filesystem-dev libboost-system-dev \
+  libavahi-client-dev \
   libnetfilter-queue-dev
 
 # Required for OpenThread Backbone CI
