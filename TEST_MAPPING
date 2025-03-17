@@ -1,10 +1,7 @@
 {
-  "presubmit": [
+  "imports": [
     {
-      "name": "CtsThreadNetworkTestCases"
-    },
-    {
-      "name": "ThreadNetworkIntegrationTests"
+      "path": "packages/modules/Connectivity/thread/TEST_MAPPING"
     }
   ],
   "postsubmit": [
