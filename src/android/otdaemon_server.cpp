@@ -584,7 +584,11 @@ void OtDaemonServer::initializeInternal(const bool                              
     otbrError                error;
 
     mAndroidHost->SetConfiguration(aConfiguration, nullptr /* aReceiver */);
-    setCountryCodeInternal(aCountryCode, nullptr /* aReceiver */);
+
+    if (aConfiguration.countryCodeEnabled)
+    {
+        setCountryCodeInternal(aCountryCode, nullptr /* aReceiver */);
+    }
     registerStateCallbackInternal(aCallback, -1 /* listenerId */);
 
     mMdnsPublisher.SetINsdPublisher(aINsdPublisher);
