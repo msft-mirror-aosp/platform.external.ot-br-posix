@@ -43,6 +43,7 @@
 #include <openthread/openthread-system.h>
 #include <openthread/srp_server.h>
 #include <openthread/thread.h>
+#include <openthread/thread_ftd.h>
 #include <openthread/trel.h>
 #include <openthread/platform/infra_if.h>
 #include <openthread/platform/trel.h>
@@ -86,6 +87,10 @@ void AndroidRcpHost::SetConfiguration(const OtDaemonConfiguration              &
     // Thread has to be a Router before new Android API is added to support making it a SED (Sleepy End Device)
     linkModeConfig = GetLinkModeConfig(/* aIsRouter= */ true);
     SuccessOrExit(error = otThreadSetLinkMode(GetOtInstance(), linkModeConfig), message = "Failed to set link mode");
+
+    // - In non-BR mode, this device should try to be a router only when there are no other routers
+    // - 16 is the default ROUTER_UPGRADE_THRESHOLD value defined in OpenThread
+    otThreadSetRouterUpgradeThreshold(GetOtInstance(), (aConfiguration.borderRouterEnabled ? 16 : 1));
 
     if (aConfiguration.borderRouterEnabled && aConfiguration.srpServerWaitForBorderRoutingEnabled)
     {
