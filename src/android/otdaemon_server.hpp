@@ -117,7 +117,7 @@ private:
 
     Status leave(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver) override;
     void   leaveInternal(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
-    void   LeaveGracefully(bool aEraseDataset, const LeaveCallback &aReceiver);
+    void   LeaveGracefully(bool aEraseDataset, const std::string &aCallerTag, const LeaveCallback &aReceiver);
     void   ResetRuntimeStatesAfterLeave();
 
     Status scheduleMigration(const std::vector<uint8_t>               &aPendingOpDatasetTlvs,
@@ -163,8 +163,6 @@ private:
     void   deactivateEphemeralKeyModeInternal(const std::shared_ptr<IOtStatusReceiver> &aReceiver);
 
     bool        RefreshOtDaemonState(otChangedFlags aFlags);
-    void        LeaveGracefully(const LeaveCallback &aReceiver);
-    void        FinishLeave(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver);
     static void DetachGracefullyCallback(void *aBinderServer);
     void        DetachGracefullyCallback(void);
     static void SendMgmtPendingSetCallback(otError aResult, void *aBinderServer);

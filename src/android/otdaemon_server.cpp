@@ -48,6 +48,7 @@
 #include <openthread/nat64.h>
 #include <openthread/openthread-system.h>
 #include <openthread/srp_server.h>
+#include <openthread/thread_ftd.h>
 #include <openthread/platform/infra_if.h>
 #include <openthread/platform/radio.h>
 
@@ -239,7 +240,9 @@ Ipv6AddressInfo OtDaemonServer::ConvertToAddressInfo(const otNetifAddress &aAddr
     addrInfo.prefixLength = aAddress.mPrefixLength;
     addrInfo.isPreferred  = aAddress.mPreferred;
     addrInfo.isMeshLocal  = aAddress.mMeshLocal;
-    addrInfo.isActiveOmr  = otNetDataContainsOmrPrefix(GetOtInstance(), &addressPrefix);
+    addrInfo.isMeshLocalEid =
+        (memcmp(&aAddress.mAddress, otThreadGetMeshLocalEid(GetOtInstance()), sizeof(aAddress.mAddress)) == 0);
+    addrInfo.isActiveOmr = otNetDataContainsOmrPrefix(GetOtInstance(), &addressPrefix);
     return addrInfo;
 }
 
@@ -692,7 +695,7 @@ void OtDaemonServer::setThreadEnabledInternal(const bool aEnabled, const std::sh
         // `aReceiver` should not be set here because the operation isn't finished yet
         UpdateThreadEnabledState(OT_STATE_DISABLING, nullptr /* aReceiver */);
 
-        LeaveGracefully([aReceiver, this]() {
+        LeaveGracefully(false /* aEraseDataset */, "disableThread", [aReceiver, this]() {
             // Ignore errors as those operations should always succeed
             (void)otThreadSetEnabled(GetOtInstance(), false);
             (void)otIp6SetEnabled(GetOtInstance(), false);
@@ -921,19 +924,21 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
     error = otDatasetGetActiveTlvs(GetOtInstance(), &curDatasetTlvs);
     if (error == OT_ERROR_NONE && areDatasetsEqual(newDatasetTlvs, curDatasetTlvs) && isAttached())
     {
-        // Do not leave and re-join if this device has already joined the same network. This can help elimilate
-        // unnecessary connectivity and topology disruption and save the time for re-joining. It's more useful for use
-        // cases where Thread networks are dynamically brought up and torn down (e.g. Thread on mobile phones).
+        // Do not leave and re-join if this device has already joined the same network.
+        // This can help elimilate unnecessary connectivity and topology disruption and
+        // save the time for re-joining. It's more useful for use cases where Thread
+        // networks are dynamically brought up and torn down (e.g. Thread on mobile phones).
         aReceiver->onSuccess();
         ExitNow();
     }
 
-    if (otThreadGetDeviceRole(GetOtInstance()) != OT_DEVICE_ROLE_DISABLED)
+    // If this device has ever joined a different network, try to leave from previous
+    // network first. Do this even this device role is detached or disabled, this is for
+    // clearing any in-memory state of the previous network.
+    if (error == OT_ERROR_NONE && !areDatasetsEqual(newDatasetTlvs, curDatasetTlvs))
     {
-        LeaveGracefully([aActiveOpDatasetTlvs, aReceiver, this]() {
-            FinishLeave(true /* aEraseDataset */, nullptr);
-            join(aActiveOpDatasetTlvs, aReceiver);
-        });
+        LeaveGracefully(true /* aEraseDataset */, "join",
+                        [aActiveOpDatasetTlvs, aReceiver, this]() { join(aActiveOpDatasetTlvs, aReceiver); });
         ExitNow();
     }
 
@@ -949,7 +954,7 @@ void OtDaemonServer::joinInternal(const std::vector<uint8_t>               &aAct
     // Abort an ongoing join()
     if (mJoinReceiver != nullptr)
     {
-        mJoinReceiver->onError(OT_ERROR_ABORT, "Join() is aborted");
+        mJoinReceiver->onError(OT_ERROR_ABORT, "Aborted by a new join()");
     }
     mJoinReceiver = aReceiver;
 
@@ -969,33 +974,56 @@ Status OtDaemonServer::leave(bool aEraseDataset, const std::shared_ptr<IOtStatus
 
 void OtDaemonServer::leaveInternal(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
 {
-    std::string message;
-    int         error = OT_ERROR_NONE;
-
-    VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
-
-    VerifyOrExit(mState.threadEnabled != OT_STATE_DISABLING, error = OT_ERROR_BUSY, message = "Thread is disabling");
-
-    if (mState.threadEnabled == OT_STATE_DISABLED)
+    if (GetOtInstance() == nullptr)
     {
-        FinishLeave(aEraseDataset, aReceiver);
-        ExitNow();
+        PropagateResult(OT_ERROR_INVALID_STATE, "OT is not initialized", aReceiver);
     }
-
-    LeaveGracefully([aEraseDataset, aReceiver, this]() { FinishLeave(aEraseDataset, aReceiver); });
-
-exit:
-    if (error != OT_ERROR_NONE)
+    else
     {
-        PropagateResult(error, message, aReceiver);
+        LeaveGracefully(aEraseDataset, "leave", [aReceiver]() { PropagateResult(OT_ERROR_NONE, "", aReceiver); });
     }
 }
 
-void OtDaemonServer::FinishLeave(bool aEraseDataset, const std::shared_ptr<IOtStatusReceiver> &aReceiver)
+void OtDaemonServer::LeaveGracefully(bool aEraseDataset, const std::string &aCallerTag, const LeaveCallback &aCallback)
 {
-    if (aEraseDataset)
+    otOperationalDatasetTlvs curDatasetTlvs;
+
+    VerifyOrDie(GetOtInstance() != nullptr, "OT is not initialized");
+
+    if (otThreadGetDeviceRole(GetOtInstance()) != OT_DEVICE_ROLE_DISABLED)
     {
-        (void)otInstanceErasePersistentInfo(GetOtInstance());
+        otbrLogInfo("Start graceful leave...");
+
+        mLeaveCallbacks.push_back([aEraseDataset, aCallerTag, aCallback, this]() {
+            assert(otThreadGetDeviceRole(GetOtInstance()) == OT_DEVICE_ROLE_DISABLED);
+            LeaveGracefully(aEraseDataset, aCallerTag, aCallback);
+        });
+
+        // Ignores the OT_ERROR_BUSY error if a detach has already been requested.
+        // `otThreadDetachGracefully()` will invoke the `DetachGracefullyCallback`
+        // callabck in 0 seconds if this device role is detached or disabled. So
+        // `DetachGracefullyCallback` is guaranteed to be called in all cases
+        (void)otThreadDetachGracefully(GetOtInstance(), DetachGracefullyCallback, this);
+        ExitNow();
+    }
+
+    // Any join() or scheduleMigration() onging requests will be aborted
+    if (mJoinReceiver != nullptr)
+    {
+        mJoinReceiver->onError(OT_ERROR_ABORT, "Aborted by a " + aCallerTag + " operation");
+        mJoinReceiver = nullptr;
+    }
+
+    if (mMigrationReceiver != nullptr)
+    {
+        mMigrationReceiver->onError(OT_ERROR_ABORT, "Aborted by a " + aCallerTag + " operation");
+        mMigrationReceiver = nullptr;
+    }
+
+    // It's not necessary to reset the OpenThread instance if it has no dataset
+    if (aEraseDataset && otDatasetGetActiveTlvs(GetOtInstance(), &curDatasetTlvs) == OT_ERROR_NONE)
+    {
+        SuccessOrDie(otInstanceErasePersistentInfo(GetOtInstance()), "Failed to erase persistent info");
         mResetThreadHandler();
 
         // The OtDaemonServer runtime states are outdated after
@@ -1006,10 +1034,12 @@ void OtDaemonServer::FinishLeave(bool aEraseDataset, const std::shared_ptr<IOtSt
                            mCountryCode, mTrelEnabled, mCallback);
     }
 
-    if (aReceiver != nullptr)
-    {
-        aReceiver->onSuccess();
-    }
+    otbrLogInfo("Leave() is done");
+
+    aCallback();
+
+exit:
+    return;
 }
 
 void OtDaemonServer::ResetRuntimeStatesAfterLeave()
@@ -1029,14 +1059,6 @@ void OtDaemonServer::ResetRuntimeStatesAfterLeave()
     mEphemeralKeyExpiryMillis = 0;
 }
 
-void OtDaemonServer::LeaveGracefully(const LeaveCallback &aReceiver)
-{
-    mLeaveCallbacks.push_back(aReceiver);
-
-    // Ignores the OT_ERROR_BUSY error if a detach has already been requested
-    (void)otThreadDetachGracefully(GetOtInstance(), DetachGracefullyCallback, this);
-}
-
 void OtDaemonServer::DetachGracefullyCallback(void *aBinderServer)
 {
     OtDaemonServer *thisServer = static_cast<OtDaemonServer *>(aBinderServer);
@@ -1045,19 +1067,7 @@ void OtDaemonServer::DetachGracefullyCallback(void *aBinderServer)
 
 void OtDaemonServer::DetachGracefullyCallback(void)
 {
-    otbrLogInfo("detach success...");
-
-    if (mJoinReceiver != nullptr)
-    {
-        mJoinReceiver->onError(OT_ERROR_ABORT, "Aborted by leave/disable operation");
-        mJoinReceiver = nullptr;
-    }
-
-    if (mMigrationReceiver != nullptr)
-    {
-        mMigrationReceiver->onError(OT_ERROR_ABORT, "Aborted by leave/disable operation");
-        mMigrationReceiver = nullptr;
-    }
+    otbrLogInfo("DetachGracefully success...");
 
     for (auto &callback : mLeaveCallbacks)
     {

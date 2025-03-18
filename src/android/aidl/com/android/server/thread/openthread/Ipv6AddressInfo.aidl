@@ -39,6 +39,7 @@ parcelable Ipv6AddressInfo {
     int prefixLength; // Valid for only unicast addresses
     boolean isPreferred; // Valid for only unicast addresses
     boolean isMeshLocal; // Valid for only unicast addresses
+    boolean isMeshLocalEid; // Valid for only unicast address
     boolean isActiveOmr; // Valid for only unicast addresses. Active OMR means the prefix is added
                          // to netdata, if the OMR prefix is removed from netdata then the address
                          // is not active OMR anymore.
