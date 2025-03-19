@@ -49,4 +49,9 @@ parcelable OtDaemonConfiguration {
      * after device reboots.
      */
     boolean borderRouterAutoJoinEnabled = true;
+
+    /**
+     * {@code true} if setting country code is enabled by OEM.
+     */
+    boolean countryCodeEnabled = true;
 }
