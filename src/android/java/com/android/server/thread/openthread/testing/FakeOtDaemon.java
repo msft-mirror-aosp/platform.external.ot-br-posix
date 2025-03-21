@@ -89,6 +89,7 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
     @Nullable private IOtDaemonCallback mCallback;
     @Nullable private Long mCallbackListenerId;
     @Nullable private RemoteException mJoinException;
+    @Nullable private String mNat64Cidr;
     @Nullable private RemoteException mSetNat64CidrException;
     @Nullable private RemoteException mRunOtCtlCommandException;
     @Nullable private String mCountryCode;
@@ -434,9 +435,16 @@ public final class FakeOtDaemon extends IOtDaemon.Stub {
         if (mSetNat64CidrException != null) {
             throw mSetNat64CidrException;
         }
+        mNat64Cidr = nat64Cidr;
         if (receiver != null) {
             receiver.onSuccess();
         }
+    }
+
+    /** Returns the NAT64 CIDR set by {@link #setNat64Cidr}. */
+    @Nullable
+    public String getNat64Cidr() {
+        return mNat64Cidr;
     }
 
     @Override
