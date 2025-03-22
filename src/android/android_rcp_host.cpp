@@ -40,6 +40,7 @@
 #include <openthread/dnssd_server.h>
 #include <openthread/ip6.h>
 #include <openthread/nat64.h>
+#include <openthread/netdiag.h>
 #include <openthread/openthread-system.h>
 #include <openthread/srp_server.h>
 #include <openthread/thread.h>
@@ -77,6 +78,11 @@ void AndroidRcpHost::SetConfiguration(const OtDaemonConfiguration              &
     otbrLogInfo("Set configuration: %s", aConfiguration.toString().c_str());
 
     VerifyOrExit(GetOtInstance() != nullptr, error = OT_ERROR_INVALID_STATE, message = "OT is not initialized");
+
+    SuccessOrExit(error   = otThreadSetVendorName(GetOtInstance(), aConfiguration.vendorName.c_str()),
+                  message = "Invalid vendor name " + aConfiguration.vendorName);
+    SuccessOrExit(error   = otThreadSetVendorModel(GetOtInstance(), aConfiguration.modelName.c_str()),
+                  message = "Invalid model name " + aConfiguration.modelName);
 
     // TODO: b/343814054 - Support enabling/disabling DHCPv6-PD.
     VerifyOrExit(!aConfiguration.dhcpv6PdEnabled, error = OT_ERROR_NOT_IMPLEMENTED,
