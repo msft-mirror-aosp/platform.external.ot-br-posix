@@ -54,4 +54,10 @@ parcelable OtDaemonConfiguration {
      * {@code true} if setting country code is enabled by OEM.
      */
     boolean countryCodeEnabled = true;
+
+    /** The vendor name which will be set to the Vendor Name TLV for diagnostic. */
+    String vendorName;
+
+    /** The model name which will be set to the Vendor Model TLV for diagnostic. */
+    String modelName;
 }

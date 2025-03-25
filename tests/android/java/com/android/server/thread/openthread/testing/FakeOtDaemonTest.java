@@ -318,12 +318,13 @@ public final class FakeOtDaemonTest {
     }
 
     @Test
-    public void setNat64Cidr_onSuccessIsInvoked() throws Exception {
+    public void setNat64Cidr_valueSavedAndOnSuccessIsInvoked() throws Exception {
         IOtStatusReceiver receiver = mock(IOtStatusReceiver.class);
 
         mFakeOtDaemon.setNat64Cidr(TEST_NAT64_CIDR, receiver);
         mTestLooper.dispatchAll();
 
+        assertThat(mFakeOtDaemon.getNat64Cidr()).isEqualTo(TEST_NAT64_CIDR);
         verify(receiver, never()).onError(anyInt(), any());
         verify(receiver, times(1)).onSuccess();
     }
